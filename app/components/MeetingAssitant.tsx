@@ -50,6 +50,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   const [activeTab, setActiveTab] = useState<TabView>('notes');
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [isExpanded, setIsExpanded] = useState(false);
   const room = useRoomContext();
   const tracks = useTracks();
 
@@ -69,6 +70,25 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
 
   // Data channel for sharing transcripts
   const { send: sendData } = useDataChannel('transcript-sync');
+
+  // Mobile responsive helpers
+  const [isMobile, setIsMobile] = useState(false);
+
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  const handleMobileHeaderClick = () => {
+    if (isMobile) {
+      setIsExpanded(!isExpanded);
+    }
+  };
 
   // Group chat messages by consecutive sender
   React.useEffect(() => {
@@ -356,25 +376,37 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   };
 
   return (
-    <div className="meeting-assistant">
-      <div className="meeting-assistant-header">
+    <div className={`meeting-assistant ${isMobile && isExpanded ? 'expanded' : ''}`}>
+      <div className="meeting-assistant-header" onClick={handleMobileHeaderClick}>
         <h3 className="meeting-assistant-title">Meeting Assistant</h3>
         <div className="tab-container">
           <button 
             className={`tab-button ${activeTab === 'notes' ? 'tab-button--active' : ''}`}
-            onClick={() => setActiveTab('notes')}
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveTab('notes');
+              if (isMobile && !isExpanded) setIsExpanded(true);
+            }}
           >
             Notes
           </button>
           <button 
             className={`tab-button ${activeTab === 'transcript' ? 'tab-button--active' : ''}`}
-            onClick={() => setActiveTab('transcript')}
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveTab('transcript');
+              if (isMobile && !isExpanded) setIsExpanded(true);
+            }}
           >
             Transcript
           </button>
           <button 
             className={`tab-button ${activeTab === 'chat' ? 'tab-button--active' : ''}`}
-            onClick={() => setActiveTab('chat')}
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveTab('chat');
+              if (isMobile && !isExpanded) setIsExpanded(true);
+            }}
           >
             Chat
             {chatMessages.length > 0 && (

@@ -118,6 +118,18 @@ function VideoConferenceComponent(props: {
   const [showShareModal, setShowShareModal] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [meetingUrl, setMeetingUrl] = React.useState('');
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  // Mobile detection
+  React.useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const roomOptions = React.useMemo((): RoomOptions => {
     let videoCodec: VideoCodec | undefined = props.options.codec ? props.options.codec : 'vp9';
@@ -278,15 +290,36 @@ function VideoConferenceComponent(props: {
   return (
     <div className="lk-room-container">
       <RoomContext.Provider value={room}>
-        <div className="lk-video-conference" style={{ display: 'flex', width: '100%', height: '100%' }}>
-          <div className="lk-main-content" style={{ flex: 1, minWidth: 0 }}>
+        <div 
+          className="lk-video-conference" 
+          style={{ 
+            display: 'flex', 
+            width: '100%', 
+            height: '100%',
+            flexDirection: isMobile ? 'column' : 'row'
+          }}
+        >
+          <div 
+            className="lk-main-content" 
+            style={{ 
+              flex: 1, 
+              minWidth: 0,
+              height: isMobile ? 'calc(100vh - 50vh)' : '100%',
+              minHeight: isMobile ? '50vh' : 'auto'
+            }}
+          >
             <CustomVideoConference
               SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
             />
           </div>
-          <div className="lk-sidebar" style={{ width: '320px', minWidth: '320px' }}>
+          {!isMobile && (
+            <div className="lk-sidebar" style={{ width: '320px', minWidth: '320px' }}>
+              <TranscriptTab onMeetingEnd={handleMeetingEnd} />
+            </div>
+          )}
+          {isMobile && (
             <TranscriptTab onMeetingEnd={handleMeetingEnd} />
-          </div>
+          )}
         </div>
         
         {/* Share Link Modal */}
