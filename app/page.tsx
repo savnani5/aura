@@ -27,7 +27,7 @@ function DemoMeeting() {
         </div>
         <h1 className={styles.title}>Welcome to Ohm</h1>
         <p className={styles.subtitle}>
-        AI first Video Confereing App
+        AI first Video Conferencing App
         </p>
       </div>
 
