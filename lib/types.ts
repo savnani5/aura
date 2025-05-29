@@ -13,12 +13,6 @@ export interface SessionProps {
 }
 
 declare module '@livekit/components-react' {
-  interface WidgetState {
-    showTranscript?: boolean;
-  }
-}
-
-declare module '@livekit/components-react' {
   interface WidgetMessage {
     msg: 'show_chat' | 'hide_chat' | 'toggle_chat' | 'unread_msg' | 'toggle_settings' | 'toggle_transcript';
   }

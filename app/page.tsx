@@ -27,7 +27,7 @@ function DemoMeeting() {
         </div>
         <h1 className={styles.title}>Welcome to Ohm</h1>
         <p className={styles.subtitle}>
-          Start a secure video meeting with real-time transcription and personal note-taking
+        AI first Video Confereing App
         </p>
       </div>
 
@@ -145,20 +145,6 @@ function DemoMeeting() {
             <div className={styles.featureContent}>
               <span className={styles.featureTitle}>Personal Notes</span>
               <span className={styles.featureDescription}>Take private notes during the meeting</span>
-            </div>
-          </div>
-
-          <div className={styles.feature}>
-            <div className={styles.featureIcon}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
-                <line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" strokeWidth="2"/>
-                <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" strokeWidth="2"/>
-              </svg>
-            </div>
-            <div className={styles.featureContent}>
-              <span className={styles.featureTitle}>HD Video Quality</span>
-              <span className={styles.featureDescription}>Crystal clear video calls with adaptive streaming</span>
             </div>
           </div>
         </div>

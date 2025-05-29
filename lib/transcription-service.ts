@@ -73,13 +73,6 @@ export class TranscriptionService {
             timestamp: Date.now(),
           };
           
-          // Broadcast transcript to all participants
-          const encodedData = new TextEncoder().encode(JSON.stringify(transcript));
-          this.room?.localParticipant.publishData(
-            encodedData,
-            { reliable: true }
-          );
-          
           // Call the callback for local display
           this.transcriptionCallback(transcript);
         }

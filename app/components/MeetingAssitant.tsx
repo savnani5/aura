@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { useTracks, useRoomContext } from '@livekit/components-react';
+import { useTracks, useRoomContext, useChat, useDataChannel } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { Transcript, TranscriptionService } from '@/lib/transcription-service';
 
@@ -12,156 +12,327 @@ interface TranscriptTabProps {
 interface DisplayTranscript {
   speaker: string;
   text: string;
+  participantId: string;
+  timestamp: number;
+  entryId: string;
 }
 
-type TabView = 'transcript' | 'notepad';
+interface SharedTranscript {
+  id: string;
+  speaker: string;
+  text: string;
+  participantId: string;
+  timestamp: number;
+  entryId: string;
+  type: 'transcript' | 'transcript_update';
+}
+
+interface ChatMessage {
+  id: string;
+  text: string;
+  timestamp: number;
+}
+
+interface GroupedChatMessage {
+  senderId: string;
+  senderName: string;
+  messages: ChatMessage[];
+  latestTimestamp: number;
+  groupId: string;
+}
+
+type TabView = 'notes' | 'transcript' | 'chat';
 
 export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
-  const [displayTranscripts, setDisplayTranscripts] = useState<DisplayTranscript[]>([]);
+  const [sharedTranscripts, setSharedTranscripts] = useState<DisplayTranscript[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabView>('transcript');
+  const [activeTab, setActiveTab] = useState<TabView>('notes');
   const [notes, setNotes] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const room = useRoomContext();
   const tracks = useTracks();
+
+  // Use ref to track current shared transcripts to avoid stale closures
+  const sharedTranscriptsRef = React.useRef<DisplayTranscript[]>([]);
+  
+  // Update ref whenever sharedTranscripts changes
+  React.useEffect(() => {
+    sharedTranscriptsRef.current = sharedTranscripts;
+  }, [sharedTranscripts]);
+
+  // Chat functionality
+  const { chatMessages, send: sendMessage, isSending } = useChat();
+  const [chatInput, setChatInput] = useState('');
+  const [groupedChatMessages, setGroupedChatMessages] = useState<GroupedChatMessage[]>([]);
+  const chatMessagesRef = React.useRef<HTMLDivElement>(null);
+
+  // Data channel for sharing transcripts
+  const { send: sendData } = useDataChannel('transcript-sync');
+
+  // Group chat messages by consecutive sender
+  React.useEffect(() => {
+    const grouped: GroupedChatMessage[] = [];
+    
+    chatMessages.forEach((message) => {
+      const lastGroup = grouped[grouped.length - 1];
+      const senderId = message.from?.identity || message.from?.name || 'Unknown';
+      const senderName = message.from?.name || message.from?.identity || 'Unknown';
+      
+      // If last group is from the same sender, append to it
+      if (lastGroup && lastGroup.senderId === senderId) {
+        lastGroup.messages.push({
+          id: message.id,
+          text: message.message,
+          timestamp: message.timestamp
+        });
+        // Update the group's latest timestamp
+        lastGroup.latestTimestamp = Math.max(lastGroup.latestTimestamp, message.timestamp);
+      } else {
+        // Create new group for this sender
+        grouped.push({
+          senderId: senderId,
+          senderName: senderName,
+          messages: [{
+            id: message.id,
+            text: message.message,
+            timestamp: message.timestamp
+          }],
+          latestTimestamp: message.timestamp,
+          groupId: `${senderId}-${message.timestamp}-${Math.random()}`
+        });
+      }
+    });
+    
+    setGroupedChatMessages(grouped);
+  }, [chatMessages]);
+
+  // Auto-scroll chat messages
+  React.useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [groupedChatMessages]);
+
+  const handleChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (chatInput.trim() && !isSending) {
+      await sendMessage(chatInput);
+      setChatInput('');
+    }
+  };
+
   const transcriptionService = React.useMemo(() => new TranscriptionService(room), [room]);
 
-  // Load notes from localStorage on component mount
-  useEffect(() => {
-    const participantId = room?.localParticipant?.identity || 'unknown';
-    const roomName = room?.name || 'unknown-room';
-    const notesKey = `meeting-notes-${roomName}-${participantId}`;
-    const savedNotes = localStorage.getItem(notesKey);
-    if (savedNotes) {
-      setNotes(savedNotes);
-    }
+  // Send transcript updates to other participants
+  const shareTranscript = useCallback((transcript: Transcript) => {
+    if (!room?.localParticipant || !sendData) return;
+
+    const participantId = room.localParticipant.identity;
+    const speaker = transcript.speaker || room.localParticipant.name || participantId;
+    
+    setSharedTranscripts(prev => {
+      // Find the most recent entry (last in chronological order)
+      const lastEntry = prev[prev.length - 1];
+      
+      // If the last entry is from the same participant, append to it
+      // Otherwise, create a new entry
+      if (lastEntry && lastEntry.participantId === participantId) {
+        // Update the last entry by appending new text
+        const updated = [...prev];
+        updated[updated.length - 1] = {
+          ...lastEntry,
+          text: lastEntry.text + ' ' + transcript.text,
+          timestamp: Math.max(lastEntry.timestamp, transcript.timestamp)
+        };
+        return updated;
+      } else {
+        // Create new transcript entry for this participant
+        const newTranscript = {
+          speaker: speaker,
+          text: transcript.text,
+          participantId: participantId,
+          timestamp: transcript.timestamp,
+          entryId: `${participantId}-${Date.now()}-${Math.random()}`
+        };
+        return [...prev, newTranscript];
+      }
+    });
+    
+    // Get the updated transcript state to send
+    setTimeout(() => {
+      const currentTranscripts = sharedTranscriptsRef.current;
+      const lastEntry = currentTranscripts[currentTranscripts.length - 1];
+      
+      if (lastEntry && lastEntry.participantId === participantId) {
+        const sharedData: SharedTranscript = {
+          id: `${participantId}-${Date.now()}`,
+          speaker: speaker,
+          text: lastEntry.text,
+          participantId: participantId,
+          timestamp: lastEntry.timestamp,
+          entryId: lastEntry.entryId,
+          type: 'transcript_update'
+        };
+
+        const encoder = new TextEncoder();
+        const data = encoder.encode(JSON.stringify(sharedData));
+        
+        try {
+          sendData(data, { reliable: true });
+        } catch (error) {
+          console.error('Error sending transcript data:', error);
+        }
+      }
+    }, 0);
+  }, [room, sendData]);
+
+  // Listen for shared transcript data from other participants
+  React.useEffect(() => {
+    if (!room) return;
+
+    const handleDataReceived = (payload: Uint8Array, participant: any) => {
+      try {
+        const decoder = new TextDecoder();
+        const data = JSON.parse(decoder.decode(payload)) as SharedTranscript;
+        
+        if (data.type === 'transcript' || data.type === 'transcript_update') {
+          setSharedTranscripts(prev => {
+            // Check if this is an update to an existing entry
+            const existingIndex = prev.findIndex(t => t.entryId === data.entryId);
+            
+            if (existingIndex >= 0) {
+              // Update existing entry
+              const updated = [...prev];
+              updated[existingIndex] = {
+                speaker: data.speaker,
+                text: data.text,
+                participantId: data.participantId,
+                timestamp: data.timestamp,
+                entryId: data.entryId
+              };
+              return updated;
+            } else {
+              // Check if we should append to the last entry from this participant
+              const lastEntry = prev[prev.length - 1];
+              
+              if (lastEntry && lastEntry.participantId === data.participantId && 
+                  Math.abs(data.timestamp - lastEntry.timestamp) < 5000) { // Within 5 seconds
+                // Update the last entry
+                const updated = [...prev];
+                updated[updated.length - 1] = {
+                  ...lastEntry,
+                  text: data.text,
+                  entryId: data.entryId,
+                  timestamp: Math.max(lastEntry.timestamp, data.timestamp)
+                };
+                return updated;
+              } else {
+                // Add new transcript entry in chronological order
+                const newTranscript = {
+                  speaker: data.speaker,
+                  text: data.text,
+                  participantId: data.participantId,
+                  timestamp: data.timestamp,
+                  entryId: data.entryId
+                };
+                return [...prev, newTranscript];
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error parsing shared transcript data:', error);
+      }
+    };
+
+    room.on('dataReceived', handleDataReceived);
+    return () => {
+      room.off('dataReceived', handleDataReceived);
+    };
   }, [room]);
 
-  // Save notes to localStorage whenever notes change
-  useEffect(() => {
-    const participantId = room?.localParticipant?.identity || 'unknown';
-    const roomName = room?.name || 'unknown-room';
-    const notesKey = `meeting-notes-${roomName}-${participantId}`;
-    localStorage.setItem(notesKey, notes);
-  }, [notes, room]);
-
-  // Filter audio tracks
-  const audioTracks = tracks.filter(
-    (track) => track.source === Track.Source.Microphone && track.participant.identity !== 'recorder'
-  );
-
+  // Auto-start transcription when audio tracks are available
   const startTranscription = useCallback(async () => {
-    if (audioTracks.length === 0) {
-      console.error('No audio tracks available');
-      return;
-    }
+    if (isRecording) return;
+    
+    const audioTracks = tracks.filter(track => track.publication.source === Track.Source.Microphone);
+    if (audioTracks.length === 0) return;
 
-    const track = audioTracks[0].publication?.track;
-    if (!track) {
-      console.error('No track available');
-      return;
-    }
+    try {
+      setIsRecording(true);
+      const track = audioTracks[0].publication?.track;
+      if (!track) {
+        setIsRecording(false);
+        return;
+      }
 
-    setIsRecording(true);
-    const audioTrack = track.mediaStreamTrack;
-    await transcriptionService.startTranscription(audioTrack, (transcript) => {
-      setTranscripts((prev) => {
-        const newTranscripts = [...prev, transcript];
-        // Sort transcripts by timestamp
-        return newTranscripts.sort((a, b) => a.timestamp - b.timestamp);
+      const audioTrack = track.mediaStreamTrack;
+      await transcriptionService.startTranscription(audioTrack, (transcript: Transcript) => {
+        setTranscripts(prev => [...prev, transcript]);
+        shareTranscript(transcript); // Share with other participants
       });
-    });
-  }, [audioTracks, transcriptionService]);
+    } catch (error) {
+      console.error('Failed to start transcription:', error);
+      setIsRecording(false);
+    }
+  }, [transcriptionService, isRecording, tracks, shareTranscript]);
 
-  // Auto-start transcription when audio tracks become available
+  // Auto-start transcription when tracks become available
   useEffect(() => {
+    const audioTracks = tracks.filter(track => track.publication.source === Track.Source.Microphone);
     if (audioTracks.length > 0 && !isRecording) {
       startTranscription();
     }
-  }, [audioTracks, isRecording, startTranscription]);
+  }, [tracks, startTranscription, isRecording]);
 
-  // Process transcripts to combine consecutive messages from the same speaker
+  // Notes persistence
+  const roomName = room?.name || 'unknown';
+  const participantId = room?.localParticipant?.identity || 'unknown';
+
+  // Load notes on mount
   useEffect(() => {
-    const processed: DisplayTranscript[] = [];
-    let currentSpeaker = '';
-    let currentText = '';
-
-    transcripts.forEach((transcript) => {
-      if (transcript.speaker !== currentSpeaker) {
-        // If we have accumulated text, add it to processed
-        if (currentText) {
-          processed.push({
-            speaker: currentSpeaker,
-            text: currentText.trim()
-          });
-        }
-        // Start new speaker
-        currentSpeaker = transcript.speaker;
-        currentText = transcript.text;
-      } else {
-        // Append to current speaker's text
-        currentText += ' ' + transcript.text;
-      }
-    });
-
-    // Add the last message
-    if (currentText) {
-      processed.push({
-        speaker: currentSpeaker,
-        text: currentText.trim()
-      });
+    const storageKey = `meeting-notes-${roomName}-${participantId}`;
+    const savedNotes = localStorage.getItem(storageKey);
+    if (savedNotes) {
+      setNotes(savedNotes);
     }
+  }, [roomName, participantId]);
 
-    setDisplayTranscripts(processed);
-  }, [transcripts]);
-
+  // Auto-save notes
   useEffect(() => {
-    if (!room) return;
+    if (!notes) return;
 
-    // Handle room disconnection for meeting end
-    const handleDisconnected = () => {
-      if (onMeetingEnd) {
-        onMeetingEnd(transcripts);
-      }
-    };
+    setSaveStatus('saving');
+    const timeoutId = setTimeout(() => {
+      const storageKey = `meeting-notes-${roomName}-${participantId}`;
+      localStorage.setItem(storageKey, notes);
+      setSaveStatus('saved');
+    }, 1000);
 
-    // Handle incoming transcripts from other participants
-    const handleData = (payload: Uint8Array, participant: any) => {
-      try {
-        const decoder = new TextDecoder();
-        const jsonString = decoder.decode(payload);
-        
-        if (!jsonString) {
-          console.warn('Received empty payload');
-          return;
-        }
+    return () => clearTimeout(timeoutId);
+  }, [notes, roomName, participantId]);
 
-        const transcript = JSON.parse(jsonString) as Transcript;
-        
-        // Validate transcript structure
-        if (!transcript.speaker || !transcript.text || typeof transcript.timestamp !== 'number') {
-          console.warn('Received invalid transcript structure:', transcript);
-          return;
-        }
+  const exportNotes = () => {
+    const timestamp = new Date().toISOString().split('T')[0];
+    const content = `Ohm Meeting Notes - ${roomName}\nDate: ${timestamp}\n\n${notes}`;
+    
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ohm-notes-${roomName}-${timestamp}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
-        setTranscripts((prev) => {
-          const newTranscripts = [...prev, transcript];
-          // Sort transcripts by timestamp
-          return newTranscripts.sort((a, b) => a.timestamp - b.timestamp);
-        });
-      } catch (error) {
-        console.error('Error parsing transcript:', error);
-      }
-    };
-
-    room.on('disconnected', handleDisconnected);
-    room.on('dataReceived', handleData);
-
-    return () => {
-      room.off('disconnected', handleDisconnected);
-      room.off('dataReceived', handleData);
-    };
-  }, [room, transcripts, onMeetingEnd]);
+  const clearNotes = () => {
+    if (confirm('Are you sure you want to clear all notes?')) {
+      setNotes('');
+      const storageKey = `meeting-notes-${roomName}-${participantId}`;
+      localStorage.removeItem(storageKey);
+    }
+  };
 
   // Generate speaker colors for consistency
   const getSpeakerColor = (speaker: string) => {
@@ -180,162 +351,151 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     return colors[Math.abs(hash) % colors.length];
   };
 
-  const handleNotesChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setNotes(e.target.value);
-  };
-
-  const clearNotes = () => {
-    setNotes('');
-  };
-
-  const exportNotes = () => {
-    const participantName = room?.localParticipant?.name || room?.localParticipant?.identity || 'Unknown';
-    const roomName = room?.name || 'Unknown Room';
-    const timestamp = new Date().toLocaleString();
-    
-    const content = `Meeting Notes - ${roomName}\nParticipant: ${participantName}\nDate: ${timestamp}\n\n${notes}`;
-    
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `meeting-notes-${roomName}-${timestamp.replace(/[/:]/g, '-')}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const formatTimestamp = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
-    <div className="transcript-container">
-      {/* Header with Tab Toggle */}
-      <div className="transcript-header">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="transcript-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 1L21 5V11C21 16.55 17.16 21.74 12 23C6.84 21.74 3 16.55 3 11V5L12 1Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <path d="M9 12L11 14L15 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <h3 className="transcript-title">Meeting Assistant</h3>
-        </div>
-
-        {/* Tab Toggle */}
-        <div className="tab-toggle">
-          <button
-            className={`tab-button ${activeTab === 'notepad' ? 'tab-button--active' : ''}`}
-            onClick={() => setActiveTab('notepad')}
+    <div className="meeting-assistant">
+      <div className="meeting-assistant-header">
+        <h3 className="meeting-assistant-title">Meeting Assistant</h3>
+        <div className="tab-container">
+          <button 
+            className={`tab-button ${activeTab === 'notes' ? 'tab-button--active' : ''}`}
+            onClick={() => setActiveTab('notes')}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" stroke="currentColor" strokeWidth="2"/>
-              <polyline points="14,2 14,8 20,8" stroke="currentColor" strokeWidth="2"/>
-            </svg>
             Notes
           </button>
-          <button
+          <button 
             className={`tab-button ${activeTab === 'transcript' ? 'tab-button--active' : ''}`}
             onClick={() => setActiveTab('transcript')}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2"/>
-              <polyline points="14,2 14,8 20,8" stroke="currentColor" strokeWidth="2"/>
-              <line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" strokeWidth="2"/>
-              <line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" strokeWidth="2"/>
-              <polyline points="10,9 9,9 8,9" stroke="currentColor" strokeWidth="2"/>
-            </svg>
             Transcript
           </button>
+          <button 
+            className={`tab-button ${activeTab === 'chat' ? 'tab-button--active' : ''}`}
+            onClick={() => setActiveTab('chat')}
+          >
+            Chat
+            {chatMessages.length > 0 && (
+              <span className="chat-badge">{chatMessages.length}</span>
+            )}
+          </button>
         </div>
-        
-        {/* Auto Recording Indicator - Only show on transcript tab when recording */}
-        {activeTab === 'transcript' && isRecording && (
-          <div className="recording-indicator">
-            <div className="recording-pulse"></div>
-            <span className="recording-text">Recording...</span>
-          </div>
-        )}
       </div>
 
-      {/* Content Area */}
-      <div className="transcript-content">
-        {activeTab === 'transcript' ? (
-          // Transcript View
-          displayTranscripts.length === 0 ? (
-            <div className="transcript-empty">
-              <div className="empty-icon">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2C13.1 2 14 2.9 14 4V8C14 9.1 13.1 10 12 10C10.9 10 10 9.1 10 8V4C10 2.9 10.9 2 12 2Z" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M19 10V12C19 15.866 15.866 19 12 19C8.134 19 5 15.866 5 12V10" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M12 19V23" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <path d="M8 23H16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </div>
-              <p className="empty-text">
-                {isRecording ? 'Listening for speech...' : 'Waiting for audio to start transcription...'}
-              </p>
-            </div>
-          ) : (
-            <div className="transcript-messages">
-              {displayTranscripts.map((transcript, index) => (
-                <div key={index} className="message-block">
-                  <div className={`speaker-badge ${getSpeakerColor(transcript.speaker)}`}>
-                    <div className="speaker-avatar">
-                      {transcript.speaker.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="speaker-name">{transcript.speaker}</span>
-                  </div>
-                  <div className="message-content">
-                    <p className="message-text">{transcript.text}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        ) : (
-          // Notepad View
-          <div className="notepad-container">
-            <div className="notepad-header">
-              <div className="notepad-title">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" stroke="currentColor" strokeWidth="2"/>
-                  <polyline points="14,2 14,8 20,8" stroke="currentColor" strokeWidth="2"/>
-                </svg>
-                Personal Notes
-              </div>
-              <div className="notepad-actions">
-                <button onClick={clearNotes} className="notepad-action-btn" title="Clear notes">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <polyline points="3,6 5,6 21,6" stroke="currentColor" strokeWidth="2"/>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" stroke="currentColor" strokeWidth="2"/>
-                  </svg>
+      <div className="meeting-assistant-content">
+        {activeTab === 'notes' && (
+          <div className="notes-tab">
+            <div className="notes-header">
+              <div className="notes-actions">
+                <button onClick={exportNotes} className="action-button" disabled={!notes.trim()}>
+                  Export
                 </button>
-                <button onClick={exportNotes} className="notepad-action-btn" title="Export notes">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="2"/>
-                    <polyline points="7,10 12,15 17,10" stroke="currentColor" strokeWidth="2"/>
-                    <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="2"/>
-                  </svg>
+                <button onClick={clearNotes} className="action-button action-button--danger" disabled={!notes.trim()}>
+                  Clear
                 </button>
+              </div>
+              <div className="save-status">
+                <span className={`save-indicator save-indicator--${saveStatus}`}>
+                  {saveStatus === 'saved' && '✓ Saved'}
+                  {saveStatus === 'saving' && '⏳ Saving...'}
+                  {saveStatus === 'unsaved' && '● Unsaved'}
+                </span>
               </div>
             </div>
             <textarea
-              className="notepad-textarea"
+              className="notes-textarea"
+              placeholder="Take notes during the meeting..."
               value={notes}
-              onChange={handleNotesChange}
-              placeholder="Type your meeting notes here..."
-              spellCheck={true}
+              onChange={(e) => {
+                setNotes(e.target.value);
+                setSaveStatus('unsaved');
+              }}
             />
-            <div className="notepad-footer">
+            <div className="notes-footer">
               <span className="character-count">{notes.length} characters</span>
-              <span className="save-indicator">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" stroke="currentColor" strokeWidth="2"/>
-                  <polyline points="17,21 17,13 7,13 7,21" stroke="currentColor" strokeWidth="2"/>
-                  <polyline points="7,3 7,8 15,8" stroke="currentColor" strokeWidth="2"/>
-                </svg>
-                Auto-saved
-              </span>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'transcript' && (
+          <div className="transcript-tab">
+            <div className="transcript-controls">
+              {isRecording && (
+                <div className="recording-indicator">
+                  <div className="recording-pulse"></div>
+                  <span className="recording-text">Recording</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="transcript-messages">
+              {sharedTranscripts.length === 0 ? (
+                <div className="transcript-empty">
+                  <p>Transcription will appear here once the meeting starts</p>
+                </div>
+              ) : (
+                sharedTranscripts.map((transcript) => (
+                  <div key={transcript.entryId} className="transcript-message">
+                    <div className={`speaker-badge ${getSpeakerColor(transcript.speaker)}`}>
+                      {transcript.speaker}
+                    </div>
+                    <p className="transcript-text">{transcript.text}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'chat' && (
+          <div className="chat-tab">
+            <div className="chat-messages" ref={chatMessagesRef}>
+              {groupedChatMessages.length === 0 ? (
+                <div className="chat-empty">
+                  <p>No messages yet. Start a conversation!</p>
+                </div>
+              ) : (
+                groupedChatMessages.map((group) => (
+                  <div key={group.groupId} className="chat-message-group">
+                    <div className="chat-message-header">
+                      <span className="chat-sender">
+                        {group.senderName}
+                      </span>
+                      <span className="chat-timestamp">
+                        {formatTimestamp(group.latestTimestamp)}
+                      </span>
+                    </div>
+                    <div className="chat-message-text">
+                      {group.messages.map((msg) => (
+                        <div key={msg.id} className="chat-message">
+                          {msg.text}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            
+            <form className="chat-input-form" onSubmit={handleChatSubmit}>
+              <input
+                type="text"
+                className="chat-input"
+                placeholder="Type a message..."
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                disabled={isSending}
+              />
+              <button 
+                type="submit" 
+                className="chat-send-button"
+                disabled={isSending || !chatInput.trim()}
+              >
+                Send
+              </button>
+            </form>
           </div>
         )}
       </div>

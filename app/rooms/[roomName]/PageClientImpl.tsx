@@ -13,6 +13,18 @@ import {
   PreJoin,
   RoomContext,
   VideoConference,
+  LayoutContextProvider,
+  useCreateLayoutContext,
+  useTracks,
+  usePinnedTracks,
+  ControlBar,
+  GridLayout,
+  ParticipantTile,
+  FocusLayoutContainer,
+  CarouselLayout,
+  FocusLayout,
+  ConnectionStateToast,
+  RoomAudioRenderer
 } from '@livekit/components-react';
 import {
   ExternalE2EEKeyProvider,
@@ -23,11 +35,13 @@ import {
   DeviceUnsupportedError,
   RoomConnectOptions,
   RoomEvent,
+  Track
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { TranscriptTab } from '@/app/components/MeetingAssitant';
 import { TranscriptionService, Transcript } from '@/lib/transcription-service';
+import { isEqualTrackRef, isTrackReference, isWeb } from '@livekit/components-core';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -266,7 +280,7 @@ function VideoConferenceComponent(props: {
       <RoomContext.Provider value={room}>
         <div className="lk-video-conference" style={{ display: 'flex', width: '100%', height: '100%' }}>
           <div className="lk-main-content" style={{ flex: 1, minWidth: 0 }}>
-            <VideoConference
+            <CustomVideoConference
               SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
             />
           </div>
@@ -371,6 +385,116 @@ function VideoConferenceComponent(props: {
         <DebugMode />
         <RecordingIndicator />
       </RoomContext.Provider>
+    </div>
+  );
+}
+
+// Custom VideoConference component without chat
+function CustomVideoConference({ SettingsComponent, ...props }: { SettingsComponent?: React.ComponentType }) {
+  const [widgetState, setWidgetState] = React.useState({
+    showChat: false,
+    unreadMessages: 0,
+    showSettings: false,
+  });
+  const lastAutoFocusedScreenShareTrack = React.useRef<any>(null);
+
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged], onlySubscribed: false },
+  );
+
+  const widgetUpdate = (state: any) => {
+    setWidgetState(state);
+  };
+
+  const layoutContext = useCreateLayoutContext();
+
+  const screenShareTracks = tracks
+    .filter(isTrackReference)
+    .filter((track: any) => track.publication.source === Track.Source.ScreenShare);
+
+  const focusTrack = usePinnedTracks(layoutContext)?.[0];
+  const carouselTracks = tracks.filter((track: any) => !isEqualTrackRef(track, focusTrack));
+
+  React.useEffect(() => {
+    // Auto focus screen share
+    if (
+      screenShareTracks.some((track: any) => track.publication.isSubscribed) &&
+      lastAutoFocusedScreenShareTrack.current === null
+    ) {
+      layoutContext.pin.dispatch?.({ msg: 'set_pin', trackReference: screenShareTracks[0] });
+      lastAutoFocusedScreenShareTrack.current = screenShareTracks[0];
+    } else if (
+      lastAutoFocusedScreenShareTrack.current &&
+      !screenShareTracks.some(
+        (track: any) =>
+          track.publication.trackSid ===
+          lastAutoFocusedScreenShareTrack.current?.publication?.trackSid,
+      )
+    ) {
+      layoutContext.pin.dispatch?.({ msg: 'clear_pin' });
+      lastAutoFocusedScreenShareTrack.current = null;
+    }
+    if (focusTrack && !isTrackReference(focusTrack)) {
+      const updatedFocusTrack = tracks.find(
+        (tr: any) =>
+          tr.participant.identity === focusTrack.participant.identity &&
+          tr.source === focusTrack.source,
+      );
+      if (updatedFocusTrack !== focusTrack && isTrackReference(updatedFocusTrack)) {
+        layoutContext.pin.dispatch?.({ msg: 'set_pin', trackReference: updatedFocusTrack });
+      }
+    }
+  }, [
+    screenShareTracks
+      .map((ref: any) => `${ref.publication.trackSid}_${ref.publication.isSubscribed}`)
+      .join(),
+    focusTrack?.publication?.trackSid,
+    tracks,
+    layoutContext.pin
+  ]);
+
+  return (
+    <div className="lk-video-conference" {...props}>
+      {isWeb() && (
+        <LayoutContextProvider
+          value={layoutContext}
+          onWidgetChange={widgetUpdate}
+        >
+          <div className="lk-video-conference-inner">
+            {!focusTrack ? (
+              <div className="lk-grid-layout-wrapper">
+                <GridLayout tracks={tracks}>
+                  <ParticipantTile />
+                </GridLayout>
+              </div>
+            ) : (
+              <div className="lk-focus-layout-wrapper">
+                <FocusLayoutContainer>
+                  <CarouselLayout tracks={carouselTracks}>
+                    <ParticipantTile />
+                  </CarouselLayout>
+                  {focusTrack && <FocusLayout trackRef={focusTrack} />}
+                </FocusLayoutContainer>
+              </div>
+            )}
+            <ControlBar controls={{ chat: false, settings: !!SettingsComponent }} />
+          </div>
+          {SettingsComponent && (
+            <div
+              className="lk-settings-menu-modal"
+              style={{ display: widgetState.showSettings ? 'block' : 'none' }}
+            >
+              <SettingsComponent />
+            </div>
+          )}
+        </LayoutContextProvider>
+      )}
+      <RoomAudioRenderer />
+      <ConnectionStateToast />
     </div>
   );
 }
