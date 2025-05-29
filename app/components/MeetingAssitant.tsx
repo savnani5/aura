@@ -68,6 +68,9 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   const [groupedChatMessages, setGroupedChatMessages] = useState<GroupedChatMessage[]>([]);
   const chatMessagesRef = React.useRef<HTMLDivElement>(null);
 
+  // Add transcript messages ref for auto-scrolling
+  const transcriptMessagesRef = React.useRef<HTMLDivElement>(null);
+
   // Data channel for sharing transcripts
   const { send: sendData } = useDataChannel('transcript-sync');
 
@@ -133,6 +136,13 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
       chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
     }
   }, [groupedChatMessages]);
+
+  // Auto-scroll transcript messages when new transcripts arrive
+  React.useEffect(() => {
+    if (transcriptMessagesRef.current) {
+      transcriptMessagesRef.current.scrollTop = transcriptMessagesRef.current.scrollHeight;
+    }
+  }, [sharedTranscripts]);
 
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -462,7 +472,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
               )}
             </div>
             
-            <div className="transcript-messages">
+            <div className="transcript-messages" ref={transcriptMessagesRef}>
               {sharedTranscripts.length === 0 ? (
                 <div className="transcript-empty">
                   <p>Transcription will appear here once the meeting starts</p>

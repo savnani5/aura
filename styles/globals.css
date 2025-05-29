@@ -1655,3 +1655,98 @@ h2 a {
     margin-bottom: 0.25rem;
   }
 }
+
+/* Transcript Tab Content */
+.transcript-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.transcript-controls {
+  flex-shrink: 0;
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.transcript-messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0; /* Important for flex child to allow shrinking */
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  scroll-behavior: smooth;
+}
+
+.transcript-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  text-align: center;
+  color: var(--lk-fg3);
+  padding: 2rem;
+}
+
+.transcript-message {
+  background: var(--lk-bg2);
+  border-radius: var(--lk-border-radius);
+  padding: 1rem;
+  border: 1px solid var(--lk-border-color);
+  transition: all 0.2s ease;
+  margin-bottom: 0.75rem;
+  flex-shrink: 0; /* Prevent messages from being compressed */
+}
+
+.transcript-message:hover {
+  background: var(--lk-bg3);
+  border-color: var(--lk-accent-bg);
+  transform: translateY(-1px);
+}
+
+.speaker-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--lk-border-radius);
+  border: 1px solid;
+  width: fit-content;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.transcript-text {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--lk-fg2);
+  font-size: 0.875rem;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Custom scrollbar for transcript */
+.transcript-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.transcript-messages::-webkit-scrollbar-track {
+  background: var(--lk-bg3);
+  border-radius: 4px;
+}
+
+.transcript-messages::-webkit-scrollbar-thumb {
+  background: var(--lk-bg4);
+  border-radius: 4px;
+}
+
+.transcript-messages::-webkit-scrollbar-thumb:hover {
+  background: var(--lk-bg5);
+}

@@ -1,4 +1,5 @@
 import React from 'react';
+import Image from 'next/image';
 import {
   MediaDeviceMenu,
   TrackReference,
@@ -9,10 +10,16 @@ import {
 import { BackgroundBlur, VirtualBackground } from '@livekit/track-processors';
 import { isLocalTrack, LocalTrackPublication, Track } from 'livekit-client';
 
-// Background image paths
+// Background image paths - ensure these are in public/background-images/
 const BACKGROUND_IMAGES = [
-  { name: 'Desk', path: { src: '/background-images/samantha-gades-BlIhVfXbi9s-unsplash.jpg' } },
-  { name: 'Nature', path: { src: '/background-images/ali-kazal-tbw_KQE3Cbg-unsplash.jpg' } },
+  { 
+    name: 'Desk', 
+    url: '/background-images/samantha-gades-BlIhVfXbi9s-unsplash.jpg'
+  },
+  { 
+    name: 'Nature', 
+    url: '/background-images/ali-kazal-tbw_KQE3Cbg-unsplash.jpg'
+  },
 ];
 
 // Background options
@@ -31,6 +38,49 @@ export function CameraSettings() {
   const [virtualBackgroundImagePath, setVirtualBackgroundImagePath] = React.useState<string | null>(
     null,
   );
+
+  const [imagesLoaded, setImagesLoaded] = React.useState(false);
+
+  // Preload background images
+  React.useEffect(() => {
+    const loadImages = async () => {
+      console.log('Starting to preload background images...');
+      const imagePromises = BACKGROUND_IMAGES.map((image) => {
+        return new Promise<HTMLImageElement | null>((resolve) => {
+          const img = new window.Image();
+          img.onload = () => {
+            console.log(`✅ Successfully loaded background image: ${image.url}`);
+            resolve(img);
+          };
+          img.onerror = () => {
+            console.error(`❌ Failed to load background image: ${image.url}`);
+            // Try to provide more detailed error information
+            fetch(image.url)
+              .then(response => {
+                console.log(`Image fetch response for ${image.url}:`, response.status, response.statusText);
+              })
+              .catch(fetchError => {
+                console.error(`Fetch error for ${image.url}:`, fetchError);
+              });
+            resolve(null); // Don't reject, just resolve with null
+          };
+          img.src = image.url;
+        });
+      });
+
+      try {
+        const results = await Promise.all(imagePromises);
+        const loadedCount = results.filter(result => result !== null).length;
+        console.log(`Preloaded ${loadedCount}/${BACKGROUND_IMAGES.length} background images`);
+        setImagesLoaded(true);
+      } catch (error) {
+        console.error('Error preloading background images:', error);
+        setImagesLoaded(true); // Still set to true to show UI
+      }
+    };
+
+    loadImages();
+  }, []);
 
   const camTrackRef: TrackReference | undefined = React.useMemo(() => {
     return cameraTrack
@@ -136,22 +186,31 @@ export function CameraSettings() {
 
           {BACKGROUND_IMAGES.map((image) => (
             <button
-              key={image.path.src}
-              onClick={() => selectBackground('image', image.path.src)}
+              key={image.url}
+              onClick={() => selectBackground('image', image.url)}
               className="lk-button"
               aria-pressed={
-                backgroundType === 'image' && virtualBackgroundImagePath === image.path.src
+                backgroundType === 'image' && virtualBackgroundImagePath === image.url
               }
               style={{
-                backgroundImage: `url(${image.path.src})`,
+                backgroundImage: `url(${image.url})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
                 width: '80px',
                 height: '60px',
                 border:
-                  backgroundType === 'image' && virtualBackgroundImagePath === image.path.src
+                  backgroundType === 'image' && virtualBackgroundImagePath === image.url
                     ? '2px solid #0090ff'
                     : '1px solid #d1d1d1',
+                backgroundColor: '#f0f0f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onError={(e) => {
+                console.error(`Failed to load background image: ${image.url}`);
+                e.currentTarget.style.backgroundColor = '#e0e0e0';
+                e.currentTarget.style.backgroundImage = 'none';
               }}
             >
               <span
@@ -160,6 +219,7 @@ export function CameraSettings() {
                   padding: '2px 5px',
                   borderRadius: '4px',
                   fontSize: '12px',
+                  color: 'white',
                 }}
               >
                 {image.name}
