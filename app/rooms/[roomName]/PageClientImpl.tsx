@@ -26,7 +26,7 @@ import {
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
-import { TranscriptTab } from '@/app/components/TranscriptTab';
+import { TranscriptTab } from '@/app/components/MeetingAssitant';
 import { TranscriptionService, Transcript } from '@/lib/transcription-service';
 
 const CONN_DETAILS_ENDPOINT =
@@ -101,6 +101,10 @@ function VideoConferenceComponent(props: {
   const e2eeEnabled = !!(e2eePassphrase && worker);
 
   const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
+  const [showShareModal, setShowShareModal] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const [meetingUrl, setMeetingUrl] = React.useState('');
+
   const roomOptions = React.useMemo((): RoomOptions => {
     let videoCodec: VideoCodec | undefined = props.options.codec ? props.options.codec : 'vp9';
     if (e2eeEnabled && (videoCodec === 'av1' || videoCodec === 'vp9')) {
@@ -163,6 +167,22 @@ function VideoConferenceComponent(props: {
     room.on(RoomEvent.Disconnected, handleOnLeave);
     room.on(RoomEvent.EncryptionError, handleEncryptionError);
     room.on(RoomEvent.MediaDevicesError, handleError);
+    
+    // Show share modal when host connects
+    const handleConnected = () => {
+      // Generate the meeting URL
+      const url = window.location.href;
+      setMeetingUrl(url);
+      setShowShareModal(true);
+      
+      // Auto-hide after 10 seconds
+      setTimeout(() => {
+        setShowShareModal(false);
+      }, 10000);
+    };
+    
+    room.on(RoomEvent.Connected, handleConnected);
+    
     if (e2eeSetupComplete) {
       room
         .connect(
@@ -188,6 +208,7 @@ function VideoConferenceComponent(props: {
       room.off(RoomEvent.Disconnected, handleOnLeave);
       room.off(RoomEvent.EncryptionError, handleEncryptionError);
       room.off(RoomEvent.MediaDevicesError, handleError);
+      room.off(RoomEvent.Connected, handleConnected);
     };
   }, [e2eeSetupComplete, room, props.connectionDetails, props.userChoices]);
 
@@ -204,6 +225,32 @@ function VideoConferenceComponent(props: {
     );
   }, []);
 
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(meetingUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  const shareViaEmail = () => {
+    const subject = encodeURIComponent('Join my Ohm video meeting');
+    const body = encodeURIComponent(`Hi! Join my video meeting on Ohm:\n\n${meetingUrl}\n\nSee you there!`);
+    window.open(`mailto:?subject=${subject}&body=${body}`);
+  };
+
+  const shareViaWhatsApp = () => {
+    const text = encodeURIComponent(`Join my video meeting on Ohm: ${meetingUrl}`);
+    window.open(`https://wa.me/?text=${text}`);
+  };
+
+  const closeShareModal = () => {
+    setShowShareModal(false);
+    setCopied(false);
+  };
+
   const handleMeetingEnd = async (transcripts: Transcript[]) => {
     try {
       const summary = await transcriptionService.summarizeTranscripts(transcripts);
@@ -217,16 +264,109 @@ function VideoConferenceComponent(props: {
   return (
     <div className="lk-room-container">
       <RoomContext.Provider value={room}>
-        <div className="lk-video-conference" style={{ display: 'flex', width: '100%' }}>
+        <div className="lk-video-conference" style={{ display: 'flex', width: '100%', height: '100%' }}>
           <div className="lk-main-content" style={{ flex: 1, minWidth: 0 }}>
             <VideoConference
               SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
             />
           </div>
-          <div className="lk-sidebar" style={{ width: '300px', minWidth: '300px', borderLeft: '1px solid #e5e7eb' }}>
+          <div className="lk-sidebar" style={{ width: '320px', minWidth: '320px' }}>
             <TranscriptTab onMeetingEnd={handleMeetingEnd} />
           </div>
         </div>
+        
+        {/* Share Link Modal */}
+        {showShareModal && (
+          <div className="share-modal-overlay" onClick={closeShareModal}>
+            <div className="share-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="share-modal-header">
+                <div className="share-modal-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="share-modal-title">Share Meeting Link</h3>
+                  <p className="share-modal-subtitle">Invite participants to join</p>
+                </div>
+                <button onClick={closeShareModal} className="share-modal-close">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
+
+              <div className="share-modal-content">
+                <div className="share-link-container">
+                  <div className="share-link-box">
+                    <input
+                      type="text"
+                      value={meetingUrl}
+                      readOnly
+                      className="share-link-input"
+                    />
+                    <button onClick={copyToClipboard} className="share-copy-button">
+                      {copied ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <polyline points="20,6 9,17 4,12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                        </svg>
+                      )}
+                      {copied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="share-options">
+                  <p className="share-options-title">Quick Share:</p>
+                  <div className="share-buttons">
+                    <button onClick={shareViaEmail} className="share-button">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" strokeWidth="2"/>
+                        <polyline points="22,6 12,13 2,6" stroke="currentColor" strokeWidth="2"/>
+                      </svg>
+                      Email
+                    </button>
+                    <button onClick={shareViaWhatsApp} className="share-button">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" strokeWidth="2"/>
+                      </svg>
+                      WhatsApp
+                    </button>
+                  </div>
+                </div>
+
+                {e2eeEnabled && (
+                  <div className="share-encryption-notice">
+                    <div className="share-encryption-icon">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" strokeWidth="2"/>
+                        <path d="m9 12 2 2 4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="share-encryption-title">End-to-end encryption enabled</p>
+                      <p className="share-encryption-description">
+                        Participants will need the encryption passphrase to join.
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="share-modal-footer">
+                  <p className="share-modal-timer">This popup will close automatically in a few seconds</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        
         <KeyboardShortcuts />
         <DebugMode />
         <RecordingIndicator />
