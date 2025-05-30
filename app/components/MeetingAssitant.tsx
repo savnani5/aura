@@ -93,8 +93,8 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     const checkMobile = () => {
       const mobile = window.innerWidth <= 768;
       setIsMobile(mobile);
-      // Auto-collapse on mobile when switching from desktop
-      if (mobile && !isMobile) {
+      // Reset expanded state when switching between mobile/desktop
+      if (!mobile) {
         setIsExpanded(false);
       }
     };
@@ -102,50 +102,11 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, [isMobile]);
+  }, []);
 
-  const handleMobileHeaderClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleMobileHeaderClick = () => {
     if (isMobile) {
       setIsExpanded(!isExpanded);
-    }
-  };
-
-  // Handle touch events for better mobile responsiveness
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (isMobile) {
-      e.stopPropagation();
-      // Add visual feedback
-      const target = e.currentTarget as HTMLElement;
-      target.style.transform = 'scale(0.98)';
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (isMobile) {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      // Reset visual feedback
-      const target = e.currentTarget as HTMLElement;
-      target.style.transform = '';
-      
-      // Haptic feedback simulation (if supported)
-      if ('vibrate' in navigator) {
-        navigator.vibrate(50);
-      }
-      
-      setIsExpanded(!isExpanded);
-    }
-  };
-
-  // Auto-expand when switching to a tab on mobile
-  const handleTabClick = (tab: TabView, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setActiveTab(tab);
-    if (isMobile && !isExpanded) {
-      setIsExpanded(true);
     }
   };
 
@@ -565,23 +526,12 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   };
 
   return (
-    <div className={`meeting-assistant ${isMobile && isExpanded ? 'expanded' : ''} ${isMobile ? 'mobile' : ''}`}>
-      <div 
-        className="meeting-assistant-header" 
-        onClick={handleMobileHeaderClick}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
-        style={{ 
-          cursor: isMobile ? 'pointer' : 'default',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          WebkitTapHighlightColor: 'transparent'
-        }}
-      >
+    <div className={`meeting-assistant ${isMobile && isExpanded ? 'expanded' : ''}`}>
+      <div className="meeting-assistant-header" onClick={handleMobileHeaderClick}>
         <h3 className="meeting-assistant-title">
           Meeting Assistant
           {isMobile && (
-            <span className="mobile-indicator">
+            <span className="expand-indicator">
               {isExpanded ? '▼' : '▲'}
             </span>
           )}
@@ -589,19 +539,58 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
         <div className="tab-container">
           <button 
             className={`tab-button ${activeTab === 'notes' ? 'tab-button--active' : ''}`}
-            onClick={(e) => handleTabClick('notes', e)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isMobile) {
+                // If clicking the active tab and expanded, collapse it
+                if (activeTab === 'notes' && isExpanded) {
+                  setIsExpanded(false);
+                } else {
+                  setActiveTab('notes');
+                  setIsExpanded(true);
+                }
+              } else {
+                setActiveTab('notes');
+              }
+            }}
           >
             Notes
           </button>
           <button 
             className={`tab-button ${activeTab === 'transcript' ? 'tab-button--active' : ''}`}
-            onClick={(e) => handleTabClick('transcript', e)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isMobile) {
+                // If clicking the active tab and expanded, collapse it
+                if (activeTab === 'transcript' && isExpanded) {
+                  setIsExpanded(false);
+                } else {
+                  setActiveTab('transcript');
+                  setIsExpanded(true);
+                }
+              } else {
+                setActiveTab('transcript');
+              }
+            }}
           >
             Transcript
           </button>
           <button 
             className={`tab-button ${activeTab === 'chat' ? 'tab-button--active' : ''}`}
-            onClick={(e) => handleTabClick('chat', e)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isMobile) {
+                // If clicking the active tab and expanded, collapse it
+                if (activeTab === 'chat' && isExpanded) {
+                  setIsExpanded(false);
+                } else {
+                  setActiveTab('chat');
+                  setIsExpanded(true);
+                }
+              } else {
+                setActiveTab('chat');
+              }
+            }}
           >
             Chat
             {chatMessages.length > 0 && (

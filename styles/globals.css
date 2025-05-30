@@ -1207,15 +1207,11 @@ h2 a {
     z-index: 50; /* Below control bar */
     transform: translateY(calc(100% - 60px));
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    will-change: transform;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
   }
 
   .meeting-assistant.expanded {
     transform: translateY(0);
-  }
-
-  .meeting-assistant.mobile {
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
   }
 
   .meeting-assistant-header {
@@ -1225,7 +1221,16 @@ h2 a {
     cursor: pointer;
     user-select: none;
     position: relative;
-    transition: all 0.2s ease;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    min-height: 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .meeting-assistant-header:active {
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .meeting-assistant-header::after {
@@ -1238,66 +1243,82 @@ h2 a {
     height: 3px;
     background: rgba(255, 255, 255, 0.3);
     border-radius: 2px;
+    transition: background-color 0.2s ease;
+  }
+
+  .meeting-assistant-header:active::after {
+    background: rgba(255, 255, 255, 0.5);
   }
 
   .meeting-assistant-title {
     font-size: 0.875rem;
     margin-bottom: 0.5rem;
     text-align: center;
+    transition: opacity 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
   }
 
-  .mobile-indicator {
+  .expand-indicator {
     font-size: 0.75rem;
     color: var(--lk-fg3);
-    transition: transform 0.2s ease;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
   }
 
-  .meeting-assistant.mobile .meeting-assistant-header {
-    background: rgba(0, 0, 0, 0.8);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-    transition: all 0.2s ease;
-    min-height: 60px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    position: relative;
-  }
-
-  .meeting-assistant.mobile .meeting-assistant-header:active {
-    background: rgba(0, 0, 0, 0.9);
-    transform: scale(0.98);
-  }
-
-  .meeting-assistant.mobile .meeting-assistant-header::before {
-    content: '';
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 40px;
-    height: 4px;
-    background: rgba(255, 255, 255, 0.4);
-    border-radius: 2px;
-    transition: all 0.2s ease;
-  }
-
-  .meeting-assistant.mobile.expanded .meeting-assistant-header::before {
-    background: rgba(255, 255, 255, 0.6);
+  .meeting-assistant.expanded .expand-indicator {
+    transform: rotate(180deg);
   }
 
   .tab-container {
     margin-bottom: 0.5rem;
   }
 
+  .tab-button {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tab-button:active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .tab-button::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.3s ease, height 0.3s ease;
+    pointer-events: none;
+  }
+
+  .tab-button:active::before {
+    width: 100px;
+    height: 100px;
+  }
+
   .meeting-assistant-content {
     flex: 1;
     min-height: 0;
     max-height: calc(45vh - 80px);
+    opacity: 1;
+    transition: opacity 0.3s ease;
+  }
+
+  .meeting-assistant:not(.expanded) .meeting-assistant-content {
+    opacity: 0;
+    pointer-events: none;
   }
 
   /* Page Layout Mobile Adjustments */
@@ -1602,31 +1623,37 @@ h2 a {
   .meeting-assistant-header {
     min-height: 60px;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.1);
-    tap-highlight-color: rgba(255, 255, 255, 0.1);
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .meeting-assistant-header:active {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .tab-button:active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.1) !important;
   }
 
   .notes-textarea,
   .chat-input {
     font-size: 16px; /* Prevent zoom on iOS */
+    -webkit-appearance: none;
+    border-radius: 8px;
   }
 
-  /* Better touch feedback */
-  .meeting-assistant.mobile .meeting-assistant-header:active {
-    background: rgba(0, 0, 0, 0.9);
-    transform: scale(0.98);
+  /* Improve touch targets for mobile */
+  .meeting-assistant-title {
+    padding: 0.5rem;
+    cursor: pointer;
   }
 
-  .tab-button:active {
-    transform: scale(0.95);
-    background: var(--lk-bg4);
-  }
-
-  .action-button:active,
-  .chat-send-button:active {
-    transform: scale(0.95);
+  .expand-indicator {
+    padding: 0.25rem;
   }
 }
 
