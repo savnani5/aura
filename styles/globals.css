@@ -2366,44 +2366,8 @@ h2 a {
     }
   }
 
-  /* Ensure the settings menu content is scrollable */
-  .lk-settings-menu-modal > * {
-    flex-shrink: 0;
-  }
-
-  .lk-settings-menu-modal > *:last-child {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    scroll-behavior: smooth;
-  }
-
-  /* Custom scrollbar for settings menu content */
-  .lk-settings-menu-modal *::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .lk-settings-menu-modal *::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 3px;
-  }
-
-  .lk-settings-menu-modal *::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-  }
-
-  .lk-settings-menu-modal *::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.3);
-  }
-
-  /* Hide scrollbar on mobile for cleaner look */
-  .lk-settings-menu-modal * {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
-  }
+  /* Remove the conflicting scrolling rules that were interfering */
+  /* The SettingsMenu component will handle its own scrolling */
 }
 
 @media (max-width: 480px) {

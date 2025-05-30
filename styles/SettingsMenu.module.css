@@ -232,6 +232,8 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    max-height: 85vh;
+    min-height: 60vh;
   }
 
   .tabs {
@@ -265,6 +267,27 @@
     overscroll-behavior: contain;
     scroll-behavior: smooth;
     min-height: 0;
+    transform: translateZ(0);
+    will-change: scroll-position;
+    touch-action: pan-y;
+  }
+
+  .tabContent::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .tabContent::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+  }
+
+  .tabContent::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+  }
+
+  .tabContent::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
   }
 
   .sectionTitle {
@@ -364,12 +387,13 @@
   }
 }
 
-/* Touch-friendly interactions */
+/* Touch-friendly interactions for settings menu */
 @media (hover: none) and (pointer: coarse) {
   .tab,
   .recordingButton,
   .closeButton {
     min-height: 44px;
+    min-width: 44px;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
@@ -385,6 +409,24 @@
 
   .closeButton:active {
     transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  /* Ensure scrollable content works with touch */
+  .tabContent {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+    /* Prevent momentum scrolling from interfering with other elements */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+
+  /* Improve touch scrolling performance */
+  .settingsMenu {
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: transform;
   }
 }
 
