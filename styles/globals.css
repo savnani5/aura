@@ -1750,3 +1750,121 @@ h2 a {
 .transcript-messages::-webkit-scrollbar-thumb:hover {
   background: var(--lk-bg5);
 }
+
+/* AI Chat Message Styles */
+.ai-message {
+  background: rgba(31, 140, 249, 0.1) !important;
+  border: 1px solid rgba(31, 140, 249, 0.2) !important;
+}
+
+.user-ai-message {
+  background: rgba(31, 249, 104, 0.1) !important;
+  border: 1px solid rgba(31, 249, 104, 0.2) !important;
+}
+
+.ai-processing {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-style: italic;
+  color: var(--lk-fg3);
+}
+
+/* AI Typing Indicator */
+.ai-typing-indicator {
+  display: inline-flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.ai-typing-indicator span {
+  width: 4px;
+  height: 4px;
+  background: var(--lk-accent-bg);
+  border-radius: 50%;
+  animation: aiTyping 1.4s infinite ease-in-out;
+}
+
+.ai-typing-indicator span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.ai-typing-indicator span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes aiTyping {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Enhanced chat input for AI commands */
+.chat-input:focus {
+  border-color: var(--lk-accent-bg);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 2px rgba(31, 140, 249, 0.1);
+}
+
+/* AI context badges */
+.ai-context-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.625rem;
+  background: var(--lk-accent-bg);
+  color: var(--lk-accent-fg);
+  padding: 0.125rem 0.375rem;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* Chat message enhancements */
+.chat-message-group {
+  transition: all 0.2s ease;
+}
+
+.chat-message-group:hover {
+  background: rgba(255, 255, 255, 0.02);
+  transform: translateY(-1px);
+}
+
+/* AI-specific styling */
+.ai-message .chat-sender {
+  color: var(--lk-accent-bg);
+  font-weight: 600;
+}
+
+.user-ai-message .chat-sender {
+  color: var(--lk-success);
+  font-weight: 600;
+}
+
+/* Better message text formatting for AI responses */
+.ai-message .chat-message {
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+/* Enhanced mobile AI chat styles */
+@media (max-width: 768px) {
+  .ai-context-badge {
+    font-size: 0.5625rem;
+    padding: 0.0625rem 0.25rem;
+  }
+
+  .ai-typing-indicator span {
+    width: 3px;
+    height: 3px;
+  }
+
+  .chat-input {
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+}

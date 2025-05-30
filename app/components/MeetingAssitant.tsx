@@ -68,6 +68,18 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   const [groupedChatMessages, setGroupedChatMessages] = useState<GroupedChatMessage[]>([]);
   const chatMessagesRef = React.useRef<HTMLDivElement>(null);
 
+  // AI Chat functionality
+  const [aiChatHistory, setAiChatHistory] = useState<Array<{
+    id: string;
+    type: 'user' | 'ai';
+    message: string;
+    timestamp: number;
+    userName?: string;
+    usedContext?: boolean;
+    relevantTranscripts?: number;
+  }>>([]);
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+
   // Add transcript messages ref for auto-scrolling
   const transcriptMessagesRef = React.useRef<HTMLDivElement>(null);
 
@@ -135,7 +147,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     if (chatMessagesRef.current) {
       chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
     }
-  }, [groupedChatMessages]);
+  }, [groupedChatMessages, aiChatHistory, isAiProcessing]);
 
   // Auto-scroll transcript messages when new transcripts arrive
   React.useEffect(() => {
@@ -146,11 +158,133 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
 
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (chatInput.trim() && !isSending) {
+    if (!chatInput.trim() || isSending) return;
+
+    const message = chatInput.trim();
+    const isAiCommand = message.startsWith('@ohm ');
+
+    if (isAiCommand) {
+      // Handle AI command
+      await handleAiChat(message.slice(5)); // Remove '@ohm ' prefix
+    } else {
+      // Handle regular chat
       await sendMessage(chatInput);
-      setChatInput('');
+    }
+    
+    setChatInput('');
+  };
+
+  const handleAiChat = async (message: string) => {
+    if (!message.trim() || isAiProcessing) return;
+
+    const currentUser = room?.localParticipant?.name || room?.localParticipant?.identity || 'User';
+    const roomName = room?.name || 'unknown';
+
+    // Add user message to AI chat history
+    const userChatId = `ai-user-${Date.now()}`;
+    const userAiMessage = {
+      id: userChatId,
+      type: 'user' as const,
+      message: message,
+      timestamp: Date.now(),
+      userName: currentUser,
+    };
+
+    setAiChatHistory(prev => [...prev, userAiMessage]);
+    setIsAiProcessing(true);
+
+    try {
+      // Get current transcripts for context
+      const currentTranscripts = sharedTranscripts
+        .map(t => `${t.speaker}: ${t.text}`)
+        .join('\n');
+
+      // Send AI chat request
+      const response = await fetch('/api/ai-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message,
+          roomName,
+          userName: currentUser,
+          currentTranscripts,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Add AI response to chat history
+        const aiChatId = `ai-response-${Date.now()}`;
+        const aiMessage = {
+          id: aiChatId,
+          type: 'ai' as const,
+          message: data.response,
+          timestamp: Date.now(),
+          usedContext: data.usedContext,
+          relevantTranscripts: data.relevantTranscripts,
+        };
+
+        setAiChatHistory(prev => [...prev, aiMessage]);
+      } else {
+        // Handle error
+        const errorMessage = {
+          id: `ai-error-${Date.now()}`,
+          type: 'ai' as const,
+          message: `Error: ${data.error || 'Failed to get AI response'}`,
+          timestamp: Date.now(),
+        };
+        setAiChatHistory(prev => [...prev, errorMessage]);
+      }
+    } catch (error) {
+      console.error('Error sending AI chat:', error);
+      const errorMessage = {
+        id: `ai-error-${Date.now()}`,
+        type: 'ai' as const,
+        message: 'Sorry, I encountered an error. Please try again.',
+        timestamp: Date.now(),
+      };
+      setAiChatHistory(prev => [...prev, errorMessage]);
+    } finally {
+      setIsAiProcessing(false);
     }
   };
+
+  // Store transcripts for AI context periodically
+  React.useEffect(() => {
+    if (sharedTranscripts.length === 0) return;
+
+    const storeTranscripts = async () => {
+      const transcriptText = sharedTranscripts
+        .map(t => `${t.speaker}: ${t.text}`)
+        .join('\n');
+
+      const participants = Array.from(new Set(sharedTranscripts.map(t => t.speaker)));
+      const roomName = room?.name || 'unknown';
+
+      try {
+        await fetch('/api/ai-chat', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            roomName,
+            transcriptText,
+            participants,
+          }),
+        });
+      } catch (error) {
+        console.error('Error storing transcript for AI:', error);
+      }
+    };
+
+    // Store transcripts every 30 seconds if there are new ones
+    const interval = setInterval(storeTranscripts, 30000);
+    return () => clearInterval(interval);
+  }, [sharedTranscripts, room?.name]);
 
   const transcriptionService = React.useMemo(() => new TranscriptionService(room), [room]);
 
@@ -494,30 +628,92 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
         {activeTab === 'chat' && (
           <div className="chat-tab">
             <div className="chat-messages" ref={chatMessagesRef}>
-              {groupedChatMessages.length === 0 ? (
+              {groupedChatMessages.length === 0 && aiChatHistory.length === 0 ? (
                 <div className="chat-empty">
                   <p>No messages yet. Start a conversation!</p>
+                  <p style={{ fontSize: '0.75rem', color: 'var(--lk-fg3)', marginTop: '0.5rem' }}>
+                    💡 Tip: Use <strong>@ohm</strong> to chat with the AI assistant
+                  </p>
                 </div>
               ) : (
-                groupedChatMessages.map((group) => (
-                  <div key={group.groupId} className="chat-message-group">
-                    <div className="chat-message-header">
-                      <span className="chat-sender">
-                        {group.senderName}
-                      </span>
-                      <span className="chat-timestamp">
-                        {formatTimestamp(group.latestTimestamp)}
-                      </span>
+                <>
+                  {/* Regular Chat Messages */}
+                  {groupedChatMessages.map((group) => (
+                    <div key={group.groupId} className="chat-message-group">
+                      <div className="chat-message-header">
+                        <span className="chat-sender">
+                          {group.senderName}
+                        </span>
+                        <span className="chat-timestamp">
+                          {formatTimestamp(group.latestTimestamp)}
+                        </span>
+                      </div>
+                      <div className="chat-message-text">
+                        {group.messages.map((msg) => (
+                          <div key={msg.id} className="chat-message">
+                            {msg.text}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="chat-message-text">
-                      {group.messages.map((msg) => (
-                        <div key={msg.id} className="chat-message">
-                          {msg.text}
+                  ))}
+
+                  {/* AI Chat Messages */}
+                  {aiChatHistory.map((aiMsg) => (
+                    <div key={aiMsg.id} className={`chat-message-group ${aiMsg.type === 'ai' ? 'ai-message' : 'user-ai-message'}`}>
+                      <div className="chat-message-header">
+                        <span className="chat-sender">
+                          {aiMsg.type === 'ai' ? (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              🤖 Ohm AI
+                              {aiMsg.usedContext && (
+                                <span style={{ 
+                                  fontSize: '0.625rem', 
+                                  background: 'var(--lk-accent-bg)', 
+                                  color: 'var(--lk-accent-fg)',
+                                  padding: '0.125rem 0.25rem',
+                                  borderRadius: '4px'
+                                }}>
+                                  {aiMsg.relevantTranscripts ? `${aiMsg.relevantTranscripts} refs` : 'context'}
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            `${aiMsg.userName} → 🤖 AI`
+                          )}
+                        </span>
+                        <span className="chat-timestamp">
+                          {formatTimestamp(aiMsg.timestamp)}
+                        </span>
+                      </div>
+                      <div className="chat-message-text">
+                        <div className="chat-message">
+                          {aiMsg.message}
                         </div>
-                      ))}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  ))}
+
+                  {/* AI Processing Indicator */}
+                  {isAiProcessing && (
+                    <div className="chat-message-group ai-message">
+                      <div className="chat-message-header">
+                        <span className="chat-sender">🤖 Ohm AI</span>
+                        <span className="chat-timestamp">Processing...</span>
+                      </div>
+                      <div className="chat-message-text">
+                        <div className="chat-message ai-processing">
+                          <span className="ai-typing-indicator">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </span>
+                          Thinking...
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
             
@@ -525,17 +721,17 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
               <input
                 type="text"
                 className="chat-input"
-                placeholder="Type a message..."
+                placeholder={chatInput.startsWith('@ohm ') ? "Ask Ohm AI about the meeting..." : "Type a message or @ohm for AI assistant..."}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
-                disabled={isSending}
+                disabled={isSending || isAiProcessing}
               />
               <button 
                 type="submit" 
                 className="chat-send-button"
-                disabled={isSending || !chatInput.trim()}
+                disabled={isSending || isAiProcessing || !chatInput.trim()}
               >
-                Send
+                {chatInput.startsWith('@ohm ') ? '🤖' : 'Send'}
               </button>
             </form>
           </div>
