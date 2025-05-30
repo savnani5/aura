@@ -1659,12 +1659,6 @@ h2 a {
     backdrop-filter: blur(10px);
   }
 
-  .meeting-assistant:not(.expanded) .meeting-assistant-header {
-    border-bottom: none;
-    background: transparent;
-    min-height: 45px;
-  }
-
   .lk-main-content {
     height: calc(100vh - 80px) !important; /* Account for control bar */
     min-height: calc(40vh - 80px) !important;
@@ -2129,5 +2123,194 @@ h2 a {
   .meeting-assistant:not(.expanded) .meeting-assistant-header::after {
     height: 3px;
     width: 32px;
+  }
+}
+
+/* Settings Menu Integration */
+.lk-widget-container {
+  position: relative;
+  z-index: 1001; /* Above meeting assistant and control bar */
+}
+
+/* Settings Menu Modal Overlay for Mobile */
+@media (max-width: 768px) {
+  .lk-widget-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1001;
+    padding: 0;
+  }
+
+  /* Ensure settings menu appears above everything */
+  .lk-widget-container > * {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+}
+
+/* Settings Menu Button Styling */
+.lk-button {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--lk-fg);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: var(--lk-font-family);
+}
+
+.lk-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+}
+
+.lk-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Track Toggle Button Styling */
+.lk-button[data-lk-source] {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 120px;
+  justify-content: center;
+}
+
+.lk-button[data-lk-source][data-lk-enabled="true"] {
+  background: var(--lk-accent-bg);
+  color: var(--lk-accent-fg);
+  border-color: var(--lk-accent2);
+}
+
+.lk-button[data-lk-source][data-lk-enabled="false"] {
+  background: rgba(249, 31, 49, 0.1);
+  color: var(--lk-danger);
+  border-color: rgba(249, 31, 49, 0.3);
+}
+
+/* Media Device Menu Styling */
+.lk-media-device-menu {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: var(--lk-fg);
+  padding: 0.5rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 200px;
+}
+
+.lk-media-device-menu:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.lk-media-device-menu option {
+  background: var(--lk-bg);
+  color: var(--lk-fg);
+  padding: 0.5rem;
+}
+
+/* Mobile Settings Menu Adjustments */
+@media (max-width: 768px) {
+  .lk-button {
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .lk-button:active {
+    transform: scale(0.95);
+  }
+
+  .lk-button[data-lk-source] {
+    min-width: 100%;
+    margin-bottom: 0.5rem;
+  }
+
+  .lk-media-device-menu {
+    width: 100%;
+    min-width: auto;
+    padding: 0.75rem;
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .lk-button {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
+  }
+
+  .lk-media-device-menu {
+    padding: 0.625rem;
+    font-size: 0.8125rem;
+  }
+}
+
+/* Touch-friendly interactions for settings */
+@media (hover: none) and (pointer: coarse) {
+  .lk-button,
+  .lk-media-device-menu {
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .lk-button:active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.2) !important;
+  }
+}
+
+/* Ensure settings menu doesn't interfere with meeting assistant */
+@media (max-width: 768px) {
+  .meeting-assistant {
+    z-index: 50; /* Below settings menu */
+  }
+
+  .lk-control-bar {
+    z-index: 100; /* Below settings menu but above meeting assistant */
+  }
+
+  .lk-widget-container {
+    z-index: 1001; /* Above everything */
+  }
+}
+
+/* Settings menu animation for mobile */
+@media (max-width: 768px) {
+  .lk-widget-container {
+    animation: settingsModalFadeIn 0.3s ease;
+  }
+
+  @keyframes settingsModalFadeIn {
+    from {
+      opacity: 0;
+      backdrop-filter: blur(0px);
+    }
+    to {
+      opacity: 1;
+      backdrop-filter: blur(8px);
+    }
   }
 }

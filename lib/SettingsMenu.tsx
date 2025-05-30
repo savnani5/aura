@@ -29,10 +29,10 @@ export function SettingsMenu(props: SettingsMenuProps) {
       media: { camera: true, microphone: true, label: 'Media Devices', speaker: true },
       recording: recordingEndpoint ? { label: 'Recording' } : undefined,
     };
-  }, []);
+  }, [recordingEndpoint]);
 
   const tabs = React.useMemo(
-    () => Object.keys(settings).filter((t) => t !== undefined) as Array<keyof typeof settings>,
+    () => Object.keys(settings).filter((t) => settings[t as keyof typeof settings] !== undefined) as Array<keyof typeof settings>,
     [settings],
   );
   const [activeTab, setActiveTab] = React.useState(tabs[0]);
@@ -63,6 +63,7 @@ export function SettingsMenu(props: SettingsMenuProps) {
       response = await fetch(recordingEndpoint + `/start?roomName=${room.name}`);
     }
     if (response.ok) {
+      // Success - state will update via useIsRecording hook
     } else {
       console.error(
         'Error handling recording request, check server logs:',
@@ -74,13 +75,14 @@ export function SettingsMenu(props: SettingsMenuProps) {
   };
 
   return (
-    <div className="settings-menu" style={{ width: '100%', position: 'relative' }} {...props}>
+    <div className={styles.settingsMenu} {...props}>
+      {/* Tab Navigation */}
       <div className={styles.tabs}>
         {tabs.map(
           (tab) =>
             settings[tab] && (
               <button
-                className={`${styles.tab} lk-button`}
+                className={styles.tab}
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 aria-pressed={tab === activeTab}
@@ -93,60 +95,95 @@ export function SettingsMenu(props: SettingsMenuProps) {
             ),
         )}
       </div>
-      <div className="tab-content">
+
+      {/* Tab Content */}
+      <div className={styles.tabContent}>
         {activeTab === 'media' && (
           <>
             {settings.media && settings.media.camera && (
-              <>
-                <h3>Camera</h3>
-                <section>
-                  <CameraSettings />
-                </section>
-              </>
-            )}
-            {settings.media && settings.media.microphone && (
-              <>
-                <h3>Microphone</h3>
-                <section>
-                  <MicrophoneSettings />
-                </section>
-              </>
-            )}
-            {settings.media && settings.media.speaker && (
-              <>
-                <h3>Speaker & Headphones</h3>
-                <section className="lk-button-group">
-                  <span className="lk-button">Audio Output</span>
-                  <div className="lk-button-group-menu">
-                    <MediaDeviceMenu kind="audiooutput"></MediaDeviceMenu>
+              <div className={styles.section}>
+                <h3 className={styles.sectionTitle}>Camera</h3>
+                <div className={styles.sectionContent}>
+                  <div className={styles.deviceControl}>
+                    <div className={styles.deviceActions}>
+                      <TrackToggle source={Track.Source.Camera} />
+                      <CameraSettings />
+                    </div>
                   </div>
-                </section>
-              </>
+                </div>
+              </div>
+            )}
+            
+            {settings.media && settings.media.microphone && (
+              <div className={styles.section}>
+                <h3 className={styles.sectionTitle}>Microphone</h3>
+                <div className={styles.sectionContent}>
+                  <div className={styles.deviceControl}>
+                    <div className={styles.deviceActions}>
+                      <TrackToggle source={Track.Source.Microphone} />
+                      <MicrophoneSettings />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {settings.media && settings.media.speaker && (
+              <div className={styles.section}>
+                <h3 className={styles.sectionTitle}>Speaker & Headphones</h3>
+                <div className={styles.sectionContent}>
+                  <div className={styles.deviceControl}>
+                    <div className={styles.deviceLabel}>Audio Output</div>
+                    <div className={styles.deviceActions}>
+                      <MediaDeviceMenu kind="audiooutput" />
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </>
         )}
+        
         {activeTab === 'recording' && (
-          <>
-            <h3>Record Meeting</h3>
-            <section>
-              <p>
-                {isRecording
-                  ? 'Meeting is currently being recorded'
-                  : 'No active recordings for this meeting'}
-              </p>
-              <button disabled={processingRecRequest} onClick={() => toggleRoomRecording()}>
-                {isRecording ? 'Stop' : 'Start'} Recording
-              </button>
-            </section>
-          </>
+          <div className={styles.section}>
+            <h3 className={styles.sectionTitle}>Record Meeting</h3>
+            <div className={styles.sectionContent}>
+              <div className={styles.recordingSection}>
+                <div className={styles.recordingStatus}>
+                  <div 
+                    className={`${styles.recordingIndicator} ${
+                      isRecording ? styles.active : styles.inactive
+                    }`}
+                  />
+                  <p className={styles.recordingText}>
+                    {isRecording
+                      ? 'Meeting is currently being recorded'
+                      : 'No active recordings for this meeting'}
+                  </p>
+                </div>
+                <button 
+                  className={`${styles.recordingButton} ${isRecording ? styles.stop : ''}`}
+                  disabled={processingRecRequest} 
+                  onClick={() => toggleRoomRecording()}
+                >
+                  {processingRecRequest 
+                    ? (isRecording ? 'Stopping...' : 'Starting...') 
+                    : (isRecording ? 'Stop Recording' : 'Start Recording')
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+
+      {/* Footer */}
+      <div className={styles.footer}>
         <button
-          className={`lk-button`}
+          className={styles.closeButton}
           onClick={() => layoutContext?.widget.dispatch?.({ msg: 'toggle_settings' })}
         >
-          Close
+          Close Settings
         </button>
       </div>
     </div>
