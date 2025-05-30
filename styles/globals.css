@@ -2314,3 +2314,111 @@ h2 a {
     }
   }
 }
+
+/* Settings Menu Modal Styling */
+.lk-settings-menu-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  z-index: 1002;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+}
+
+/* Mobile Settings Menu Modal Adjustments */
+@media (max-width: 768px) {
+  .lk-settings-menu-modal {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: none;
+    border-radius: 20px 20px 0 0;
+    max-width: none;
+    width: 100%;
+    max-height: 85vh;
+    min-height: 60vh;
+    animation: settingsModalSlideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  @keyframes settingsModalSlideUp {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .lk-settings-menu-modal {
+    max-height: 90vh;
+    min-height: 70vh;
+    border-radius: 16px 16px 0 0;
+  }
+}
+
+/* Landscape mobile adjustments for settings menu */
+@media (max-width: 768px) and (orientation: landscape) {
+  .lk-settings-menu-modal {
+    max-height: 95vh;
+    min-height: 80vh;
+  }
+}
+
+/* Compact landscape adjustments */
+@media (max-width: 768px) and (orientation: landscape) and (max-height: 500px) {
+  .lk-settings-menu-modal {
+    max-height: 98vh;
+    min-height: 85vh;
+    border-radius: 12px 12px 0 0;
+  }
+}
+
+/* iOS specific fixes for settings menu */
+@supports (-webkit-appearance: none) {
+  @media (max-width: 768px) {
+    .lk-settings-menu-modal {
+      /* Use viewport height units that work better on iOS */
+      max-height: 85vh;
+      max-height: 85svh; /* Safari 15.4+ */
+      min-height: 60vh;
+      min-height: 60svh; /* Safari 15.4+ */
+    }
+  }
+}
+
+/* High DPI mobile displays for settings menu */
+@media (max-width: 768px) and (-webkit-min-device-pixel-ratio: 2) {
+  .lk-settings-menu-modal {
+    border-radius: 20px 20px 0 0;
+    border-width: 2px;
+  }
+}
+
+/* Touch-friendly interactions for settings menu modal */
+@media (hover: none) and (pointer: coarse) {
+  .lk-settings-menu-modal {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
+/* Ensure proper stacking order */
+@media (max-width: 768px) {
+  .lk-settings-menu-modal {
+    z-index: 1002; /* Above everything including widget container */
+  }
+}
