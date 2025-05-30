@@ -1205,9 +1205,10 @@ h2 a {
     background: rgba(0, 0, 0, 0.95);
     backdrop-filter: blur(20px);
     z-index: 50; /* Below control bar */
-    transform: translateY(calc(100% - 60px));
+    transform: translateY(calc(100% - 50px)); /* Show only a thin bar when collapsed */
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
   }
 
   .meeting-assistant.expanded {
@@ -1217,16 +1218,17 @@ h2 a {
   .meeting-assistant-header {
     padding: 0.75rem 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.8);
     cursor: pointer;
     user-select: none;
     position: relative;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
-    min-height: 60px;
+    min-height: 50px; /* Reduced height for collapsed state */
     display: flex;
     flex-direction: column;
     justify-content: center;
+    flex-shrink: 0;
   }
 
   .meeting-assistant-header:active {
@@ -1236,33 +1238,34 @@ h2 a {
   .meeting-assistant-header::after {
     content: '';
     position: absolute;
-    top: 8px;
+    top: 6px;
     left: 50%;
     transform: translateX(-50%);
     width: 32px;
     height: 3px;
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.4);
     border-radius: 2px;
     transition: background-color 0.2s ease;
   }
 
   .meeting-assistant-header:active::after {
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.6);
   }
 
   .meeting-assistant-title {
-    font-size: 0.875rem;
-    margin-bottom: 0.5rem;
+    font-size: 0.75rem; /* Smaller font for collapsed state */
+    margin-bottom: 0;
     text-align: center;
-    transition: opacity 0.2s ease;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    color: var(--lk-fg2);
   }
 
   .expand-indicator {
-    font-size: 0.75rem;
+    font-size: 0.625rem;
     color: var(--lk-fg3);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
@@ -1273,6 +1276,17 @@ h2 a {
   }
 
   .tab-container {
+    margin-bottom: 0;
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 0.3s ease;
+    pointer-events: none;
+  }
+
+  .meeting-assistant.expanded .tab-container {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
     margin-bottom: 0.5rem;
   }
 
@@ -1312,13 +1326,29 @@ h2 a {
     flex: 1;
     min-height: 0;
     max-height: calc(45vh - 80px);
-    opacity: 1;
-    transition: opacity 0.3s ease;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.3s ease;
+    pointer-events: none;
   }
 
-  .meeting-assistant:not(.expanded) .meeting-assistant-content {
-    opacity: 0;
-    pointer-events: none;
+  .meeting-assistant.expanded .meeting-assistant-content {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  /* When collapsed, show only the thin header bar */
+  .meeting-assistant:not(.expanded) {
+    height: 50px; /* Thin bar height */
+    border-radius: 16px 16px 0 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+  }
+
+  .meeting-assistant:not(.expanded) .meeting-assistant-header {
+    border-bottom: none;
+    background: transparent;
   }
 
   /* Page Layout Mobile Adjustments */
@@ -1457,7 +1487,6 @@ h2 a {
     font-size: 0.625rem;
     padding: 0.25rem 0.5rem;
     margin-bottom: 0.5rem;
-    border-radius: 6px;
   }
 
   .transcript-text {
@@ -1512,11 +1541,34 @@ h2 a {
   .meeting-assistant {
     height: 50vh;
     bottom: 80px; /* Consistent with control bar */
-    transform: translateY(calc(100% - 50px));
+    transform: translateY(calc(100% - 45px)); /* Even thinner bar for small screens */
+  }
+
+  .meeting-assistant.expanded {
+    transform: translateY(0);
+  }
+
+  .meeting-assistant:not(.expanded) {
+    height: 45px; /* Thinner bar for small screens */
+    border-radius: 12px 12px 0 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+  }
+
+  .meeting-assistant:not(.expanded) .meeting-assistant-header {
+    border-bottom: none;
+    background: transparent;
+    min-height: 45px;
   }
 
   .meeting-assistant-title {
     font-size: 0.75rem;
+  }
+
+  .meeting-assistant-header::after {
+    top: 4px;
+    width: 28px;
+    height: 2px;
   }
 
   .tab-button {
@@ -1525,7 +1577,11 @@ h2 a {
   }
 
   .meeting-assistant-content {
-    max-height: calc(50vh - 70px);
+    max-height: calc(50vh - 65px);
+  }
+
+  .meeting-assistant.expanded .meeting-assistant-content {
+    max-height: calc(50vh - 65px);
   }
 
   .lk-main-content {
@@ -1589,7 +1645,24 @@ h2 a {
   .meeting-assistant {
     height: 60vh;
     bottom: 80px; /* Consistent with control bar */
-    transform: translateY(calc(100% - 50px));
+    transform: translateY(calc(100% - 45px)); /* Thin bar in landscape */
+  }
+
+  .meeting-assistant.expanded {
+    transform: translateY(0);
+  }
+
+  .meeting-assistant:not(.expanded) {
+    height: 45px; /* Thin bar height */
+    border-radius: 12px 12px 0 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+  }
+
+  .meeting-assistant:not(.expanded) .meeting-assistant-header {
+    border-bottom: none;
+    background: transparent;
+    min-height: 45px;
   }
 
   .lk-main-content {
@@ -1598,6 +1671,10 @@ h2 a {
   }
 
   .meeting-assistant-content {
+    max-height: calc(60vh - 80px);
+  }
+
+  .meeting-assistant.expanded .meeting-assistant-content {
     max-height: calc(60vh - 80px);
   }
 
@@ -1611,166 +1688,29 @@ h2 a {
   }
 }
 
-/* Touch-friendly interactions */
-@media (hover: none) and (pointer: coarse) {
-  .tab-button,
-  .action-button,
-  .chat-send-button {
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-  .meeting-assistant-header {
-    min-height: 60px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-
-  .meeting-assistant-header:active {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .tab-button:active {
-    transform: scale(0.95);
-    background: rgba(255, 255, 255, 0.1) !important;
-  }
-
-  .notes-textarea,
-  .chat-input {
-    font-size: 16px; /* Prevent zoom on iOS */
-    -webkit-appearance: none;
-    border-radius: 8px;
-  }
-
-  /* Improve touch targets for mobile */
-  .meeting-assistant-title {
-    padding: 0.5rem;
-    cursor: pointer;
-  }
-
-  .expand-indicator {
-    padding: 0.25rem;
-  }
-}
-
-/* Additional mobile optimizations */
-@media (max-width: 768px) {
-  /* Ensure no horizontal scrolling */
-  body {
-    overflow-x: hidden;
-  }
-
-  /* Fix mobile keyboard issues */
-  .meeting-assistant-content {
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* Smooth scrolling for mobile */
-  .chat-messages,
-  .transcript-messages {
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-  }
-
-  /* Better tap targets */
-  .lk-button,
-  .tab-button {
-    min-height: 48px !important;
-    min-width: 48px !important;
-  }
-
-  /* Mobile-specific meeting assistant behaviors */
-  .meeting-assistant {
-    -webkit-transform: translateZ(0); /* Force hardware acceleration */
-    transform: translateZ(0);
-    will-change: transform;
-  }
-
-  .meeting-assistant-header {
-    -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-
-  /* Prevent text selection on mobile controls */
-  .tab-button,
-  .action-button {
-    -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
-  }
-
-  /* Better focus states for mobile */
-  .notes-textarea:focus,
-  .chat-input:focus {
-    outline: none;
-    border-color: rgba(59, 130, 246, 0.5);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-}
-
-/* iOS specific fixes */
-@supports (-webkit-appearance: none) {
-  @media (max-width: 768px) {
-    /* Fix iOS Safari viewport issues */
-    .meeting-assistant {
-      /* Use viewport height units that work better on iOS */
-      height: 50vh;
-      height: 50svh; /* Safari 15.4+ */
-    }
-
-    .lk-main-content {
-      height: calc(100vh - 50vh) !important;
-      height: calc(100svh - 50svh) !important; /* Safari 15.4+ */
-    }
-
-    /* Prevent iOS zoom on input focus */
-    .notes-textarea,
-    .chat-input {
-      transform: translateZ(0);
-      -webkit-appearance: none;
-      border-radius: 0;
-    }
-  }
-}
-
-/* Android specific optimizations */
-@media (max-width: 768px) and (-webkit-min-device-pixel-ratio: 1) {
-  .meeting-assistant {
-    /* Better scrolling on Android */
-    overscroll-behavior: contain;
-  }
-
-  .meeting-assistant-content {
-    overscroll-behavior: contain;
-  }
-}
-
-/* High DPI mobile displays */
-@media (max-width: 768px) and (-webkit-min-device-pixel-ratio: 2) {
-  .lk-participant-tile {
-    border-radius: 16px !important;
-  }
-
-  .meeting-assistant-header::after {
-    height: 4px;
-    width: 40px;
-  }
-}
-
 /* Landscape mobile adjustments - enhanced */
 @media (max-width: 768px) and (orientation: landscape) and (max-height: 500px) {
   .meeting-assistant {
     height: 70vh;
     bottom: 80px; /* Ensure control bar space */
-    transform: translateY(calc(100% - 40px));
+    transform: translateY(calc(100% - 40px)); /* Very thin bar for compact landscape */
+  }
+
+  .meeting-assistant.expanded {
+    transform: translateY(0);
+  }
+
+  .meeting-assistant:not(.expanded) {
+    height: 40px; /* Very thin bar for compact landscape */
+    border-radius: 10px 10px 0 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+  }
+
+  .meeting-assistant:not(.expanded) .meeting-assistant-header {
+    border-bottom: none;
+    background: transparent;
+    min-height: 40px;
   }
 
   .lk-main-content {
@@ -1779,6 +1719,10 @@ h2 a {
   }
 
   .meeting-assistant-content {
+    max-height: calc(70vh - 60px);
+  }
+
+  .meeting-assistant.expanded .meeting-assistant-content {
     max-height: calc(70vh - 60px);
   }
 
@@ -2011,5 +1955,179 @@ h2 a {
 
   .chat-input {
     font-size: 16px; /* Prevent zoom on iOS */
+  }
+}
+
+/* Ensure control bar is always visible in compact landscape */
+@media (max-width: 768px) and (orientation: landscape) {
+  .lk-control-bar {
+    position: fixed !important;
+    bottom: 0 !important;
+    z-index: 100 !important;
+    height: 80px !important;
+  }
+}
+
+/* Touch-friendly interactions */
+@media (hover: none) and (pointer: coarse) {
+  .tab-button,
+  .action-button,
+  .chat-send-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .meeting-assistant-header {
+    min-height: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .meeting-assistant-header:active {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .tab-button:active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.1) !important;
+  }
+
+  .notes-textarea,
+  .chat-input {
+    font-size: 16px; /* Prevent zoom on iOS */
+    -webkit-appearance: none;
+    border-radius: 8px;
+  }
+
+  /* Improve touch targets for mobile */
+  .meeting-assistant-title {
+    padding: 0.5rem;
+    cursor: pointer;
+  }
+
+  .expand-indicator {
+    padding: 0.25rem;
+  }
+}
+
+/* Additional mobile optimizations */
+@media (max-width: 768px) {
+  /* Ensure no horizontal scrolling */
+  body {
+    overflow-x: hidden;
+  }
+
+  /* Fix mobile keyboard issues */
+  .meeting-assistant-content {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Smooth scrolling for mobile */
+  .chat-messages,
+  .transcript-messages {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+
+  /* Better tap targets */
+  .lk-button,
+  .tab-button {
+    min-height: 48px !important;
+    min-width: 48px !important;
+  }
+
+  /* Mobile-specific meeting assistant behaviors */
+  .meeting-assistant {
+    -webkit-transform: translateZ(0); /* Force hardware acceleration */
+    transform: translateZ(0);
+    will-change: transform;
+  }
+
+  .meeting-assistant-header {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Prevent text selection on mobile controls */
+  .tab-button,
+  .action-button {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* Better focus states for mobile */
+  .notes-textarea:focus,
+  .chat-input:focus {
+    outline: none;
+    border-color: rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+}
+
+/* iOS specific fixes */
+@supports (-webkit-appearance: none) {
+  @media (max-width: 768px) {
+    /* Fix iOS Safari viewport issues */
+    .meeting-assistant {
+      /* Use viewport height units that work better on iOS */
+      height: 50vh;
+      height: 50svh; /* Safari 15.4+ */
+    }
+
+    .meeting-assistant:not(.expanded) {
+      height: 50px;
+      height: 50px; /* Fixed height for collapsed state */
+    }
+
+    .lk-main-content {
+      height: calc(100vh - 50vh) !important;
+      height: calc(100svh - 50svh) !important; /* Safari 15.4+ */
+    }
+
+    /* Prevent iOS zoom on input focus */
+    .notes-textarea,
+    .chat-input {
+      transform: translateZ(0);
+      -webkit-appearance: none;
+      border-radius: 0;
+    }
+  }
+}
+
+/* Android specific optimizations */
+@media (max-width: 768px) and (-webkit-min-device-pixel-ratio: 1) {
+  .meeting-assistant {
+    /* Better scrolling on Android */
+    overscroll-behavior: contain;
+  }
+
+  .meeting-assistant-content {
+    overscroll-behavior: contain;
+  }
+}
+
+/* High DPI mobile displays */
+@media (max-width: 768px) and (-webkit-min-device-pixel-ratio: 2) {
+  .lk-participant-tile {
+    border-radius: 16px !important;
+  }
+
+  .meeting-assistant-header::after {
+    height: 4px;
+    width: 40px;
+  }
+
+  .meeting-assistant:not(.expanded) .meeting-assistant-header::after {
+    height: 3px;
+    width: 32px;
   }
 }
