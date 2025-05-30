@@ -1206,11 +1206,16 @@ h2 a {
     backdrop-filter: blur(20px);
     z-index: 50; /* Below control bar */
     transform: translateY(calc(100% - 60px));
-    transition: transform 0.3s ease;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
   }
 
   .meeting-assistant.expanded {
     transform: translateY(0);
+  }
+
+  .meeting-assistant.mobile {
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.4);
   }
 
   .meeting-assistant-header {
@@ -1220,6 +1225,7 @@ h2 a {
     cursor: pointer;
     user-select: none;
     position: relative;
+    transition: all 0.2s ease;
   }
 
   .meeting-assistant-header::after {
@@ -1238,6 +1244,50 @@ h2 a {
     font-size: 0.875rem;
     margin-bottom: 0.5rem;
     text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .mobile-indicator {
+    font-size: 0.75rem;
+    color: var(--lk-fg3);
+    transition: transform 0.2s ease;
+  }
+
+  .meeting-assistant.mobile .meeting-assistant-header {
+    background: rgba(0, 0, 0, 0.8);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    transition: all 0.2s ease;
+    min-height: 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+  }
+
+  .meeting-assistant.mobile .meeting-assistant-header:active {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(0.98);
+  }
+
+  .meeting-assistant.mobile .meeting-assistant-header::before {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.4);
+    border-radius: 2px;
+    transition: all 0.2s ease;
+  }
+
+  .meeting-assistant.mobile.expanded .meeting-assistant-header::before {
+    background: rgba(255, 255, 255, 0.6);
   }
 
   .tab-container {
@@ -1554,11 +1604,29 @@ h2 a {
     display: flex;
     align-items: center;
     justify-content: center;
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.1);
+    tap-highlight-color: rgba(255, 255, 255, 0.1);
   }
 
   .notes-textarea,
   .chat-input {
     font-size: 16px; /* Prevent zoom on iOS */
+  }
+
+  /* Better touch feedback */
+  .meeting-assistant.mobile .meeting-assistant-header:active {
+    background: rgba(0, 0, 0, 0.9);
+    transform: scale(0.98);
+  }
+
+  .tab-button:active {
+    transform: scale(0.95);
+    background: var(--lk-bg4);
+  }
+
+  .action-button:active,
+  .chat-send-button:active {
+    transform: scale(0.95);
   }
 }
 

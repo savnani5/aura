@@ -91,17 +91,61 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
 
   React.useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
+      const mobile = window.innerWidth <= 768;
+      setIsMobile(mobile);
+      // Auto-collapse on mobile when switching from desktop
+      if (mobile && !isMobile) {
+        setIsExpanded(false);
+      }
     };
     
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
-  }, []);
+  }, [isMobile]);
 
-  const handleMobileHeaderClick = () => {
+  const handleMobileHeaderClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (isMobile) {
       setIsExpanded(!isExpanded);
+    }
+  };
+
+  // Handle touch events for better mobile responsiveness
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (isMobile) {
+      e.stopPropagation();
+      // Add visual feedback
+      const target = e.currentTarget as HTMLElement;
+      target.style.transform = 'scale(0.98)';
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (isMobile) {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Reset visual feedback
+      const target = e.currentTarget as HTMLElement;
+      target.style.transform = '';
+      
+      // Haptic feedback simulation (if supported)
+      if ('vibrate' in navigator) {
+        navigator.vibrate(50);
+      }
+      
+      setIsExpanded(!isExpanded);
+    }
+  };
+
+  // Auto-expand when switching to a tab on mobile
+  const handleTabClick = (tab: TabView, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setActiveTab(tab);
+    if (isMobile && !isExpanded) {
+      setIsExpanded(true);
     }
   };
 
@@ -521,37 +565,43 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   };
 
   return (
-    <div className={`meeting-assistant ${isMobile && isExpanded ? 'expanded' : ''}`}>
-      <div className="meeting-assistant-header" onClick={handleMobileHeaderClick}>
-        <h3 className="meeting-assistant-title">Meeting Assistant</h3>
+    <div className={`meeting-assistant ${isMobile && isExpanded ? 'expanded' : ''} ${isMobile ? 'mobile' : ''}`}>
+      <div 
+        className="meeting-assistant-header" 
+        onClick={handleMobileHeaderClick}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        style={{ 
+          cursor: isMobile ? 'pointer' : 'default',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTapHighlightColor: 'transparent'
+        }}
+      >
+        <h3 className="meeting-assistant-title">
+          Meeting Assistant
+          {isMobile && (
+            <span className="mobile-indicator">
+              {isExpanded ? '▼' : '▲'}
+            </span>
+          )}
+        </h3>
         <div className="tab-container">
           <button 
             className={`tab-button ${activeTab === 'notes' ? 'tab-button--active' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveTab('notes');
-              if (isMobile && !isExpanded) setIsExpanded(true);
-            }}
+            onClick={(e) => handleTabClick('notes', e)}
           >
             Notes
           </button>
           <button 
             className={`tab-button ${activeTab === 'transcript' ? 'tab-button--active' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveTab('transcript');
-              if (isMobile && !isExpanded) setIsExpanded(true);
-            }}
+            onClick={(e) => handleTabClick('transcript', e)}
           >
             Transcript
           </button>
           <button 
             className={`tab-button ${activeTab === 'chat' ? 'tab-button--active' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              setActiveTab('chat');
-              if (isMobile && !isExpanded) setIsExpanded(true);
-            }}
+            onClick={(e) => handleTabClick('chat', e)}
           >
             Chat
             {chatMessages.length > 0 && (
