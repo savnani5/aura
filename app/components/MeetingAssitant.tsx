@@ -161,11 +161,12 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     if (!chatInput.trim() || isSending) return;
 
     const message = chatInput.trim();
-    const isAiCommand = message.startsWith('@ohm ');
+    const isAiCommand = message.toLowerCase().startsWith('@ohm ');
 
     if (isAiCommand) {
-      // Handle AI command
-      await handleAiChat(message.slice(5)); // Remove '@ohm ' prefix
+      // Handle AI command - remove the @ohm prefix (case-insensitive)
+      const aiMessage = message.slice(message.toLowerCase().indexOf('@ohm ') + 5);
+      await handleAiChat(aiMessage);
     } else {
       // Handle regular chat
       await sendMessage(chatInput);
@@ -632,7 +633,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 <div className="chat-empty">
                   <p>No messages yet. Start a conversation!</p>
                   <p style={{ fontSize: '0.75rem', color: 'var(--lk-fg3)', marginTop: '0.5rem' }}>
-                    💡 Tip: Use <strong>@ohm</strong> to chat with the AI assistant
+                    💡 Tip: Use <strong>@ohm</strong> or <strong>@Ohm</strong> to chat with the AI assistant
                   </p>
                 </div>
               ) : (
@@ -721,7 +722,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
               <input
                 type="text"
                 className="chat-input"
-                placeholder={chatInput.startsWith('@ohm ') ? "Ask Ohm AI about the meeting..." : "Type a message or @ohm for AI assistant..."}
+                placeholder={chatInput.toLowerCase().startsWith('@ohm ') ? "Ask Ohm AI about the meeting..." : "Type a message or @ohm/@Ohm for AI assistant..."}
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 disabled={isSending || isAiProcessing}
@@ -731,7 +732,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 className="chat-send-button"
                 disabled={isSending || isAiProcessing || !chatInput.trim()}
               >
-                {chatInput.startsWith('@ohm ') ? '🤖' : 'Send'}
+                {chatInput.toLowerCase().startsWith('@ohm ') ? '🤖' : 'Send'}
               </button>
             </form>
           </div>
