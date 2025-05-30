@@ -8,9 +8,7 @@ An intelligent video conferencing application built with Next.js 15, React 18, T
 - 📝 **Live Transcription**: Automatic speech-to-text using Deepgram
 - 💬 **Chat System**: Real-time messaging with participants
 - 🤖 **AI Assistant**: Context-aware chatbot using OpenAI GPT-4
-- 📱 **Mobile Responsive**: Optimized for both desktop and mobile devices
 - 🎨 **Modern UI**: Clean, intuitive interface with dark theme
-- 🔧 **Camera Settings**: Background effects and virtual backgrounds
 
 ## AI Assistant Features
 

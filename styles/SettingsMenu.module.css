@@ -231,6 +231,7 @@
     z-index: auto;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .tabs {
@@ -257,50 +258,51 @@
 
   .tabContent {
     padding: 1.25rem;
-    gap: 1.25rem;
-    min-height: auto;
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scroll-behavior: smooth;
+    min-height: 0;
   }
 
   .sectionTitle {
     font-size: 1rem;
-    padding-bottom: 0.75rem;
+    margin-bottom: 1rem;
   }
 
   .deviceControl {
     padding: 1rem;
-    border-radius: 14px;
+    margin-bottom: 1rem;
+    border-radius: 12px;
   }
 
   .deviceActions {
     flex-direction: column;
-    align-items: stretch;
     gap: 0.75rem;
+    align-items: stretch;
   }
 
   .recordingSection {
     padding: 1rem;
-    border-radius: 14px;
+    border-radius: 12px;
   }
 
   .recordingStatus {
-    padding: 0.75rem;
-    border-radius: 10px;
+    margin-bottom: 1rem;
   }
 
   .footer {
-    padding: 1rem 1.25rem 1.5rem 1.25rem;
+    padding: 1rem;
     flex-shrink: 0;
   }
 
   .closeButton {
     width: 100%;
-    justify-content: center;
-    padding: 1rem 1.5rem;
+    padding: 0.875rem;
+    font-size: 1rem;
     border-radius: 12px;
-    font-size: 0.9375rem;
   }
 }
 
