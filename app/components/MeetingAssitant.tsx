@@ -632,7 +632,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
               {groupedChatMessages.length === 0 && aiChatHistory.length === 0 ? (
                 <div className="chat-empty">
                   <p>No messages yet. Start a conversation!</p>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--lk-fg3)', marginTop: '0.5rem' }}>
+                  <p className="chat-tip">
                     💡 Tip: Use <strong>@ohm</strong> or <strong>@Ohm</strong> to chat with the AI assistant
                   </p>
                 </div>
