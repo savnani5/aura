@@ -490,6 +490,14 @@ function CustomVideoConference({ SettingsComponent, ...props }: { SettingsCompon
     layoutContext.pin
   ]);
 
+  // Handle backdrop clicks to close settings menu on mobile
+  const handleBackdropClick = React.useCallback((e: React.MouseEvent) => {
+    // Only handle backdrop clicks on mobile
+    if (window.innerWidth <= 768 && e.target === e.currentTarget) {
+      setWidgetState(prev => ({ ...prev, showSettings: false }));
+    }
+  }, []);
+
   return (
     <div className="lk-video-conference" {...props}>
       {isWeb() && (
@@ -520,6 +528,7 @@ function CustomVideoConference({ SettingsComponent, ...props }: { SettingsCompon
             <div
               className="lk-settings-menu-modal"
               style={{ display: widgetState.showSettings ? 'block' : 'none' }}
+              onClick={handleBackdropClick}
             >
               <SettingsComponent />
             </div>

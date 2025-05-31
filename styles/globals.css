@@ -2485,6 +2485,7 @@ h2 a {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
   @keyframes settingsModalSlideUp {
@@ -2498,8 +2499,41 @@ h2 a {
     }
   }
 
-  /* Remove the conflicting scrolling rules that were interfering */
-  /* The SettingsMenu component will handle its own scrolling */
+  /* Make the widget container backdrop clickable to close */
+  .lk-widget-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 1001;
+    padding: 0;
+    /* Ensure touch scrolling works */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    /* Make backdrop clickable */
+    cursor: pointer;
+  }
+
+  /* Prevent clicks on the modal content from closing the modal */
+  .lk-widget-container > * {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    /* Enable scrolling for the settings content */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    max-height: 85vh;
+    /* Prevent backdrop clicks from propagating */
+    cursor: default;
+    pointer-events: auto;
+  }
 }
 
 @media (max-width: 480px) {

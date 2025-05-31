@@ -198,6 +198,7 @@
   padding: 1rem 1.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
 }
 
 .closeButton {
@@ -210,12 +211,19 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
+  z-index: 10;
 }
 
 .closeButton:hover {
   background: rgba(255, 255, 255, 0.15);
   border-color: rgba(255, 255, 255, 0.3);
   transform: translateY(-1px);
+}
+
+.closeButton:active {
+  transform: scale(0.95);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Mobile Responsive */
@@ -236,8 +244,23 @@
     min-height: 60vh;
   }
 
+  /* Add mobile drag handle indicator */
+  .settingsMenu::before {
+    content: '';
+    position: absolute;
+    top: 0.75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
   .tabs {
-    padding: 0.75rem 1rem 0.5rem 1rem;
+    padding: 1.5rem 1rem 0.5rem 1rem;
     gap: 0.5rem;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
