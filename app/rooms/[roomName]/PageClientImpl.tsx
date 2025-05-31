@@ -24,12 +24,7 @@ import {
   CarouselLayout,
   FocusLayout,
   ConnectionStateToast,
-  RoomAudioRenderer,
-  VideoTrack,
-  useParticipantTile,
-  ParticipantName,
-  ConnectionQualityIndicator,
-  TrackMutedIndicator
+  RoomAudioRenderer
 } from '@livekit/components-react';
 import {
   ExternalE2EEKeyProvider,
@@ -51,53 +46,6 @@ import { isEqualTrackRef, isTrackReference, isWeb } from '@livekit/components-co
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
-
-// Custom ParticipantTile without minimize/maximize buttons
-function CustomParticipantTile(props: any) {
-  const {
-    trackRef,
-    onParticipantClick,
-    disableSpeakingIndicator,
-    ...htmlProps
-  } = props;
-
-  const {
-    elementProps,
-  } = useParticipantTile({
-    trackRef,
-    onParticipantClick,
-    disableSpeakingIndicator,
-    htmlProps,
-  });
-
-  return (
-    <div {...elementProps} className="lk-participant-tile">
-      {trackRef && trackRef.publication?.track ? (
-        <VideoTrack 
-          trackRef={trackRef} 
-          className="lk-participant-media-video"
-        />
-      ) : (
-        <div className="lk-participant-placeholder">
-          <div className="lk-participant-placeholder-text">
-            {trackRef?.participant?.name || trackRef?.participant?.identity || 'Participant'}
-          </div>
-        </div>
-      )}
-      
-      <div className="lk-participant-metadata">
-        <div className="lk-participant-metadata-item">
-          <TrackMutedIndicator 
-            trackRef={trackRef} 
-            show={'muted'}
-          />
-          <ParticipantName participant={trackRef?.participant} />
-        </div>
-        <ConnectionQualityIndicator participant={trackRef?.participant} />
-      </div>
-    </div>
-  );
-}
 
 export function PageClientImpl(props: {
   roomName: string;
@@ -553,14 +501,14 @@ function CustomVideoConference({ SettingsComponent, ...props }: { SettingsCompon
             {!focusTrack ? (
               <div className="lk-grid-layout-wrapper">
                 <GridLayout tracks={tracks}>
-                  <CustomParticipantTile />
+                  <ParticipantTile />
                 </GridLayout>
               </div>
             ) : (
               <div className="lk-focus-layout-wrapper">
                 <FocusLayoutContainer>
                   <CarouselLayout tracks={carouselTracks}>
-                    <CustomParticipantTile />
+                    <ParticipantTile />
                   </CarouselLayout>
                   {focusTrack && <FocusLayout trackRef={focusTrack} />}
                 </FocusLayoutContainer>

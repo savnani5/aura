@@ -2231,298 +2231,87 @@ h2 a {
 /* Mobile Settings Menu Adjustments */
 @media (max-width: 768px) {
   .lk-button {
-    min-width: 40px !important;
-    height: 40px !important;
-    font-size: 0.75rem !important;
-    border-radius: 10px !important;
-    padding: 0.5rem !important;
+    min-height: 44px;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
   .lk-button:active {
     transform: scale(0.95);
-    background: rgba(255, 255, 255, 0.15) !important;
   }
 
   .lk-button[data-lk-source] {
-    min-width: 80px !important;
-    font-size: 0.625rem !important;
+    min-width: 100%;
+    margin-bottom: 0.5rem;
   }
 
   .lk-media-device-menu {
-    min-width: 150px !important;
-    font-size: 0.75rem !important;
-    padding: 0.375rem !important;
-  }
-
-  /* Mobile Video Layout Improvements */
-  .lk-grid-layout-wrapper {
-    padding: 0.5rem !important;
-    gap: 0.5rem !important;
-    height: 100% !important;
-    overflow: hidden !important;
-  }
-
-  .lk-grid-layout {
-    gap: 0.5rem !important;
-    height: 100% !important;
-    width: 100% !important;
-    display: grid !important;
-    grid-auto-rows: 1fr !important;
-  }
-
-  /* Dynamic grid layout based on participant count */
-  .lk-grid-layout[data-lk-grid-layout="1x1"] {
-    grid-template-columns: 1fr !important;
-    grid-template-rows: 1fr !important;
-  }
-
-  .lk-grid-layout[data-lk-grid-layout="1x2"] {
-    grid-template-columns: 1fr !important;
-    grid-template-rows: 1fr 1fr !important;
-  }
-
-  .lk-grid-layout[data-lk-grid-layout="2x2"] {
-    grid-template-columns: 1fr 1fr !important;
-    grid-template-rows: 1fr 1fr !important;
-  }
-
-  .lk-grid-layout[data-lk-grid-layout="2x3"] {
-    grid-template-columns: 1fr 1fr !important;
-    grid-template-rows: 1fr 1fr 1fr !important;
-  }
-
-  .lk-grid-layout[data-lk-grid-layout="3x3"] {
-    grid-template-columns: 1fr 1fr 1fr !important;
-    grid-template-rows: 1fr 1fr 1fr !important;
-  }
-
-  /* Participant tile mobile optimizations */
-  .lk-participant-tile {
-    border-radius: 12px !important;
-    overflow: hidden !important;
-    position: relative !important;
-    background: var(--lk-bg2) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    min-height: 120px !important;
-    display: flex !important;
-    flex-direction: column !important;
-    justify-content: center !important;
-    align-items: center !important;
-  }
-
-  .lk-participant-media-video {
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
-    object-position: center !important;
-    border-radius: 12px !important;
-  }
-
-  .lk-participant-placeholder {
-    width: 100% !important;
-    height: 100% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    background: var(--lk-bg3) !important;
-    color: var(--lk-fg2) !important;
-    border-radius: 12px !important;
-    min-height: 120px !important;
-  }
-
-  .lk-participant-placeholder-text {
-    font-size: 0.75rem !important;
-    font-weight: 500 !important;
-    text-align: center !important;
-    padding: 0.5rem !important;
-  }
-
-  .lk-participant-metadata {
-    position: absolute !important;
-    bottom: 0.5rem !important;
-    left: 0.5rem !important;
-    right: 0.5rem !important;
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    background: rgba(0, 0, 0, 0.7) !important;
-    backdrop-filter: blur(8px) !important;
-    border-radius: 8px !important;
-    padding: 0.375rem 0.5rem !important;
-    font-size: 0.625rem !important;
-    color: white !important;
-    z-index: 10 !important;
-  }
-
-  .lk-participant-metadata-item {
-    display: flex !important;
-    align-items: center !important;
-    gap: 0.25rem !important;
-    flex: 1 !important;
-    min-width: 0 !important;
-  }
-
-  .lk-participant-name {
-    font-size: 0.625rem !important;
-    font-weight: 500 !important;
-    color: white !important;
-    truncate: true !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    white-space: nowrap !important;
-  }
-
-  /* Hide participant tile controls/buttons on mobile */
-  .lk-participant-tile .lk-button,
-  .lk-participant-tile button[aria-label*="minimize"],
-  .lk-participant-tile button[aria-label*="maximize"],
-  .lk-participant-tile button[aria-label*="pin"],
-  .lk-participant-tile button[aria-label*="unpin"],
-  .lk-participant-tile .lk-participant-tile-controls {
-    display: none !important;
-  }
-
-  /* Focus layout mobile adjustments */
-  .lk-focus-layout-wrapper {
-    padding: 0.5rem !important;
-    gap: 0.5rem !important;
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-  }
-
-  .lk-focus-layout-container {
-    height: 100% !important;
-    display: flex !important;
-    flex-direction: column !important;
-    gap: 0.5rem !important;
-  }
-
-  .lk-carousel-layout {
-    flex-shrink: 0 !important;
-    height: 80px !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    display: flex !important;
-    gap: 0.5rem !important;
-    padding: 0.25rem !important;
-    -webkit-overflow-scrolling: touch !important;
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
-  }
-
-  .lk-carousel-layout::-webkit-scrollbar {
-    display: none !important;
-  }
-
-  .lk-carousel-layout .lk-participant-tile {
-    flex-shrink: 0 !important;
-    width: 100px !important;
-    height: 70px !important;
-    min-height: 70px !important;
-  }
-
-  .lk-focus-layout {
-    flex: 1 !important;
-    min-height: 0 !important;
-    border-radius: 12px !important;
-    overflow: hidden !important;
-    background: var(--lk-bg2) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  }
-
-  .lk-focus-layout .lk-participant-media-video {
-    width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
+    width: 100%;
+    min-width: auto;
+    padding: 0.75rem;
+    font-size: 0.875rem;
   }
 }
 
-/* Extra small mobile devices */
 @media (max-width: 480px) {
-  .lk-grid-layout {
-    gap: 0.375rem !important;
+  .lk-button {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.8125rem;
   }
 
-  .lk-participant-tile {
-    min-height: 100px !important;
-    border-radius: 10px !important;
-  }
-
-  .lk-participant-metadata {
-    padding: 0.25rem 0.375rem !important;
-    border-radius: 6px !important;
-    bottom: 0.375rem !important;
-    left: 0.375rem !important;
-    right: 0.375rem !important;
-  }
-
-  .lk-participant-name {
-    font-size: 0.5rem !important;
-  }
-
-  .lk-carousel-layout {
-    height: 70px !important;
-  }
-
-  .lk-carousel-layout .lk-participant-tile {
-    width: 80px !important;
-    height: 60px !important;
-    min-height: 60px !important;
+  .lk-media-device-menu {
+    padding: 0.625rem;
+    font-size: 0.8125rem;
   }
 }
 
-/* Landscape orientation mobile adjustments */
-@media (max-width: 768px) and (orientation: landscape) {
-  .lk-grid-layout {
-    /* Prefer horizontal layout in landscape */
-    grid-auto-flow: column !important;
-  }
-
-  .lk-grid-layout[data-lk-grid-layout="1x2"] {
-    grid-template-columns: 1fr 1fr !important;
-    grid-template-rows: 1fr !important;
-  }
-
-  .lk-grid-layout[data-lk-grid-layout="2x2"] {
-    grid-template-columns: 1fr 1fr 1fr 1fr !important;
-    grid-template-rows: 1fr !important;
-  }
-
-  .lk-participant-tile {
-    min-height: 80px !important;
-  }
-
-  .lk-carousel-layout {
-    height: 60px !important;
-  }
-
-  .lk-carousel-layout .lk-participant-tile {
-    width: 80px !important;
-    height: 50px !important;
-    min-height: 50px !important;
-  }
-}
-
-/* Touch-friendly interactions */
+/* Touch-friendly interactions for settings */
 @media (hover: none) and (pointer: coarse) {
-  .lk-participant-tile {
-    -webkit-tap-highlight-color: transparent !important;
-    touch-action: manipulation !important;
-  }
-
-  .lk-participant-tile:active {
-    transform: scale(0.98) !important;
-    transition: transform 0.1s ease !important;
-  }
-
-  /* Ensure all interactive elements are touch-friendly */
   .lk-button,
   .lk-media-device-menu {
-    min-height: 44px !important;
-    min-width: 44px !important;
-    -webkit-tap-highlight-color: transparent !important;
-    touch-action: manipulation !important;
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  .lk-button:active {
+    transform: scale(0.95);
+    background: rgba(255, 255, 255, 0.2) !important;
+  }
+}
+
+/* Ensure settings menu doesn't interfere with meeting assistant */
+@media (max-width: 768px) {
+  .meeting-assistant {
+    z-index: 50; /* Below settings menu */
+  }
+
+  .lk-control-bar {
+    z-index: 100; /* Below settings menu but above meeting assistant */
+  }
+
+  .lk-widget-container {
+    z-index: 1001; /* Above everything */
+  }
+}
+
+/* Settings menu animation for mobile */
+@media (max-width: 768px) {
+  .lk-widget-container {
+    animation: settingsModalFadeIn 0.3s ease;
+  }
+
+  @keyframes settingsModalFadeIn {
+    from {
+      opacity: 0;
+      backdrop-filter: blur(0px);
+    }
+    to {
+      opacity: 1;
+      backdrop-filter: blur(8px);
+    }
   }
 }
 
@@ -2577,35 +2366,66 @@ h2 a {
     }
   }
 
-  /* Settings menu animation for mobile */
-  .lk-widget-container {
-    animation: settingsModalFadeIn 0.3s ease;
-  }
+  /* Remove the conflicting scrolling rules that were interfering */
+  /* The SettingsMenu component will handle its own scrolling */
+}
 
-  @keyframes settingsModalFadeIn {
-    from {
-      opacity: 0;
-      backdrop-filter: blur(0px);
+@media (max-width: 480px) {
+  .lk-settings-menu-modal {
+    max-height: 90vh;
+    min-height: 70vh;
+    border-radius: 16px 16px 0 0;
+  }
+}
+
+/* Landscape mobile adjustments for settings menu */
+@media (max-width: 768px) and (orientation: landscape) {
+  .lk-settings-menu-modal {
+    max-height: 95vh;
+    min-height: 80vh;
+  }
+}
+
+/* Compact landscape adjustments */
+@media (max-width: 768px) and (orientation: landscape) and (max-height: 500px) {
+  .lk-settings-menu-modal {
+    max-height: 98vh;
+    min-height: 85vh;
+    border-radius: 12px 12px 0 0;
+  }
+}
+
+/* iOS specific fixes for settings menu */
+@supports (-webkit-appearance: none) {
+  @media (max-width: 768px) {
+    .lk-settings-menu-modal {
+      /* Use viewport height units that work better on iOS */
+      max-height: 85vh;
+      max-height: 85svh; /* Safari 15.4+ */
+      min-height: 60vh;
+      min-height: 60svh; /* Safari 15.4+ */
     }
-    to {
-      opacity: 1;
-      backdrop-filter: blur(8px);
-    }
   }
+}
 
-  /* Ensure settings menu doesn't interfere with meeting assistant */
-  .meeting-assistant {
-    z-index: 50; /* Below settings menu */
+/* High DPI mobile displays for settings menu */
+@media (max-width: 768px) and (-webkit-min-device-pixel-ratio: 2) {
+  .lk-settings-menu-modal {
+    border-radius: 20px 20px 0 0;
+    border-width: 2px;
   }
+}
 
-  .lk-control-bar {
-    z-index: 100; /* Below settings menu but above meeting assistant */
+/* Touch-friendly interactions for settings menu modal */
+@media (hover: none) and (pointer: coarse) {
+  .lk-settings-menu-modal {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
+}
 
-  .lk-widget-container {
-    z-index: 1001; /* Above everything */
-  }
-
+/* Ensure proper stacking order */
+@media (max-width: 768px) {
   .lk-settings-menu-modal {
     z-index: 1002; /* Above everything including widget container */
   }

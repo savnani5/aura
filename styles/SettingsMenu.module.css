@@ -267,122 +267,65 @@
     overscroll-behavior: contain;
     scroll-behavior: smooth;
     min-height: 0;
-    max-height: calc(85vh - 120px);
+    transform: translateZ(0);
+    will-change: scroll-position;
+    touch-action: pan-y;
   }
 
   .tabContent::-webkit-scrollbar {
-    width: 6px;
+    width: 4px;
   }
 
   .tabContent::-webkit-scrollbar-track {
     background: rgba(255, 255, 255, 0.05);
-    border-radius: 3px;
+    border-radius: 2px;
   }
 
   .tabContent::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
+    border-radius: 2px;
   }
 
   .tabContent::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.3);
   }
 
-  .deviceSection {
-    margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  .deviceSection:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-  }
-
-  .deviceLabel {
-    font-size: 0.875rem;
-    margin-bottom: 0.75rem;
-    font-weight: 600;
+  .sectionTitle {
+    font-size: 1rem;
+    margin-bottom: 1rem;
   }
 
   .deviceControl {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
     padding: 1rem;
     margin-bottom: 1rem;
+    border-radius: 12px;
   }
 
   .deviceActions {
-    display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    margin-top: 0.75rem;
-  }
-
-  .deviceActions .lk-button {
-    width: 100%;
-    padding: 0.875rem;
-    font-size: 0.875rem;
-    border-radius: 10px;
-    min-height: 44px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-  }
-
-  .deviceActions .lk-media-device-menu {
-    width: 100%;
-    padding: 0.875rem;
-    font-size: 0.875rem;
-    border-radius: 10px;
-    min-height: 44px;
+    align-items: stretch;
   }
 
   .recordingSection {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 1rem;
     border-radius: 12px;
-    padding: 1.25rem;
+  }
+
+  .recordingStatus {
     margin-bottom: 1rem;
   }
 
-  .recordingButton {
-    width: 100%;
+  .footer {
     padding: 1rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-    border-radius: 10px;
-    min-height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    transition: all 0.2s ease;
+    flex-shrink: 0;
   }
 
   .closeButton {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: var(--lk-fg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    z-index: 10;
-  }
-
-  .closeButton:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.3);
+    width: 100%;
+    padding: 0.875rem;
+    font-size: 1rem;
+    border-radius: 12px;
   }
 }
 
