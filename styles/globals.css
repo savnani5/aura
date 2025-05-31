@@ -1409,9 +1409,105 @@ h2 a {
     overflow: hidden !important;
   }
 
+  /* Hide participant tile controls on mobile */
+  .lk-participant-tile .lk-focus-toggle-button {
+    display: none !important;
+  }
+
+  .lk-participant-tile .lk-connection-quality {
+    opacity: 1 !important; /* Keep connection quality visible but remove hover dependency */
+  }
+
   .lk-participant-metadata {
     padding: 0.5rem !important;
     font-size: 0.75rem !important;
+  }
+
+  /* Improved mobile grid layout for multiple participants */
+  .lk-grid-layout {
+    gap: 8px !important;
+    padding: 8px !important;
+    height: 100% !important;
+    display: grid !important;
+  }
+
+  /* Default single column for mobile */
+  .lk-grid-layout {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto !important;
+  }
+
+  /* 2 participants - split screen vertically */
+  .lk-grid-layout:has(.lk-participant-tile:nth-child(2):last-child) {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+  }
+
+  /* 3 participants - one large on top, two small below */
+  .lk-grid-layout:has(.lk-participant-tile:nth-child(3):last-child) {
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+  }
+
+  .lk-grid-layout:has(.lk-participant-tile:nth-child(3):last-child) .lk-participant-tile:first-child {
+    grid-column: 1 / -1 !important;
+    grid-row: 1 !important;
+  }
+
+  /* 4+ participants - 2x2 grid */
+  .lk-grid-layout:has(.lk-participant-tile:nth-child(4)) {
+    grid-template-columns: 1fr 1fr !important;
+    grid-template-rows: 1fr 1fr !important;
+  }
+
+  /* For browsers that don't support :has(), fallback to CSS counting */
+  @supports not selector(:has(*)) {
+    /* Use CSS counters as fallback */
+    .lk-grid-layout {
+      counter-reset: participants;
+    }
+    
+    .lk-participant-tile {
+      counter-increment: participants;
+    }
+    
+    /* This is a simplified fallback - will default to 2x2 grid for 3+ participants */
+    .lk-grid-layout .lk-participant-tile:nth-child(3) ~ .lk-participant-tile,
+    .lk-grid-layout .lk-participant-tile:nth-child(3) {
+      grid-template-columns: 1fr 1fr !important;
+      grid-template-rows: 1fr 1fr !important;
+    }
+  }
+
+  .lk-participant-tile {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 120px !important;
+    position: relative !important;
+  }
+
+  .lk-participant-tile .lk-participant-media-video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+
+  /* Participant name overlay improvements */
+  .lk-participant-name {
+    position: absolute !important;
+    bottom: 8px !important;
+    left: 8px !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    color: white !important;
+    padding: 4px 8px !important;
+    border-radius: 6px !important;
+    font-size: 0.75rem !important;
+    font-weight: 500 !important;
+    z-index: 10 !important;
+    max-width: calc(100% - 16px) !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
   }
 
   /* Notes Mobile Optimizations */
@@ -2147,6 +2243,9 @@ h2 a {
     justify-content: center;
     z-index: 1001;
     padding: 0;
+    /* Ensure touch scrolling works */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   /* Ensure settings menu appears above everything */
@@ -2154,6 +2253,39 @@ h2 a {
     width: 100%;
     max-width: none;
     margin: 0;
+    /* Enable scrolling for the settings content */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    max-height: 85vh;
+  }
+
+  /* Ensure the settings menu modal is properly positioned */
+  .lk-settings-menu-modal {
+    position: fixed !important;
+    top: auto !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    transform: none !important;
+    border-radius: 20px 20px 0 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    max-height: 85vh !important;
+    min-height: 60vh !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    /* Ensure proper z-index */
+    z-index: 1002 !important;
+  }
+
+  /* Ensure settings menu content is scrollable */
+  .lk-settings-menu-modal .lk-settings-menu {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 }
 
