@@ -7,6 +7,9 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   overflow: hidden;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Tab Navigation */
@@ -53,6 +56,34 @@
   flex-direction: column;
   gap: 1.5rem;
   min-height: 300px;
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  will-change: scroll-position;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Custom scrollbar styling for desktop */
+.tabContent::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tabContent::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.tabContent::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.tabContent::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 
 .section {
@@ -198,6 +229,7 @@
   padding: 1rem 1.5rem;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
 }
 
 .closeButton {
