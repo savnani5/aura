@@ -119,6 +119,8 @@ function VideoConferenceComponent(props: {
   const [copied, setCopied] = React.useState(false);
   const [meetingUrl, setMeetingUrl] = React.useState('');
   const [isMobile, setIsMobile] = React.useState(false);
+  const [sidebarWidth, setSidebarWidth] = React.useState(400);
+  const [isResizing, setIsResizing] = React.useState(false);
 
   // Mobile detection
   React.useEffect(() => {
@@ -130,6 +132,42 @@ function VideoConferenceComponent(props: {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Handle resize functionality
+  const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
+    setIsResizing(true);
+    e.preventDefault();
+  }, []);
+
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const newWidth = window.innerWidth - e.clientX;
+      const minWidth = 300;
+      const maxWidth = Math.min(600, window.innerWidth * 0.5);
+      
+      setSidebarWidth(Math.max(minWidth, Math.min(maxWidth, newWidth)));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing]);
 
   const roomOptions = React.useMemo((): RoomOptions => {
     let videoCodec: VideoCodec | undefined = props.options.codec ? props.options.codec : 'vp9';
@@ -313,7 +351,30 @@ function VideoConferenceComponent(props: {
             />
           </div>
           {!isMobile && (
-            <div className="lk-sidebar" style={{ width: '320px', minWidth: '320px' }}>
+            <div className="lk-sidebar" style={{ width: sidebarWidth, minWidth: 300, maxWidth: 600, position: 'relative' }}>
+              <div 
+                className="resize-handle"
+                onMouseDown={handleMouseDown}
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: '4px',
+                  cursor: 'ew-resize',
+                  backgroundColor: 'transparent',
+                  zIndex: 10,
+                  userSelect: 'none'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(59, 130, 246, 0.5)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isResizing) {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              />
               <TranscriptTab onMeetingEnd={handleMeetingEnd} />
             </div>
           )}

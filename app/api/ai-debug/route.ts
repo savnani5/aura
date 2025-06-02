@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
             content: t.content.substring(0, 100) + '...',
             timestamp: new Date(t.timestamp).toISOString(),
             participants: t.participants,
-            hasEmbedding: !!t.embedding
+            hasKeywords: !!t.keywords
           }));
         }
 
@@ -145,9 +145,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { error: 'Anthropic API key not configured' },
         { status: 500 }
       );
     }

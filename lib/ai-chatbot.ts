@@ -1,12 +1,12 @@
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 import { VectorService, ChatContext, MeetingTranscript } from './vector-service';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant';
   content: string;
   timestamp: number;
 }
@@ -15,6 +15,8 @@ export interface AIChatResponse {
   message: string;
   usedContext: boolean;
   relevantTranscripts: number;
+  usedWebSearch?: boolean;
+  citations?: string[];
 }
 
 export class AIChatbot {
@@ -35,23 +37,15 @@ export class AIChatbot {
 
   // System prompt for the AI assistant
   private getSystemPrompt(): string {
-    return `You are Ohm, an AI assistant for video conferencing meetings. You help participants by:
+    return `You are Ohm, a concise AI assistant for video meetings. 
 
-1. Answering questions about the current meeting based on live transcripts
-2. Providing insights from previous similar meetings using stored context
-3. Summarizing discussions and key points
-4. Helping with action items and follow-ups
-5. Providing meeting-related assistance
+Help with:
+- Meeting summaries and decisions
+- Action items and follow-ups  
+- Transcript insights
+- Rephrasing and clarity
 
-Guidelines:
-- Be concise but helpful
-- Reference specific parts of transcripts when relevant
-- Distinguish between current meeting content and historical context
-- Use a professional but friendly tone
-- If you don't have enough context, ask clarifying questions
-- Always prioritize accuracy over speculation
-
-When referencing transcripts, format them clearly and indicate if they're from the current meeting or previous meetings.`;
+Be brief, direct, and helpful. Reference specific transcript content when relevant. If you lack context, ask short clarifying questions.`;
   }
 
   // Format context for the AI
@@ -78,6 +72,26 @@ When referencing transcripts, format them clearly and indicate if they're from t
     return formattedContext;
   }
 
+  // Check if message is a web search request
+  private isWebSearchRequest(message: string): boolean {
+    const lowerMessage = message.toLowerCase().trim();
+    return lowerMessage.startsWith('@web ') || 
+           lowerMessage.includes('search the web') || 
+           lowerMessage.includes('latest information') ||
+           lowerMessage.includes('current news') ||
+           lowerMessage.includes('recent developments');
+  }
+
+  // Extract search query from web search request
+  private extractWebSearchQuery(message: string): string {
+    // If it starts with @web, extract everything after
+    if (message.toLowerCase().startsWith('@web ')) {
+      return message.slice(5).trim();
+    }
+    // Otherwise, use the full message as search query
+    return message;
+  }
+
   // Process AI chat request
   async processChat(
     message: string,
@@ -98,6 +112,14 @@ When referencing transcripts, format them clearly and indicate if they're from t
       };
       history.push(userMessage);
 
+      // Check if this is a web search request
+      const needsWebSearch = this.isWebSearchRequest(message);
+      let searchQuery = '';
+      
+      if (needsWebSearch) {
+        searchQuery = this.extractWebSearchQuery(message);
+      }
+
       // Get relevant context from vector database
       const context = await this.vectorService.getChatContext(
         message,
@@ -105,39 +127,80 @@ When referencing transcripts, format them clearly and indicate if they're from t
         currentTranscripts
       );
 
-      // Prepare messages for OpenAI
-      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-        {
-          role: 'system',
-          content: this.getSystemPrompt(),
-        },
-      ];
-
+      // Prepare system prompt with context
+      let systemPrompt = this.getSystemPrompt();
+      
       // Add context if available
       const formattedContext = this.formatContext(context);
       if (formattedContext.trim()) {
-        messages.push({
-          role: 'system',
-          content: `CONTEXT INFORMATION:\n${formattedContext}`,
+        systemPrompt += `\n\nCONTEXT INFORMATION:\n${formattedContext}`;
+      }
+
+      // If web search is needed, modify the system prompt
+      if (needsWebSearch) {
+        systemPrompt += `\n\nThe user is requesting information that may require web search. Use the web search tool to find current, relevant information about: "${searchQuery}"`;
+      }
+
+      // Prepare messages for Anthropic (recent conversation history)
+      const recentHistory = history.slice(-10);
+      const messages: Anthropic.Messages.MessageParam[] = recentHistory.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
+      // Prepare tools array - include web search if needed
+      const tools: any[] = [];
+      if (needsWebSearch) {
+        tools.push({
+          type: "web_search_20250305",
+          name: "web_search",
+          max_uses: 3
         });
       }
 
-      // Add recent conversation history (last 10 messages)
-      const recentHistory = history.slice(-10);
-      messages.push(...recentHistory.map(msg => ({
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-      })));
-
-      // Get AI response
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages,
-        max_tokens: 500,
+      // Get AI response from Claude
+      const requestParams: any = {
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
         temperature: 0.7,
-      });
+        system: systemPrompt,
+        messages,
+      };
 
-      const aiResponse = completion.choices[0]?.message?.content || 'I apologize, but I could not generate a response.';
+      // Add tools if web search is needed
+      if (tools.length > 0) {
+        requestParams.tools = tools;
+      }
+
+      const response = await anthropic.messages.create(requestParams);
+
+      // Extract response text and citations
+      let aiResponse = '';
+      const citations: string[] = [];
+      let usedWebSearch = false;
+
+      for (const content of response.content) {
+        if (content.type === 'text') {
+          aiResponse += content.text;
+          
+          // Check for citations in the text content
+          if (content.citations) {
+            for (const citation of content.citations) {
+              if (citation.type === 'web_search_result_location') {
+                citations.push(citation.url);
+                usedWebSearch = true;
+              }
+            }
+          }
+        } else if (content.type === 'web_search_tool_result') {
+          // Web search was used
+          usedWebSearch = true;
+        }
+      }
+
+      if (!aiResponse) {
+        aiResponse = 'I apologize, but I could not generate a response.';
+      }
 
       // Add AI response to history
       const assistantMessage: ChatMessage = {
@@ -157,6 +220,8 @@ When referencing transcripts, format them clearly and indicate if they're from t
         message: aiResponse,
         usedContext: context.relevantHistory.length > 0 || context.currentTranscripts.trim().length > 0,
         relevantTranscripts: context.relevantHistory.length,
+        usedWebSearch,
+        citations: citations.length > 0 ? citations : undefined,
       };
 
     } catch (error) {
@@ -165,6 +230,7 @@ When referencing transcripts, format them clearly and indicate if they're from t
         message: 'I apologize, but I encountered an error. Please try again.',
         usedContext: false,
         relevantTranscripts: 0,
+        usedWebSearch: false,
       };
     }
   }

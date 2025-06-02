@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useTracks, useRoomContext, useChat, useDataChannel } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { Transcript, TranscriptionService } from '@/lib/transcription-service';
+import ReactMarkdown from 'react-markdown';
 
 interface TranscriptTabProps {
   onMeetingEnd?: (transcripts: Transcript[]) => void;
@@ -77,8 +78,19 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     userName?: string;
     usedContext?: boolean;
     relevantTranscripts?: number;
+    usedWebSearch?: boolean;
+    citations?: string[];
   }>>([]);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+
+  // Question suggestions for AI chat
+  const questionSuggestions = [
+    "Summarize what's been decided so far?",
+    "Help me rephrase my thoughts ....",
+    "What are the key topics covered in this meeting?",
+    "What questions were raised but not answered?",
+    "@web Latest industry trends and news"
+  ];
 
   // Add transcript messages ref for auto-scrolling
   const transcriptMessagesRef = React.useRef<HTMLDivElement>(null);
@@ -166,11 +178,16 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     if (!chatInput.trim() || isSending) return;
 
     const message = chatInput.trim();
-    const isAiCommand = message.toLowerCase().startsWith('@ohm ');
+    const isAiCommand = message.toLowerCase().startsWith('@ohm ') || message.toLowerCase().startsWith('@web ');
 
     if (isAiCommand) {
-      // Handle AI command - remove the @ohm prefix (case-insensitive)
-      const aiMessage = message.slice(message.toLowerCase().indexOf('@ohm ') + 5);
+      // Handle AI command - remove the @ohm or @web prefix (case-insensitive)
+      let aiMessage = message;
+      if (message.toLowerCase().startsWith('@ohm ')) {
+        aiMessage = message.slice(message.toLowerCase().indexOf('@ohm ') + 5);
+      } else if (message.toLowerCase().startsWith('@web ')) {
+        aiMessage = message; // Keep @web prefix for backend processing
+      }
       await handleAiChat(aiMessage);
     } else {
       // Handle regular chat
@@ -231,6 +248,8 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
           timestamp: Date.now(),
           usedContext: data.usedContext,
           relevantTranscripts: data.relevantTranscripts,
+          usedWebSearch: data.usedWebSearch,
+          citations: data.citations,
         };
 
         setAiChatHistory(prev => [...prev, aiMessage]);
@@ -672,11 +691,44 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 <div className="chat-empty">
                   <p>No messages yet. Start a conversation!</p>
                   <p className="chat-tip">
-                    💡 Tip: Use <strong>@ohm</strong> or <strong>@Ohm</strong> to chat with the AI assistant
+                    💡 Tip: Use <strong>@ohm</strong> for AI assistant, <strong>@web</strong> for web search
                   </p>
+                  
+                  <div className="ai-suggestions">
+                    <p className="suggestions-title">Try asking Ohm:</p>
+                    <div className="suggestion-buttons">
+                      {questionSuggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          className="suggestion-button"
+                          onClick={() => setChatInput(suggestion.startsWith('@web') ? suggestion : `@ohm ${suggestion}`)}
+                          disabled={isSending || isAiProcessing}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <>
+                  {/* Show suggestions at the top for any chat activity */}
+                  <div className="ai-suggestions-compact">
+                    <p className="suggestions-title-compact">💡 Ask Ohm AI:</p>
+                    <div className="suggestion-buttons-compact">
+                      {questionSuggestions.map((suggestion, index) => (
+                        <button
+                          key={index}
+                          className="suggestion-button-compact"
+                          onClick={() => setChatInput(suggestion.startsWith('@web') ? suggestion : `@ohm ${suggestion}`)}
+                          disabled={isSending || isAiProcessing}
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Regular Chat Messages */}
                   {groupedChatMessages.map((group) => (
                     <div key={group.groupId} className="chat-message-group">
@@ -706,6 +758,17 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                           {aiMsg.type === 'ai' ? (
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                               🤖 Ohm AI
+                              {aiMsg.usedWebSearch && (
+                                <span style={{ 
+                                  fontSize: '0.625rem', 
+                                  background: '#4ade80', 
+                                  color: 'white',
+                                  padding: '0.125rem 0.25rem',
+                                  borderRadius: '4px'
+                                }}>
+                                  🌐 web
+                                </span>
+                              )}
                               {aiMsg.usedContext && (
                                 <span style={{ 
                                   fontSize: '0.625rem', 
@@ -728,8 +791,26 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                       </div>
                       <div className="chat-message-text">
                         <div className="chat-message">
-                          {aiMsg.message}
+                          <ReactMarkdown>{aiMsg.message}</ReactMarkdown>
                         </div>
+                        {aiMsg.citations && aiMsg.citations.length > 0 && (
+                          <div className="message-citations">
+                            <div className="citations-label">Sources:</div>
+                            <div className="citations-list">
+                              {aiMsg.citations.map((url, index) => (
+                                <a 
+                                  key={index}
+                                  href={url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="citation-link"
+                                >
+                                  🔗 {new URL(url).hostname}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -758,21 +839,65 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
             </div>
             
             <form className="chat-input-form" onSubmit={handleChatSubmit}>
-              <input
-                type="text"
-                className="chat-input"
-                placeholder={chatInput.toLowerCase().startsWith('@ohm ') ? "Ask Ohm AI about the meeting..." : "Type a message or @ohm/@Ohm for AI assistant..."}
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                disabled={isSending || isAiProcessing}
-              />
-              <button 
-                type="submit" 
-                className="chat-send-button"
-                disabled={isSending || isAiProcessing || !chatInput.trim()}
-              >
-                {chatInput.toLowerCase().startsWith('@ohm ') ? '🤖' : 'Send'}
-              </button>
+              <div className="chat-command-buttons">
+                <button
+                  type="button"
+                  className={`command-button ${chatInput.toLowerCase().startsWith('@ohm ') ? 'active' : ''}`}
+                  onClick={() => {
+                    if (chatInput.toLowerCase().startsWith('@ohm ')) {
+                      // Remove @ohm prefix if already present
+                      setChatInput(chatInput.slice(5));
+                    } else if (chatInput.toLowerCase().startsWith('@web ')) {
+                      // Replace @web with @ohm
+                      setChatInput(`@ohm ${chatInput.slice(5)}`);
+                    } else {
+                      // Add @ohm prefix
+                      setChatInput(`@ohm ${chatInput}`);
+                    }
+                  }}
+                  disabled={isSending || isAiProcessing}
+                  title="AI Assistant"
+                >
+                  🤖 AI
+                </button>
+                <button
+                  type="button"
+                  className={`command-button ${chatInput.toLowerCase().startsWith('@web ') ? 'active' : ''}`}
+                  onClick={() => {
+                    if (chatInput.toLowerCase().startsWith('@web ')) {
+                      // Remove @web prefix if already present
+                      setChatInput(chatInput.slice(5));
+                    } else if (chatInput.toLowerCase().startsWith('@ohm ')) {
+                      // Replace @ohm with @web
+                      setChatInput(`@web ${chatInput.slice(5)}`);
+                    } else {
+                      // Add @web prefix
+                      setChatInput(`@web ${chatInput}`);
+                    }
+                  }}
+                  disabled={isSending || isAiProcessing}
+                  title="Web Search"
+                >
+                  🌐 Web
+                </button>
+              </div>
+              <div className="chat-input-row">
+                <input
+                  type="text"
+                  className="chat-input"
+                  placeholder={chatInput.toLowerCase().startsWith('@ohm ') || chatInput.toLowerCase().startsWith('@web ') ? "Ask AI about the meeting or search the web..." : "Type a message ..."}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  disabled={isSending || isAiProcessing}
+                />
+                <button 
+                  type="submit" 
+                  className="chat-send-button"
+                  disabled={isSending || isAiProcessing || !chatInput.trim()}
+                >
+                  {chatInput.toLowerCase().startsWith('@ohm ') || chatInput.toLowerCase().startsWith('@web ') ? '🤖' : 'Send'}
+                </button>
+              </div>
             </form>
           </div>
         )}

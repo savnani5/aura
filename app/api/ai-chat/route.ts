@@ -13,10 +13,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if OpenAI API key is configured
-    if (!process.env.OPENAI_API_KEY) {
+    // Check if Anthropic API key is configured
+    if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { error: 'Anthropic API key not configured' },
         { status: 500 }
       );
     }
@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
       response: response.message,
       usedContext: response.usedContext,
       relevantTranscripts: response.relevantTranscripts,
+      usedWebSearch: response.usedWebSearch || false,
+      citations: response.citations,
       timestamp: Date.now(),
     });
 
@@ -63,9 +65,9 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { error: 'Anthropic API key not configured' },
         { status: 500 }
       );
     }

@@ -12,6 +12,7 @@
     "format:write": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
     "@aws-sdk/client-s3": "^3.817.0",
     "@datadog/browser-logs": "^5.23.3",
     "@deepgram/sdk": "^4.2.0",
@@ -27,7 +28,10 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-hot-toast": "^2.5.2",
-    "tinykeys": "^3.0.0"
+    "react-markdown": "^10.1.0",
+    "tavily": "^1.0.2",
+    "tinykeys": "^3.0.0",
+    "voyageai": "^0.0.4"
   },
   "devDependencies": {
     "@types/node": "22.15.19",
