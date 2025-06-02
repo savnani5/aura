@@ -11,8 +11,10 @@ import {
 import styles from '../styles/SettingsMenu.module.css';
 import { CameraSettings } from './CameraSettings';
 import { MicrophoneSettings } from './MicrophoneSettings';
+
 /**
  * @alpha
+ * Updated Settings Menu Component - Latest Version
  */
 export interface SettingsMenuProps extends React.HTMLAttributes<HTMLDivElement> {}
 
