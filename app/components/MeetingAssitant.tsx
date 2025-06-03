@@ -86,7 +86,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   // Question suggestions for AI chat
   const questionSuggestions = [
     "Summarize what's been decided so far?",
-    "Help me rephrase my thoughts ....",
+    "What are the action items from last meeting?",
     "What are the key topics covered in this meeting?",
     "What questions were raised but not answered?",
     "@web Latest industry trends and news"
@@ -701,7 +701,13 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                         <button
                           key={index}
                           className="suggestion-button"
-                          onClick={() => setChatInput(suggestion.startsWith('@web') ? suggestion : `@ohm ${suggestion}`)}
+                          onClick={async () => {
+                            if (suggestion.startsWith('@web')) {
+                              await handleAiChat(suggestion);
+                            } else {
+                              await handleAiChat(`@ohm ${suggestion}`);
+                            }
+                          }}
                           disabled={isSending || isAiProcessing}
                         >
                           {suggestion}
@@ -720,7 +726,13 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                         <button
                           key={index}
                           className="suggestion-button-compact"
-                          onClick={() => setChatInput(suggestion.startsWith('@web') ? suggestion : `@ohm ${suggestion}`)}
+                          onClick={async () => {
+                            if (suggestion.startsWith('@web')) {
+                              await handleAiChat(suggestion);
+                            } else {
+                              await handleAiChat(`@ohm ${suggestion}`);
+                            }
+                          }}
                           disabled={isSending || isAiProcessing}
                         >
                           {suggestion}
