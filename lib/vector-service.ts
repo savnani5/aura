@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { DatabaseService } from './prisma';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -21,7 +22,11 @@ export interface ChatContext {
 
 export class VectorService {
   private static instance: VectorService;
-  private transcripts: Map<string, MeetingTranscript[]> = new Map();
+  private dbService: DatabaseService;
+
+  constructor() {
+    this.dbService = DatabaseService.getInstance();
+  }
 
   static getInstance(): VectorService {
     if (!VectorService.instance) {
@@ -61,30 +66,60 @@ export class VectorService {
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
-  // Store meeting transcript with embedding
+  // Store meeting transcript with embedding in database
   async storeMeetingTranscript(transcript: Omit<MeetingTranscript, 'embedding'>): Promise<void> {
     try {
+      // First, get the meeting from database to get meetingId
+      const meeting = await this.dbService.getMeeting(transcript.roomName);
+      if (!meeting) {
+        console.error(`Meeting not found for room: ${transcript.roomName}`);
+        return;
+      }
+
+      // Generate embedding for the content
       const embedding = await this.generateEmbedding(transcript.content);
-      const transcriptWithEmbedding: MeetingTranscript = {
-        ...transcript,
-        embedding,
-      };
-
-      if (!this.transcripts.has(transcript.roomName)) {
-        this.transcripts.set(transcript.roomName, []);
-      }
-
-      const roomTranscripts = this.transcripts.get(transcript.roomName)!;
-      roomTranscripts.push(transcriptWithEmbedding);
-
-      // Keep only last 100 transcripts per room to manage memory
-      if (roomTranscripts.length > 100) {
-        roomTranscripts.splice(0, roomTranscripts.length - 100);
-      }
+      
+      // Store transcript in database
+      await this.dbService.createTranscript({
+        meetingId: meeting.id,
+        speaker: transcript.participants[0] || 'Unknown', // For backward compatibility
+        text: transcript.content,
+        embedding: JSON.stringify(embedding) // Store as JSON string
+      });
 
       console.log(`Stored transcript for room ${transcript.roomName}`);
     } catch (error) {
       console.error('Error storing meeting transcript:', error);
+    }
+  }
+
+  // Store individual transcript entry with embedding
+  async storeTranscriptEntry(
+    roomName: string, 
+    speaker: string, 
+    text: string
+  ): Promise<void> {
+    try {
+      // Get meeting from database
+      const meeting = await this.dbService.getMeeting(roomName);
+      if (!meeting) {
+        console.error(`Meeting not found for room: ${roomName}`);
+        return;
+      }
+
+      // Generate embedding
+      const embedding = await this.generateEmbedding(text);
+      
+      // Store in database
+      await this.dbService.createTranscript({
+        meetingId: meeting.id,
+        speaker,
+        text,
+        embedding: JSON.stringify(embedding)
+      });
+
+    } catch (error) {
+      console.error('Error storing transcript entry:', error);
     }
   }
 
@@ -96,39 +131,62 @@ export class VectorService {
   ): Promise<MeetingTranscript[]> {
     try {
       const queryEmbedding = await this.generateEmbedding(query);
-      const allTranscripts: MeetingTranscript[] = [];
-
-      // Get transcripts from current room and similar rooms
-      for (const [room, transcripts] of this.transcripts.entries()) {
-        if (room === roomName || room.includes(roomName.split('-')[0])) {
-          allTranscripts.push(...transcripts);
-        }
+      
+      // Get meeting from database
+      const meeting = await this.dbService.getMeeting(roomName);
+      if (!meeting) {
+        return [];
       }
 
+      // Get all transcripts for this meeting (could expand to similar meetings later)
+      const transcripts = await this.dbService.getTranscriptsForMeeting(meeting.id, 500);
+      
       // Calculate similarities and sort
-      const transcriptsWithSimilarity = allTranscripts
-        .filter(transcript => transcript.embedding)
-        .map(transcript => ({
-          transcript,
-          similarity: this.cosineSimilarity(queryEmbedding, transcript.embedding!),
-        }))
-        .sort((a, b) => b.similarity - a.similarity)
+      const transcriptsWithSimilarity = transcripts
+        .filter((transcript: any) => transcript.embedding)
+        .map((transcript: any) => {
+          const embedding = JSON.parse(transcript.embedding!);
+          return {
+            transcript: {
+              id: transcript.id,
+              roomName: meeting.roomName,
+              content: transcript.text,
+              timestamp: transcript.timestamp.getTime(),
+              participants: [transcript.speaker],
+              embedding
+            },
+            similarity: this.cosineSimilarity(queryEmbedding, embedding),
+          };
+        })
+        .sort((a: any, b: any) => b.similarity - a.similarity)
         .slice(0, limit);
 
-      return transcriptsWithSimilarity.map(item => item.transcript);
+      return transcriptsWithSimilarity.map((item: any) => item.transcript);
     } catch (error) {
       console.error('Error searching relevant transcripts:', error);
       return [];
     }
   }
 
-  // Get chat context for AI assistant
+  // Get chat context for AI assistant (enhanced with database search)
   async getChatContext(
     query: string,
     roomName: string,
     currentTranscripts: string
   ): Promise<ChatContext> {
-    const relevantHistory = await this.searchRelevantTranscripts(query, roomName);
+    // Get relevant historical transcripts
+    const relevantHistory = await this.searchRelevantTranscripts(query, roomName, 3);
+    
+    // Also search across other meetings of the same type if needed
+    try {
+      const meeting = await this.dbService.getMeeting(roomName);
+      if (meeting?.isRecurring) {
+        // For recurring meetings, we could search across previous instances
+        // This would require a more complex query - for now, we'll stick to current meeting
+      }
+    } catch (error) {
+      console.error('Error getting meeting context:', error);
+    }
     
     return {
       currentTranscripts,
@@ -136,37 +194,68 @@ export class VectorService {
     };
   }
 
-  // Clear old transcripts (can be called periodically)
-  clearOldTranscripts(olderThanDays: number = 30): void {
-    const cutoffTime = Date.now() - (olderThanDays * 24 * 60 * 60 * 1000);
-    
-    for (const [roomName, transcripts] of this.transcripts.entries()) {
-      const filteredTranscripts = transcripts.filter(
-        transcript => transcript.timestamp > cutoffTime
-      );
+  // Search transcripts across all meetings (for global search)
+  async searchGlobalTranscripts(query: string, limit: number = 10): Promise<MeetingTranscript[]> {
+    try {
+      const queryEmbedding = await this.generateEmbedding(query);
       
-      if (filteredTranscripts.length === 0) {
-        this.transcripts.delete(roomName);
-      } else {
-        this.transcripts.set(roomName, filteredTranscripts);
-      }
+      // Simple text search for now (could be enhanced with vector search later)
+      const searchResults = await this.dbService.searchTranscripts(query);
+      
+      // Convert to MeetingTranscript format
+      const transcripts: MeetingTranscript[] = searchResults.map((result: any) => ({
+        id: result.id,
+        roomName: result.meeting?.roomName || 'Unknown',
+        content: result.text,
+        timestamp: result.timestamp.getTime(),
+        participants: [result.speaker],
+      }));
+
+      return transcripts.slice(0, limit);
+    } catch (error) {
+      console.error('Error searching global transcripts:', error);
+      return [];
     }
   }
 
-  // Debug methods for testing
-  getAllTranscripts(): Map<string, MeetingTranscript[]> {
-    return this.transcripts;
+  // Clear old transcripts (handled by database cleanup now)
+  clearOldTranscripts(olderThanDays: number = 30): void {
+    // This is now handled by DatabaseService.cleanupOldData()
+    console.log('Use DatabaseService.cleanupOldData() for transcript cleanup');
   }
 
-  getTranscriptsForRoom(roomName: string): MeetingTranscript[] {
-    return this.transcripts.get(roomName) || [];
+  // Debug methods
+  async getTranscriptsForRoom(roomName: string): Promise<MeetingTranscript[]> {
+    try {
+      const meeting = await this.dbService.getMeeting(roomName);
+      if (!meeting) return [];
+
+      const transcripts = await this.dbService.getTranscriptsForMeeting(meeting.id);
+      return transcripts.map((t: any) => ({
+        id: t.id,
+        roomName: meeting.roomName,
+        content: t.text,
+        timestamp: t.timestamp.getTime(),
+        participants: [t.speaker],
+        embedding: t.embedding ? JSON.parse(t.embedding) : undefined
+      }));
+    } catch (error) {
+      console.error('Error getting transcripts for room:', error);
+      return [];
+    }
   }
 
-  getTotalTranscriptCount(): number {
-    return Array.from(this.transcripts.values()).reduce((sum, arr) => sum + arr.length, 0);
+  async getTotalTranscriptCount(): Promise<number> {
+    try {
+      const meetings = await this.dbService.getAllMeetings();
+      return meetings.reduce((sum: number, meeting: any) => sum + (meeting._count?.transcripts || 0), 0);
+    } catch (error) {
+      console.error('Error getting total transcript count:', error);
+      return 0;
+    }
   }
 
   clearAllTranscripts(): void {
-    this.transcripts.clear();
+    console.log('Use database operations for clearing transcripts');
   }
 } 

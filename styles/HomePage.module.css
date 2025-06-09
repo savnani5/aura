@@ -1,0 +1,382 @@
+/* Homepage Container */
+.container {
+  min-height: 100vh;
+  background: #0a0a0a;
+  display: flex;
+  flex-direction: column;
+  color: #ffffff;
+  overflow-y: auto;
+}
+
+/* Header */
+.header {
+  background: rgba(15, 15, 15, 0.8);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1rem 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.headerContent {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: white;
+}
+
+.logo svg {
+  color: #3b82f6;
+}
+
+.logo h1 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.025em;
+}
+
+.headerActions {
+  display: flex;
+  gap: 1rem;
+}
+
+.refreshButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.refreshButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  transform: translateY(-1px);
+}
+
+/* Main Content */
+.main {
+  flex: 1;
+  padding: 3rem 0;
+  overflow-y: auto;
+}
+
+.mainContent {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 4rem;
+  align-items: start;
+}
+
+/* Left Section - Start Meeting */
+.leftSection {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  position: sticky;
+  top: 2rem;
+}
+
+.startMeetingCard {
+  background: rgba(15, 15, 15, 0.8);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1.5rem;
+  padding: 2.5rem;
+  text-align: center;
+}
+
+.startMeetingIcon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.startMeetingIcon svg {
+  color: #3b82f6;
+}
+
+.startMeetingContent h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.025em;
+}
+
+.startMeetingDescription {
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 2rem 0;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.startMeetingButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 2rem;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.startMeetingButton:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+/* Right Section - Meeting Content */
+.rightSection {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  min-height: 0;
+}
+
+.meetingSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sectionHeader {
+  text-align: left;
+}
+
+.sectionHeaderContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.sectionTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.025em;
+}
+
+.sectionDescription {
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+  line-height: 1.5;
+  font-size: 0.9375rem;
+}
+
+.viewAllButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.viewAllButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.viewAllButton svg {
+  transition: transform 0.2s ease;
+}
+
+.viewAllButton:hover svg {
+  transform: translateX(2px);
+}
+
+.meetingRoomsGrid,
+.oneOffMeetingsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+/* Loading State */
+.loadingState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+}
+
+.loadingSpinner {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Empty State */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  background: rgba(15, 15, 15, 0.4);
+  backdrop-filter: blur(20px);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 1.5rem;
+  text-align: center;
+}
+
+.emptyStateIcon {
+  margin-bottom: 1.5rem;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.emptyStateTitle {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: white;
+  margin: 0 0 0.5rem 0;
+}
+
+.emptyStateDescription {
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 2rem 0;
+  line-height: 1.6;
+  font-size: 0.9rem;
+}
+
+.emptyStateButton {
+  padding: 0.75rem 1.5rem;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 0.5rem;
+  color: #3b82f6;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.emptyStateButton:hover {
+  background: rgba(59, 130, 246, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .mainContent {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+  
+  .leftSection {
+    position: static;
+  }
+}
+
+@media (max-width: 768px) {
+  .headerContent {
+    padding: 0 1rem;
+  }
+  
+  .mainContent {
+    padding: 0 1rem;
+    gap: 2rem;
+  }
+  
+  .startMeetingCard {
+    padding: 2rem;
+  }
+  
+  .meetingRoomsGrid,
+  .oneOffMeetingsGrid {
+    grid-template-columns: 1fr;
+  }
+  
+  .sectionHeaderContent {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .viewAllButton {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .logo h1 {
+    display: none;
+  }
+  
+  .refreshButton span {
+    display: none;
+  }
+  
+  .startMeetingTitle {
+    font-size: 1.25rem;
+  }
+  
+  .sectionTitle {
+    font-size: 1.25rem;
+  }
+  
+  .main {
+    padding: 2rem 0;
+  }
+  
+  .rightSection {
+    gap: 2rem;
+  }
+  
+  .meetingSection {
+    gap: 1rem;
+  }
+  
+  .viewAllButton {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+  }
+} 

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import React, { useState } from 'react';
 import { encodePassphrase, randomString } from '@/lib/client-utils';
-import styles from '../../styles/Home.module.css';
+import styles from '@/styles/Home.module.css';
 
 export default function DebugPage() {
   const router = useRouter();

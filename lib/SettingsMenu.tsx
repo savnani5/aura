@@ -8,7 +8,7 @@ import {
   useRoomContext,
   useIsRecording,
 } from '@livekit/components-react';
-import styles from '../styles/SettingsMenu.module.css';
+import styles from '@/styles/SettingsMenu.module.css';
 import { CameraSettings } from './CameraSettings';
 import { MicrophoneSettings } from './MicrophoneSettings';
 

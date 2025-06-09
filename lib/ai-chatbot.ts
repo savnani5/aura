@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { VectorService, ChatContext, MeetingTranscript } from './vector-service';
+import { DatabaseService } from './prisma';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -22,10 +23,12 @@ export interface AIChatResponse {
 export class AIChatbot {
   private static instance: AIChatbot;
   private vectorService: VectorService;
+  private dbService: DatabaseService;
   private conversationHistory: Map<string, ChatMessage[]> = new Map();
 
   constructor() {
     this.vectorService = VectorService.getInstance();
+    this.dbService = DatabaseService.getInstance();
   }
 
   static getInstance(): AIChatbot {
@@ -44,8 +47,13 @@ Help with:
 - Action items and follow-ups  
 - Transcript insights
 - Rephrasing and clarity
+- Task management and suggestions
 
-Be brief, direct, and helpful. Reference specific transcript content when relevant. If you lack context, ask short clarifying questions.`;
+Be brief, direct, and helpful. Reference specific transcript content when relevant. If you lack context, ask short clarifying questions.
+
+When users ask about tasks or action items, you can suggest creating tasks with priorities and assignments based on the meeting discussion.
+
+Note: Meeting types are flexible - users can define any custom meeting type name (like "Daily Standup", "Client Review", "Sprint Planning", etc.).`;
   }
 
   // Format context for the AI
@@ -235,23 +243,37 @@ Be brief, direct, and helpful. Reference specific transcript content when releva
     }
   }
 
-  // Store meeting transcript for future context
+  // Store meeting transcript for AI context (updated to use database)
   async storeMeetingTranscript(
     roomName: string,
     transcriptText: string,
     participants: string[]
   ): Promise<void> {
-    if (!transcriptText.trim()) return;
-
-    const transcript: Omit<MeetingTranscript, 'embedding'> = {
-      id: `${roomName}-${Date.now()}`,
-      roomName,
-      content: transcriptText,
-      timestamp: Date.now(),
-      participants,
-    };
-
-    await this.vectorService.storeMeetingTranscript(transcript);
+    try {
+      // Store in vector service for semantic search
+      const transcript: Omit<MeetingTranscript, 'embedding'> = {
+        id: `${roomName}-${Date.now()}`,
+        roomName,
+        content: transcriptText,
+        timestamp: Date.now(),
+        participants,
+      };
+      
+      await this.vectorService.storeMeetingTranscript(transcript);
+      
+      // Also store individual transcript entries for better granularity
+      const lines = transcriptText.split('\n').filter(line => line.trim());
+      for (const line of lines) {
+        const match = line.match(/^([^:]+):\s*(.+)$/);
+        if (match) {
+          const [, speaker, text] = match;
+          await this.vectorService.storeTranscriptEntry(roomName, speaker.trim(), text.trim());
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error storing transcript:', error);
+    }
   }
 
   // Clear conversation history for a room

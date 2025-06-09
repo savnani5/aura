@@ -1,0 +1,144 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url = env("POSTGRES_PRISMA_URL") // uses connection pooling
+  directUrl = env("POSTGRES_URL_NON_POOLING") // uses a direct connection
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+model Meeting {
+  id          String      @id @default(cuid())
+  roomName    String      @unique
+  title       String?
+  type        String      // Now flexible - users can input any meeting type
+  isRecurring Boolean     @default(false)
+  
+  // Meeting metadata
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  startedAt   DateTime?
+  endedAt     DateTime?
+  
+  // For recurring meetings
+  recurringPattern String? // "daily", "weekly", "biweekly", etc.
+  nextScheduledAt  DateTime?
+  
+  // Meeting relationships
+  participants MeetingParticipant[]
+  transcripts  Transcript[]
+  tasks        Task[]
+  summaries    MeetingSummary[]
+  
+  @@map("meetings")
+}
+
+model MeetingParticipant {
+  id           String   @id @default(cuid())
+  meetingId    String
+  participantName String
+  joinedAt     DateTime @default(now())
+  leftAt       DateTime?
+  isHost       Boolean  @default(false)
+  
+  // Relationships
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  assignedTasks Task[] @relation("TaskAssignee")
+  
+  @@unique([meetingId, participantName])
+  @@map("meeting_participants")
+}
+
+model Transcript {
+  id           String   @id @default(cuid())
+  meetingId    String
+  speaker      String
+  text         String
+  timestamp    DateTime @default(now())
+  
+  // Vector embedding for semantic search (stored as text, converted to float[] in app)
+  embedding    String?
+  
+  // Relationships
+  meeting      Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  
+  @@map("transcripts")
+}
+
+model Task {
+  id          String      @id @default(cuid())
+  meetingId   String
+  title       String
+  description String?
+  status      TaskStatus  @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  
+  // Task metadata
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  dueDate     DateTime?
+  completedAt DateTime?
+  
+  // AI generation metadata
+  isAiGenerated Boolean   @default(false)
+  aiConfidence  Float?    // 0.0 to 1.0, how confident AI was in generating this task
+  
+  // Assignment
+  assigneeId  String?
+  
+  // Relationships
+  meeting     Meeting             @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  assignee    MeetingParticipant? @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  
+  @@map("tasks")
+}
+
+model MeetingSummary {
+  id          String   @id @default(cuid())
+  meetingId   String
+  summary     String
+  keyPoints   String[] // Array of key discussion points
+  actionItems String[] // Array of action items mentioned
+  decisions   String[] // Array of decisions made
+  
+  // AI generation metadata
+  generatedAt DateTime @default(now())
+  aiModel     String?  // Which AI model generated this
+  
+  // Relationships
+  meeting     Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  
+  @@map("meeting_summaries")
+}
+
+// For storing vector embeddings efficiently (future optimization)
+model VectorEmbedding {
+  id          String   @id @default(cuid())
+  contentId   String   // References transcript.id or other content
+  contentType String   // 'transcript', 'summary', etc.
+  embedding   Float[]  // pgvector extension will handle this
+  
+  createdAt   DateTime @default(now())
+  
+  @@map("vector_embeddings")
+}
