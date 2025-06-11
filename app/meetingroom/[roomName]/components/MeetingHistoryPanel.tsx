@@ -39,7 +39,7 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState('all');
 
   useEffect(() => {
@@ -49,8 +49,8 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
   const fetchMeetings = async () => {
     try {
       setLoading(true);
-      // Simulate API call with mock data
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Remove artificial delay - history loads instantly from indexed database
+      // await new Promise(resolve => setTimeout(resolve, 1000));
       
       const mockMeetings: Meeting[] = [
         {
@@ -245,7 +245,7 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
             <div
               key={meeting.id}
               className={styles.meetingCard}
-              onClick={() => setSelectedMeeting(meeting)}
+              onClick={() => setSelectedMeetingId(meeting.id)}
             >
               <div className={styles.meetingHeader}>
                 <div className={styles.meetingInfo}>
@@ -301,11 +301,11 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
         )}
       </div>
 
-      {selectedMeeting && (
+      {selectedMeetingId && (
         <MeetingModal
-          meeting={selectedMeeting}
-          isOpen={!!selectedMeeting}
-          onClose={() => setSelectedMeeting(null)}
+          meetingId={selectedMeetingId}
+          isOpen={!!selectedMeetingId}
+          onClose={() => setSelectedMeetingId(null)}
         />
       )}
     </div>

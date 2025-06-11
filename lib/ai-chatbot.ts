@@ -1,6 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { VectorService, ChatContext, MeetingTranscript } from './vector-service';
-import { DatabaseService } from './prisma';
+import { DatabaseService } from './mongodb';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -14,20 +13,16 @@ export interface ChatMessage {
 
 export interface AIChatResponse {
   message: string;
-  usedContext: boolean;
-  relevantTranscripts: number;
   usedWebSearch?: boolean;
   citations?: string[];
 }
 
 export class AIChatbot {
   private static instance: AIChatbot;
-  private vectorService: VectorService;
   private dbService: DatabaseService;
   private conversationHistory: Map<string, ChatMessage[]> = new Map();
 
   constructor() {
-    this.vectorService = VectorService.getInstance();
     this.dbService = DatabaseService.getInstance();
   }
 
@@ -45,39 +40,13 @@ export class AIChatbot {
 Help with:
 - Meeting summaries and decisions
 - Action items and follow-ups  
-- Transcript insights
-- Rephrasing and clarity
 - Task management and suggestions
+- Rephrasing and clarity
+- General meeting support
 
-Be brief, direct, and helpful. Reference specific transcript content when relevant. If you lack context, ask short clarifying questions.
-
-When users ask about tasks or action items, you can suggest creating tasks with priorities and assignments based on the meeting discussion.
+Be brief, direct, and helpful. When users ask about tasks or action items, you can suggest creating tasks with priorities and assignments.
 
 Note: Meeting types are flexible - users can define any custom meeting type name (like "Daily Standup", "Client Review", "Sprint Planning", etc.).`;
-  }
-
-  // Format context for the AI
-  private formatContext(context: ChatContext): string {
-    let formattedContext = '';
-
-    // Add current meeting transcripts
-    if (context.currentTranscripts.trim()) {
-      formattedContext += `CURRENT MEETING TRANSCRIPT:\n${context.currentTranscripts}\n\n`;
-    }
-
-    // Add relevant historical context
-    if (context.relevantHistory.length > 0) {
-      formattedContext += `RELEVANT PREVIOUS MEETINGS:\n`;
-      context.relevantHistory.forEach((transcript, index) => {
-        const date = new Date(transcript.timestamp).toLocaleDateString();
-        formattedContext += `\n--- Meeting ${index + 1} (${date}) ---\n`;
-        formattedContext += `Room: ${transcript.roomName}\n`;
-        formattedContext += `Participants: ${transcript.participants.join(', ')}\n`;
-        formattedContext += `Content: ${transcript.content}\n`;
-      });
-    }
-
-    return formattedContext;
   }
 
   // Check if message is a web search request
@@ -100,12 +69,37 @@ Note: Meeting types are flexible - users can define any custom meeting type name
     return message;
   }
 
+  // Get meeting context for AI
+  private async getMeetingContext(roomName: string): Promise<string> {
+    try {
+      const meeting = await this.dbService.getMeeting(roomName);
+      if (!meeting) return '';
+
+      let context = `Current meeting: ${meeting.title || meeting.type}\n`;
+      
+      if (meeting.participants.length > 0) {
+        context += `Participants: ${meeting.participants.map(p => p.name).join(', ')}\n`;
+      }
+
+      if (meeting.tasks.length > 0) {
+        context += `\nCurrent tasks:\n`;
+        meeting.tasks.forEach(task => {
+          context += `- ${task.title} (${task.status}${task.assigneeName ? `, assigned to ${task.assigneeName}` : ''})\n`;
+        });
+      }
+
+      return context;
+    } catch (error) {
+      console.error('Error getting meeting context:', error);
+      return '';
+    }
+  }
+
   // Process AI chat request
   async processChat(
     message: string,
     roomName: string,
-    userName: string,
-    currentTranscripts: string
+    userName: string
   ): Promise<AIChatResponse> {
     try {
       // Get conversation history for this room
@@ -128,20 +122,15 @@ Note: Meeting types are flexible - users can define any custom meeting type name
         searchQuery = this.extractWebSearchQuery(message);
       }
 
-      // Get relevant context from vector database
-      const context = await this.vectorService.getChatContext(
-        message,
-        roomName,
-        currentTranscripts
-      );
+      // Get meeting context
+      const meetingContext = await this.getMeetingContext(roomName);
 
       // Prepare system prompt with context
       let systemPrompt = this.getSystemPrompt();
       
-      // Add context if available
-      const formattedContext = this.formatContext(context);
-      if (formattedContext.trim()) {
-        systemPrompt += `\n\nCONTEXT INFORMATION:\n${formattedContext}`;
+      // Add meeting context if available
+      if (meetingContext.trim()) {
+        systemPrompt += `\n\nCURRENT MEETING CONTEXT:\n${meetingContext}`;
       }
 
       // If web search is needed, modify the system prompt
@@ -200,14 +189,7 @@ Note: Meeting types are flexible - users can define any custom meeting type name
               }
             }
           }
-        } else if (content.type === 'web_search_tool_result') {
-          // Web search was used
-          usedWebSearch = true;
         }
-      }
-
-      if (!aiResponse) {
-        aiResponse = 'I apologize, but I could not generate a response.';
       }
 
       // Add AI response to history
@@ -218,7 +200,7 @@ Note: Meeting types are flexible - users can define any custom meeting type name
       };
       history.push(assistantMessage);
 
-      // Keep only last 20 messages in history
+      // Update conversation history (keep last 20 messages)
       if (history.length > 20) {
         history = history.slice(-20);
       }
@@ -226,53 +208,13 @@ Note: Meeting types are flexible - users can define any custom meeting type name
 
       return {
         message: aiResponse,
-        usedContext: context.relevantHistory.length > 0 || context.currentTranscripts.trim().length > 0,
-        relevantTranscripts: context.relevantHistory.length,
         usedWebSearch,
         citations: citations.length > 0 ? citations : undefined,
       };
 
     } catch (error) {
-      console.error('Error processing AI chat:', error);
-      return {
-        message: 'I apologize, but I encountered an error. Please try again.',
-        usedContext: false,
-        relevantTranscripts: 0,
-        usedWebSearch: false,
-      };
-    }
-  }
-
-  // Store meeting transcript for AI context (updated to use database)
-  async storeMeetingTranscript(
-    roomName: string,
-    transcriptText: string,
-    participants: string[]
-  ): Promise<void> {
-    try {
-      // Store in vector service for semantic search
-      const transcript: Omit<MeetingTranscript, 'embedding'> = {
-        id: `${roomName}-${Date.now()}`,
-        roomName,
-        content: transcriptText,
-        timestamp: Date.now(),
-        participants,
-      };
-      
-      await this.vectorService.storeMeetingTranscript(transcript);
-      
-      // Also store individual transcript entries for better granularity
-      const lines = transcriptText.split('\n').filter(line => line.trim());
-      for (const line of lines) {
-        const match = line.match(/^([^:]+):\s*(.+)$/);
-        if (match) {
-          const [, speaker, text] = match;
-          await this.vectorService.storeTranscriptEntry(roomName, speaker.trim(), text.trim());
-        }
-      }
-      
-    } catch (error) {
-      console.error('Error storing transcript:', error);
+      console.error('Error processing chat:', error);
+      throw new Error('Failed to process chat request');
     }
   }
 

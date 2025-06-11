@@ -139,11 +139,20 @@
   font-size: 0.9rem;
 }
 
+.instantForm {
+  width: 100%;
+  margin-bottom: 1.5rem;
+}
+
+.instantForm .formGroup {
+  text-align: left;
+}
+
 /* Create Form */
 .createForm {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
 }
 
 .formGroup {
@@ -156,6 +165,13 @@
   font-size: 0.875rem;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.8);
+}
+
+.subLabel {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 0.25rem;
 }
 
 .input {
@@ -178,7 +194,16 @@
   color: rgba(255, 255, 255, 0.4);
 }
 
-.textarea {
+.input[type="date"] {
+  color-scheme: dark;
+}
+
+.input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
+.select {
   padding: 0.75rem;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.5rem;
@@ -186,24 +211,51 @@
   transition: all 0.2s ease;
   background: rgba(255, 255, 255, 0.02);
   color: #ffffff;
-  resize: vertical;
-  min-height: 80px;
-  font-family: inherit;
+  cursor: pointer;
 }
 
-.textarea:focus {
+.select:focus {
   outline: none;
   border-color: #60a5fa;
   background: rgba(255, 255, 255, 0.05);
 }
 
-.textarea::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+.select option {
+  background: #1a1a1a;
+  color: #ffffff;
 }
 
-/* Type Input with Dropdown */
+.scheduleContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.scheduleRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.scheduleField {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.scheduleFieldFullWidth {
+  grid-column: 1 / -1;
+}
+
 .typeInputContainer {
   position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.typeInputContainer .input {
+  padding-right: 3rem;
+  flex: 1;
 }
 
 .dropdownButton {
@@ -215,14 +267,16 @@
   border: none;
   color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
-  padding: 0.25rem;
-  border-radius: 0.25rem;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
 }
 
 .dropdownButton:hover {
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .dropdown {
@@ -425,13 +479,17 @@
   
   .participantRow {
     flex-direction: column;
-    align-items: stretch;
+    gap: 0.5rem;
+  }
+  
+  .scheduleRow {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
   }
   
   .removeButton {
     align-self: flex-end;
-    width: auto;
-    padding: 0.5rem 1rem;
+    margin-top: 0.5rem;
   }
 }
 
@@ -464,5 +522,17 @@
   .tab svg {
     width: 14px;
     height: 14px;
+  }
+  
+  .createForm {
+    gap: 1rem;
+  }
+  
+  .scheduleContainer {
+    gap: 0.5rem;
+  }
+  
+  .scheduleRow {
+    gap: 0.5rem;
   }
 } 

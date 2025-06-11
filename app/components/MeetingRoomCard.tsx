@@ -23,7 +23,7 @@ export function MeetingRoomCard({ room }: MeetingRoomCardProps) {
   const router = useRouter();
 
   const handleCardClick = () => {
-    router.push(`/room/${room.id}`);
+    router.push(`/meetingroom/${room.id}`);
   };
 
   const formatLastActivity = (date?: Date) => {

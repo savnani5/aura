@@ -34,7 +34,6 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Question suggestions for AI
@@ -42,19 +41,8 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
     "Summarize our room's previous discussions",
     "What are the recurring topics in our meetings?", 
     "Create a summary of action items",
-    "Who are the most active participants?",
-    "What decisions were made recently?",
-    "Latest trends in our industry"
+    "What decisions were made recently?"
   ];
-
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, aiChatHistory]);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,8 +87,8 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
       // TODO: Send message to API
       console.log('Sending message:', message);
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Remove artificial delay - chat messages send instantly
+      // await new Promise(resolve => setTimeout(resolve, 500));
       
     } catch (error) {
       console.error('Error sending message:', error);
@@ -236,14 +224,6 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
         <div className={styles.messagesList}>
           {!hasAnyMessages ? (
             <div className={styles.emptyState}>
-              <div className={styles.emptyIcon}>
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L2 7v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7l-10-5z" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M12 22v-6" stroke="currentColor" strokeWidth="1.5"/>
-                  <path d="M8 12c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="currentColor" strokeWidth="1.5"/>
-                </svg>
-              </div>
-              <h4>Ask Ohm anything about your room</h4>
               <p>Get insights about meetings, participants, and decisions. Use <strong>@ohm</strong> for room context or <strong>@web</strong> for web search.</p>
               
               <div className={styles.aiSuggestions}>
@@ -254,11 +234,7 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
                       key={index}
                       className={styles.suggestionCard}
                       onClick={async () => {
-                        if (suggestion.includes('trends in our industry')) {
-                          await handleAiChat(`@web ${suggestion}`);
-                        } else {
-                          await handleAiChat(suggestion);
-                        }
+                        await handleAiChat(suggestion);
                       }}
                       disabled={isLoading || isAiProcessing}
                     >
@@ -279,11 +255,7 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
                       key={index}
                       className={styles.suggestionButtonCompact}
                       onClick={async () => {
-                        if (suggestion.includes('trends in our industry')) {
-                          await handleAiChat(`@web ${suggestion}`);
-                        } else {
-                          await handleAiChat(suggestion);
-                        }
+                        await handleAiChat(suggestion);
                       }}
                       disabled={isLoading || isAiProcessing}
                     >
@@ -378,7 +350,6 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
               )}
             </>
           )}
-          <div ref={messagesEndRef} />
         </div>
       </div>
 

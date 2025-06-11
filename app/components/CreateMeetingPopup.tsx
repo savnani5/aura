@@ -13,8 +13,16 @@ interface CreateMeetingPopupProps {
 interface MeetingRoomForm {
   title: string;
   type: string;
-  description: string;
   participants: string[];
+  startDate: string;
+  endDate: string;
+  frequency: string;
+  recurringDay: string;
+  recurringTime: string;
+}
+
+interface InstantMeetingForm {
+  name: string;
 }
 
 const MEETING_TYPE_SUGGESTIONS = [
@@ -28,27 +36,69 @@ const MEETING_TYPE_SUGGESTIONS = [
   'Product Demo'
 ];
 
+const FREQUENCY_OPTIONS = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Every 2 weeks' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' }
+];
+
+const DAYS_OF_WEEK = [
+  'Monday',
+  'Tuesday', 
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday'
+];
+
+const TIME_SLOTS = [
+  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+  '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
+];
+
 export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'instant' | 'create'>('instant');
   const [isLoading, setIsLoading] = useState(false);
   
+  // Form state for instant meeting
+  const [instantForm, setInstantForm] = useState<InstantMeetingForm>({
+    name: ''
+  });
+  
   // Form state for creating meeting room
   const [form, setForm] = useState<MeetingRoomForm>({
     title: '',
     type: '',
-    description: '',
-    participants: ['']
+    participants: [''],
+    startDate: '',
+    endDate: '',
+    frequency: 'weekly',
+    recurringDay: '',
+    recurringTime: ''
   });
 
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
 
   if (!isOpen) return null;
 
+  // Get today's date in YYYY-MM-DD format
+  const today = new Date().toISOString().split('T')[0];
+
   const handleInstantMeeting = () => {
     setIsLoading(true);
     const roomId = generateRoomId();
-    router.push(`/rooms/${roomId}`);
+    const meetingName = instantForm.name.trim();
+    
+    // If a name is provided, we could pass it as a query parameter
+    if (meetingName) {
+      router.push(`/rooms/${roomId}?name=${encodeURIComponent(meetingName)}`);
+    } else {
+      router.push(`/rooms/${roomId}`);
+    }
   };
 
   const handleCreateRoom = async (e: React.FormEvent) => {
@@ -78,8 +128,12 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
           title: form.title.trim(),
           type: form.type.trim(),
           isRecurring: true, // Meeting rooms are persistent/recurring
-          description: form.description.trim() || undefined,
-          participants: validParticipants
+          participants: validParticipants,
+          startDate: form.startDate,
+          endDate: form.endDate,
+          frequency: form.frequency,
+          recurringDay: form.recurringDay,
+          recurringTime: form.recurringTime
         }),
       });
 
@@ -123,6 +177,12 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
   const selectMeetingType = (type: string) => {
     setForm(prev => ({ ...prev, type }));
     setShowTypeDropdown(false);
+  };
+
+  // Close dropdown when clicking outside
+  const handleTypeInputClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setShowTypeDropdown(true);
   };
 
   return (
@@ -174,6 +234,24 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
               <p className={styles.instantDescription}>
                 Create a quick video conference room that you can share with others
               </p>
+              
+              <div className={styles.instantForm}>
+                <div className={styles.formGroup}>
+                  <label htmlFor="meetingName" className={styles.label}>
+                    Meeting Name (Optional)
+                  </label>
+                  <input
+                    id="meetingName"
+                    type="text"
+                    value={instantForm.name}
+                    onChange={(e) => setInstantForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="e.g., Quick Team Sync"
+                    className={styles.input}
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+              
               <button 
                 onClick={handleInstantMeeting}
                 disabled={isLoading}
@@ -195,6 +273,7 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
                   onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))}
                   placeholder="e.g., Weekly Team Standup"
                   className={styles.input}
+                  autoComplete="off"
                   required
                 />
               </div>
@@ -211,7 +290,8 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
                     onChange={(e) => setForm(prev => ({ ...prev, type: e.target.value }))}
                     placeholder="Enter or select meeting type"
                     className={styles.input}
-                    onFocus={() => setShowTypeDropdown(true)}
+                    onClick={handleTypeInputClick}
+                    autoComplete="off"
                     required
                   />
                   <button
@@ -242,17 +322,93 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
               </div>
 
               <div className={styles.formGroup}>
-                <label htmlFor="description" className={styles.label}>
-                  Description (Optional)
+                <label className={styles.label}>
+                  Meeting Duration *
                 </label>
-                <textarea
-                  id="description"
-                  value={form.description}
-                  onChange={(e) => setForm(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Brief description of the meeting room purpose"
-                  className={styles.textarea}
-                  rows={3}
-                />
+                <div className={styles.scheduleContainer}>
+                  <div className={styles.scheduleRow}>
+                    <div className={styles.scheduleField}>
+                      <label htmlFor="startDate" className={styles.subLabel}>Start Date</label>
+                      <input
+                        id="startDate"
+                        type="date"
+                        value={form.startDate}
+                        onChange={(e) => setForm(prev => ({ ...prev, startDate: e.target.value }))}
+                        min={today}
+                        className={styles.input}
+                        required
+                      />
+                    </div>
+                    <div className={styles.scheduleField}>
+                      <label htmlFor="endDate" className={styles.subLabel}>End Date</label>
+                      <input
+                        id="endDate"
+                        type="date"
+                        value={form.endDate}
+                        onChange={(e) => setForm(prev => ({ ...prev, endDate: e.target.value }))}
+                        min={form.startDate || today}
+                        className={styles.input}
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.formGroup}>
+                <label className={styles.label}>
+                  Recurring Schedule *
+                </label>
+                <div className={styles.scheduleContainer}>
+                  <div className={styles.scheduleRow}>
+                    <div className={styles.scheduleField}>
+                      <label htmlFor="frequency" className={styles.subLabel}>Frequency</label>
+                      <select
+                        id="frequency"
+                        value={form.frequency}
+                        onChange={(e) => setForm(prev => ({ ...prev, frequency: e.target.value }))}
+                        className={styles.select}
+                        required
+                      >
+                        {FREQUENCY_OPTIONS.map((freq) => (
+                          <option key={freq.value} value={freq.value}>{freq.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className={styles.scheduleField}>
+                      <label htmlFor="day" className={styles.subLabel}>Day</label>
+                      <select
+                        id="day"
+                        value={form.recurringDay}
+                        onChange={(e) => setForm(prev => ({ ...prev, recurringDay: e.target.value }))}
+                        className={styles.select}
+                        required
+                      >
+                        <option value="">Select day</option>
+                        {DAYS_OF_WEEK.map((day) => (
+                          <option key={day} value={day}>{day}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className={styles.scheduleRow}>
+                    <div className={`${styles.scheduleField} ${styles.scheduleFieldFullWidth}`}>
+                      <label htmlFor="time" className={styles.subLabel}>Time</label>
+                      <select
+                        id="time"
+                        value={form.recurringTime}
+                        onChange={(e) => setForm(prev => ({ ...prev, recurringTime: e.target.value }))}
+                        className={styles.select}
+                        required
+                      >
+                        <option value="">Select time</option>
+                        {TIME_SLOTS.map((time) => (
+                          <option key={time} value={time}>{time}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className={styles.formGroup}>
@@ -268,6 +424,7 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
                         onChange={(e) => updateParticipant(index, e.target.value)}
                         placeholder="participant@example.com"
                         className={styles.input}
+                        autoComplete="off"
                       />
                       {form.participants.length > 1 && (
                         <button
@@ -307,7 +464,7 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
                 </button>
                 <button
                   type="submit"
-                  disabled={isLoading || !form.title.trim() || !form.type.trim()}
+                  disabled={isLoading || !form.title.trim() || !form.type.trim() || !form.startDate || !form.endDate || !form.recurringDay || !form.recurringTime}
                   className={styles.primaryButton}
                 >
                   {isLoading ? 'Creating...' : 'Create Meeting Room'}

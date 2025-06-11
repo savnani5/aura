@@ -62,9 +62,9 @@ export function AllMeetingRoomsView({
           <div className={styles.headerLeft}>
             <button onClick={onBack} className={styles.backButton}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="m12 19-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M19 12H5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-              Back
             </button>
             <div className={styles.title}>
               <h1>All Meeting Rooms</h1>
@@ -135,7 +135,7 @@ export function AllMeetingRoomsView({
             </div>
             <h3 className={styles.emptyStateTitle}>No rooms found</h3>
             <p className={styles.emptyStateDescription}>
-              No meeting rooms match your search for "{searchQuery}"
+              No meeting rooms match your search for &quot;{searchQuery}&quot;
             </p>
             <button 
               onClick={() => setSearchQuery('')}

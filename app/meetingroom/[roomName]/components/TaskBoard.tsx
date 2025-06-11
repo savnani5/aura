@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import styles from './TaskBoard.module.css';
+import styles from '@/styles/TaskBoard.module.css';
 
 interface Task {
   id: string;

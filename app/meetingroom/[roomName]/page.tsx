@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { MeetingRoomDashboard } from './MeetingRoomDashboard';
+import { MeetingRoomDashboard } from '@/app/meetingroom/[roomName]/MeetingRoomDashboard';
 
 export default async function RoomPage({
   params,

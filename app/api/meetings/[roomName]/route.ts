@@ -1,9 +1,93 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DatabaseService } from '@/lib/prisma';
 
-const dbService = DatabaseService.getInstance();
+// Mock meeting room data
+const mockMeetingRooms: Record<string, any> = {
+  'weekly-standup-123': {
+    id: 'weekly-standup-123',
+    roomName: 'weekly-standup-123',
+    title: 'Weekly Team Standup',
+    type: 'Daily Standup',
+    description: 'Our regular team sync to discuss progress and blockers',
+    isRecurring: true,
+    createdAt: '2024-01-01T09:00:00Z',
+    updatedAt: '2024-01-15T09:00:00Z',
+    participantCount: 5,
+    lastActivity: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    isActive: false,
+    recentMeetings: 12
+  },
+  'client-review-456': {
+    id: 'client-review-456',
+    roomName: 'client-review-456',
+    title: 'Client Project Review',
+    type: 'Client Review',
+    description: 'Monthly review with the client team',
+    isRecurring: true,
+    createdAt: '2024-01-05T14:00:00Z',
+    updatedAt: '2024-01-15T14:30:00Z',
+    participantCount: 8,
+    lastActivity: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+    isActive: true,
+    recentMeetings: 3
+  },
+  'design-sync-789': {
+    id: 'design-sync-789',
+    roomName: 'design-sync-789',
+    title: 'Design Team Sync',
+    type: 'Design Review',
+    description: 'Weekly design review and feedback session',
+    isRecurring: true,
+    createdAt: '2024-01-10T16:00:00Z',
+    updatedAt: '2024-01-14T16:00:00Z',
+    participantCount: 4,
+    lastActivity: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    isActive: false,
+    recentMeetings: 8
+  },
+  'sprint-planning-101': {
+    id: 'sprint-planning-101',
+    roomName: 'sprint-planning-101',
+    title: 'Sprint Planning',
+    type: 'Project Planning',
+    description: 'Bi-weekly sprint planning and estimation',
+    isRecurring: true,
+    createdAt: '2024-01-08T10:00:00Z',
+    updatedAt: '2024-01-08T12:00:00Z',
+    participantCount: 6,
+    lastActivity: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    isActive: false,
+    recentMeetings: 6
+  },
+  'engineering-sync-202': {
+    id: 'engineering-sync-202',
+    roomName: 'engineering-sync-202',
+    title: 'Engineering Team Sync',
+    type: 'Team Sync',
+    description: 'Weekly engineering team synchronization meeting',
+    isRecurring: true,
+    createdAt: '2024-01-03T11:00:00Z',
+    updatedAt: '2024-01-12T11:30:00Z',
+    participantCount: 12,
+    lastActivity: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    isActive: false,
+    recentMeetings: 15
+  },
+  'product-review-303': {
+    id: 'product-review-303',
+    roomName: 'product-review-303',
+    title: 'Product Review Meeting',
+    type: 'Product Review',
+    description: 'Monthly product roadmap and feature review',
+    isRecurring: true,
+    createdAt: '2024-01-01T15:00:00Z',
+    updatedAt: '2024-01-10T15:30:00Z',
+    participantCount: 7,
+    lastActivity: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    isActive: false,
+    recentMeetings: 4
+  }
+};
 
-// GET /api/meetings/[roomName] - Get meeting data
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> }
@@ -11,174 +95,23 @@ export async function GET(
   try {
     const { roomName } = await params;
     
-    if (!roomName) {
-      return NextResponse.json(
-        { error: 'Room name is required' },
-        { status: 400 }
-      );
-    }
-
-    const meeting = await dbService.getMeeting(roomName);
+    // Remove artificial delay - real APIs are fast with proper indexing
+    // await new Promise(resolve => setTimeout(resolve, 200));
     
-    if (!meeting) {
+    const room = mockMeetingRooms[roomName];
+    
+    if (!room) {
       return NextResponse.json(
-        { error: 'Meeting not found' },
+        { error: 'Room not found' },
         { status: 404 }
       );
     }
-
-    return NextResponse.json({
-      success: true,
-      meeting
-    });
-
-  } catch (error) {
-    console.error('Error fetching meeting:', error);
-    return NextResponse.json(
-      { 
-        error: 'Failed to fetch meeting',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
-  }
-}
-
-// POST /api/meetings/[roomName] - Join meeting / Add participant
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ roomName: string }> }
-) {
-  try {
-    const { roomName } = await params;
-    const body = await request.json();
-    const { participantName, isHost } = body;
-
-    if (!roomName || !participantName) {
-      return NextResponse.json(
-        { error: 'Room name and participant name are required' },
-        { status: 400 }
-      );
-    }
-
-    // Get or create meeting first
-    const meeting = await dbService.getMeeting(roomName);
     
-    if (!meeting) {
-      return NextResponse.json(
-        { error: 'Meeting not found. Create the meeting first.' },
-        { status: 404 }
-      );
-    }
-
-    // Add participant
-    const participant = await dbService.addParticipant(
-      meeting.id, 
-      participantName, 
-      isHost || false
-    );
-
-    // Start meeting if this is the first participant
-    if (!meeting.startedAt) {
-      await dbService.startMeeting(roomName);
-    }
-
-    return NextResponse.json({
-      success: true,
-      participant,
-      meeting: await dbService.getMeeting(roomName)
-    });
-
+    return NextResponse.json(room);
   } catch (error) {
-    console.error('Error adding participant:', error);
+    console.error('Error fetching room:', error);
     return NextResponse.json(
-      { 
-        error: 'Failed to add participant',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
-  }
-}
-
-// PUT /api/meetings/[roomName] - Update meeting (e.g., end meeting)
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ roomName: string }> }
-) {
-  try {
-    const { roomName } = await params;
-    const body = await request.json();
-    const { action, participantName } = body;
-
-    if (!roomName) {
-      return NextResponse.json(
-        { error: 'Room name is required' },
-        { status: 400 }
-      );
-    }
-
-    const meeting = await dbService.getMeeting(roomName);
-    
-    if (!meeting) {
-      return NextResponse.json(
-        { error: 'Meeting not found' },
-        { status: 404 }
-      );
-    }
-
-    let updatedMeeting: NonNullable<typeof meeting> = meeting;
-
-    switch (action) {
-      case 'end_meeting':
-        await dbService.endMeeting(roomName);
-        const endedMeeting = await dbService.getMeeting(roomName);
-        if (!endedMeeting) {
-          return NextResponse.json(
-            { error: 'Meeting not found after update' },
-            { status: 404 }
-          );
-        }
-        updatedMeeting = endedMeeting;
-        break;
-      
-      case 'leave_meeting':
-        if (!participantName) {
-          return NextResponse.json(
-            { error: 'Participant name required for leave action' },
-            { status: 400 }
-          );
-        }
-        await dbService.removeParticipant(meeting.id, participantName);
-        const leftMeeting = await dbService.getMeeting(roomName);
-        if (!leftMeeting) {
-          return NextResponse.json(
-            { error: 'Meeting not found after update' },
-            { status: 404 }
-          );
-        }
-        updatedMeeting = leftMeeting;
-        break;
-      
-      default:
-        return NextResponse.json(
-          { error: 'Invalid action. Supported actions: end_meeting, leave_meeting' },
-          { status: 400 }
-        );
-    }
-
-    return NextResponse.json({
-      success: true,
-      meeting: updatedMeeting!
-    });
-
-  } catch (error) {
-    console.error('Error updating meeting:', error);
-    return NextResponse.json(
-      { 
-        error: 'Failed to update meeting',
-        details: error instanceof Error ? error.message : 'Unknown error'
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

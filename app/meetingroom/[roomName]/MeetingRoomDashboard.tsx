@@ -4,9 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { MeetingHistoryPanel } from './components/MeetingHistoryPanel';
 import { TaskBoard } from './components/TaskBoard';
-import { ParticipantsPanel } from './components/ParticipantsPanel';
-import RoomChat from '../../components/RoomChat';
-import styles from './MeetingRoomDashboard.module.css';
+import RoomChat from './components/RoomChat';
+import { MeetingPrep } from './components/MeetingPrep';
+import styles from '@/styles/MeetingRoomDashboard.module.css';
 
 interface MeetingRoom {
   id: string;
@@ -19,6 +19,15 @@ interface MeetingRoom {
   updatedAt: string;
 }
 
+interface Participant {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  isOnline: boolean;
+  isHost?: boolean;
+}
+
 interface MeetingRoomDashboardProps {
   roomName: string;
 }
@@ -28,10 +37,27 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
   const [room, setRoom] = useState<MeetingRoom | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activePanel, setActivePanel] = useState<'history' | 'tasks' | 'participants' | 'chat'>('tasks');
+  const [activePanel, setActivePanel] = useState<'prep' | 'history' | 'tasks'>('prep');
 
   // Mock current user for demo purposes
   const currentUser = 'Demo User';
+
+  // Mock participants data
+  const participants: Participant[] = [
+    { id: '1', name: 'Alex Chen', email: 'alex@company.com', isOnline: true, isHost: true },
+    { id: '2', name: 'Sarah Johnson', email: 'sarah@company.com', isOnline: true },
+    { id: '3', name: 'Mike Rodriguez', email: 'mike@company.com', isOnline: false },
+    { id: '4', name: 'Emily Watson', email: 'emily@company.com', isOnline: true },
+    { id: '5', name: 'David Kim', email: 'david@company.com', isOnline: true },
+  ];
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
+  const onlineParticipants = participants.filter(p => p.isOnline);
+  const displayParticipants = onlineParticipants.slice(0, 4);
+  const remainingCount = onlineParticipants.length - displayParticipants.length;
 
   // Fetch room data
   useEffect(() => {
@@ -52,11 +78,6 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
 
     fetchRoom();
   }, [roomName]);
-
-  const handleJoinMeeting = () => {
-    // Navigate to the live video meeting
-    router.push(`/rooms/${roomName}`);
-  };
 
   const handleBackToHome = () => {
     router.push('/');
@@ -87,7 +108,10 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
           <h2>Room Not Found</h2>
           <p>{error || 'The meeting room you\'re looking for doesn\'t exist.'}</p>
           <button onClick={handleBackToHome} className={styles.backButton}>
-            Back to Home
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="m12 19-7-7 7-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M19 12H5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
           </button>
         </div>
       </div>
@@ -115,13 +139,22 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
             </div>
           </div>
           
-          <div className={styles.headerActions}>
-            <button onClick={handleJoinMeeting} className={styles.joinButton}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M15 10l4.553-2.276A1 1 0 0 1 21 8.618v6.764a1 1 0 0 1-1.447.894L15 14M5 18h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Join Meeting
-            </button>
+          {/* Participant Blobs */}
+          <div className={styles.participantBlobs}>
+            {displayParticipants.map((participant) => (
+              <div
+                key={participant.id}
+                className={`${styles.participantBlob} ${participant.isHost ? styles.hostBlob : ''}`}
+                title={`${participant.name}${participant.isHost ? ' (Host)' : ''}`}
+              >
+                {getInitials(participant.name)}
+              </div>
+            ))}
+            {remainingCount > 0 && (
+              <div className={styles.participantCount} title={`+${remainingCount} more participants`}>
+                +{remainingCount}
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -132,6 +165,16 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
           {/* Left Panel - Navigation */}
           <aside className={styles.sidebar}>
             <nav className={styles.navigation}>
+              <button
+                onClick={() => setActivePanel('prep')}
+                className={`${styles.navButton} ${activePanel === 'prep' ? styles.navButtonActive : ''}`}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2"/>
+                </svg>
+                Meeting Prep
+              </button>
+              
               <button
                 onClick={() => setActivePanel('tasks')}
                 className={`${styles.navButton} ${activePanel === 'tasks' ? styles.navButtonActive : ''}`}
@@ -156,38 +199,25 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
                 </svg>
                 History
               </button>
-              
-              <button
-                onClick={() => setActivePanel('participants')}
-                className={`${styles.navButton} ${activePanel === 'participants' ? styles.navButtonActive : ''}`}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" strokeWidth="2"/>
-                  <circle cx="9" cy="7" r="4" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" strokeWidth="2"/>
-                </svg>
-                Participants
-              </button>
-              
-              <button
-                onClick={() => setActivePanel('chat')}
-                className={`${styles.navButton} ${activePanel === 'chat' ? styles.navButtonActive : ''}`}
-              >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2"/>
-                </svg>
-                Ask Ohm
-              </button>
             </nav>
+            
+            {/* Compact Participants below navigation */}
           </aside>
 
           {/* Right Panel - Content */}
           <div className={styles.content}>
+            {activePanel === 'prep' && (
+              <div className={styles.meetingPrepLayout}>
+                <div className={styles.chatSection}>
+                  <RoomChat roomName={roomName} currentUser={currentUser} />
+                </div>
+                <div className={styles.prepSection}>
+                  <MeetingPrep roomName={roomName} />
+                </div>
+              </div>
+            )}
             {activePanel === 'tasks' && <TaskBoard roomName={roomName} />}
             {activePanel === 'history' && <MeetingHistoryPanel roomName={roomName} />}
-            {activePanel === 'participants' && <ParticipantsPanel roomName={roomName} />}
-            {activePanel === 'chat' && <RoomChat roomName={roomName} currentUser={currentUser} />}
           </div>
         </div>
       </main>

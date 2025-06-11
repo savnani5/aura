@@ -1,10 +1,28 @@
 /* Container */
 .container {
+  background: rgba(15, 15, 15, 0.6);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1rem;
+  padding: 2rem;
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 1.5rem;
+  position: relative;
   overflow: hidden;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+}
+
+.container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 30% 20%, rgba(34, 197, 94, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* Header */
@@ -16,6 +34,8 @@
   padding-bottom: 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
+  z-index: 1;
+  position: relative;
 }
 
 .headerLeft {
@@ -26,10 +46,13 @@
 
 .title {
   font-size: 1.5rem;
-  font-weight: 600;
-  color: #ffffff;
+  font-weight: 700;
   margin: 0;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #ffffff 0%, #a1a1aa 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .subtitle {
@@ -47,6 +70,8 @@
   justify-content: center;
   height: 100%;
   color: rgba(255, 255, 255, 0.6);
+  z-index: 1;
+  position: relative;
 }
 
 .loadingSpinner {
@@ -70,6 +95,8 @@
   gap: 1rem;
   margin-bottom: 1.5rem;
   flex-shrink: 0;
+  z-index: 1;
+  position: relative;
 }
 
 .searchBox {
@@ -90,18 +117,20 @@
 .searchInput {
   width: 100%;
   padding: 0.75rem 0.75rem 0.75rem 2.5rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(15, 15, 15, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.5rem;
+  border-radius: 0.75rem;
   color: #ffffff;
   font-size: 0.875rem;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
 }
 
 .searchInput:focus {
   outline: none;
-  border-color: #3b82f6;
-  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(15, 15, 15, 0.8);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 .searchInput::placeholder {
@@ -110,20 +139,22 @@
 
 .dateFilter {
   padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(15, 15, 15, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0.5rem;
+  border-radius: 0.75rem;
   color: #ffffff;
   font-size: 0.875rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 120px;
+  backdrop-filter: blur(10px);
 }
 
 .dateFilter:focus {
   outline: none;
-  border-color: #3b82f6;
-  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(15, 15, 15, 0.8);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
 /* Meetings List - Make it scrollable */
@@ -135,6 +166,8 @@
   gap: 1rem;
   padding-right: 0.5rem;
   margin-right: -0.5rem;
+  z-index: 1;
+  position: relative;
 }
 
 /* Custom scrollbar for webkit browsers */
@@ -158,19 +191,39 @@
 
 /* Meeting Card */
 .meetingCard {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(15, 15, 15, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   padding: 1.5rem;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+}
+
+.meetingCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.02);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  border-radius: 1rem;
+}
+
+.meetingCard:hover::before {
+  opacity: 1;
 }
 
 .meetingCard:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateY(-3px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
 }
 
 /* Meeting Header */
@@ -179,6 +232,8 @@
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 1rem;
+  position: relative;
+  z-index: 1;
 }
 
 .meetingInfo {
@@ -191,6 +246,8 @@
   color: #ffffff;
   margin: 0 0 0.5rem 0;
   line-height: 1.4;
+  position: relative;
+  z-index: 1;
 }
 
 .meetingMeta {
@@ -198,6 +255,8 @@
   gap: 0.75rem;
   align-items: center;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 1;
 }
 
 .meetingType {
@@ -405,4 +464,31 @@
   .emptyState {
     padding: 2rem 1rem;
   }
+}
+
+/* Content wrapper for proper scrolling */
+.contentWrapper {
+  flex: 1;
+  overflow-y: auto;
+  z-index: 1;
+  position: relative;
+  min-height: 0;
+}
+
+.contentWrapper::-webkit-scrollbar {
+  width: 6px;
+}
+
+.contentWrapper::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.contentWrapper::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.contentWrapper::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 } 

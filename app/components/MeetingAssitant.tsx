@@ -611,7 +611,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
               }
             }}
           >
-            Chat
+            Ohm
             {chatMessages.length > 0 && (
               <span className="chat-badge">{chatMessages.length}</span>
             )}
