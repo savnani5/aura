@@ -292,7 +292,7 @@ export default function HomePage() {
                 <div className={styles.mockTranscript}>
                   <div className={styles.transcriptLine}>
                     <span className={styles.speaker}>Alex:</span>
-                    <span>Let's discuss the Q4 roadmap...</span>
+                    <span>Let&apos;s discuss the Q4 roadmap...</span>
                   </div>
                   <div className={styles.transcriptLine}>
                     <span className={styles.speaker}>Sarah:</span>
