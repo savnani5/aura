@@ -26,45 +26,6 @@
   border-color: rgba(34, 197, 94, 0.4);
 }
 
-/* Active Indicator */
-.activeIndicator {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.75rem;
-  background: #22c55e;
-  color: white;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  z-index: 10;
-}
-
-.activePulse {
-  width: 0.5rem;
-  height: 0.5rem;
-  background: white;
-  border-radius: 50%;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
-}
-
-.activeText {
-  font-size: 0.75rem;
-  font-weight: 500;
-}
-
 /* Card Header */
 .cardHeader {
   margin-bottom: 1rem;
@@ -82,7 +43,6 @@
   color: #ffffff;
   margin: 0;
   line-height: 1.4;
-  padding-right: 4rem; /* Space for active indicator */
   letter-spacing: -0.025em;
 }
 
@@ -198,7 +158,6 @@
   
   .title {
     font-size: 1rem;
-    padding-right: 3rem;
   }
   
   .typeTag {
@@ -234,19 +193,8 @@
     padding: 1rem;
   }
   
-  .activeIndicator {
-    top: 0.75rem;
-    right: 0.75rem;
-    padding: 0.125rem 0.5rem;
-  }
-  
-  .activeText {
-    font-size: 0.6875rem;
-  }
-  
   .title {
     font-size: 0.9375rem;
-    padding-right: 2.5rem;
   }
   
   .stats {

@@ -37,6 +37,7 @@ const MEETING_TYPE_SUGGESTIONS = [
 ];
 
 const FREQUENCY_OPTIONS = [
+  { value: 'daily', label: 'Daily' },
   { value: 'weekly', label: 'Weekly' },
   { value: 'biweekly', label: 'Every 2 weeks' },
   { value: 'monthly', label: 'Monthly' },
@@ -76,7 +77,7 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
     participants: [''],
     startDate: '',
     endDate: '',
-    frequency: 'weekly',
+    frequency: 'daily',
     recurringDay: '',
     recurringTime: ''
   });
@@ -88,16 +89,51 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
 
-  const handleInstantMeeting = () => {
+  const handleInstantMeeting = async () => {
     setIsLoading(true);
-    const roomId = generateRoomId();
-    const meetingName = instantForm.name.trim();
     
-    // If a name is provided, we could pass it as a query parameter
-    if (meetingName) {
+    try {
+      const roomId = generateRoomId();
+      const meetingName = instantForm.name.trim() || 'Instant Meeting';
+      
+      // Create one-off meeting record in database
+      const response = await fetch('/api/meetings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomName: roomId,
+          title: meetingName,
+          type: 'Instant Meeting',
+          isRecurring: false, // This creates a one-off meeting
+          participantName: 'Host' // Default participant name
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('One-off meeting created:', data);
+      } else {
+        console.warn('Failed to create meeting record, proceeding anyway');
+      }
+
+      // Navigate to LiveKit room
       router.push(`/rooms/${roomId}?name=${encodeURIComponent(meetingName)}`);
-    } else {
-      router.push(`/rooms/${roomId}`);
+      
+    } catch (error) {
+      console.error('Error creating instant meeting:', error);
+      // Fallback: navigate without database record
+      const roomId = generateRoomId();
+      const meetingName = instantForm.name.trim();
+      
+      if (meetingName) {
+        router.push(`/rooms/${roomId}?name=${encodeURIComponent(meetingName)}`);
+      } else {
+        router.push(`/rooms/${roomId}`);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -183,6 +219,16 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
   const handleTypeInputClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     setShowTypeDropdown(true);
+  };
+
+  const handleFrequencyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newFrequency = e.target.value;
+    setForm(prev => ({
+      ...prev,
+      frequency: newFrequency,
+      // Clear recurringDay when switching to daily
+      recurringDay: newFrequency === 'daily' ? '' : prev.recurringDay
+    }));
   };
 
   return (
@@ -366,7 +412,7 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
                       <select
                         id="frequency"
                         value={form.frequency}
-                        onChange={(e) => setForm(prev => ({ ...prev, frequency: e.target.value }))}
+                        onChange={handleFrequencyChange}
                         className={styles.select}
                         required
                       >
@@ -375,21 +421,23 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
                         ))}
                       </select>
                     </div>
-                    <div className={styles.scheduleField}>
-                      <label htmlFor="day" className={styles.subLabel}>Day</label>
-                      <select
-                        id="day"
-                        value={form.recurringDay}
-                        onChange={(e) => setForm(prev => ({ ...prev, recurringDay: e.target.value }))}
-                        className={styles.select}
-                        required
-                      >
-                        <option value="">Select day</option>
-                        {DAYS_OF_WEEK.map((day) => (
-                          <option key={day} value={day}>{day}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {form.frequency !== 'daily' && (
+                      <div className={styles.scheduleField}>
+                        <label htmlFor="day" className={styles.subLabel}>Day</label>
+                        <select
+                          id="day"
+                          value={form.recurringDay}
+                          onChange={(e) => setForm(prev => ({ ...prev, recurringDay: e.target.value }))}
+                          className={styles.select}
+                          required
+                        >
+                          <option value="">Select day</option>
+                          {DAYS_OF_WEEK.map((day) => (
+                            <option key={day} value={day}>{day}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                   </div>
                   <div className={styles.scheduleRow}>
                     <div className={`${styles.scheduleField} ${styles.scheduleFieldFullWidth}`}>
@@ -464,7 +512,7 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
                 </button>
                 <button
                   type="submit"
-                  disabled={isLoading || !form.title.trim() || !form.type.trim() || !form.startDate || !form.endDate || !form.recurringDay || !form.recurringTime}
+                  disabled={isLoading || !form.title.trim() || !form.type.trim() || !form.startDate || !form.endDate || (form.frequency !== 'daily' && !form.recurringDay) || !form.recurringTime}
                   className={styles.primaryButton}
                 >
                   {isLoading ? 'Creating...' : 'Create Meeting Room'}

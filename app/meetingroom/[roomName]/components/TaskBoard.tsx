@@ -15,7 +15,12 @@ interface Task {
   createdAt: string;
   updatedAt: string;
   isAiGenerated: boolean;
-  comments?: string[];
+  comments?: Array<{
+    userId?: string;
+    userName: string;
+    text: string;
+    createdAt: string;
+  }>;
 }
 
 interface TaskBoardProps {
@@ -29,6 +34,7 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [participants, setParticipants] = useState<Array<{ id: string; name: string }>>([]);
+  const [roomId, setRoomId] = useState<string | null>(null);
   
   // New task form state
   const [newTask, setNewTask] = useState({
@@ -44,63 +50,55 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Mock data for now - replace with actual API calls
-        const mockTasks: Task[] = [
-          {
-            id: '1',
-            title: 'Review quarterly reports',
-            description: 'Go through the Q3 financial reports and prepare feedback',
-            status: 'PENDING',
-            priority: 'HIGH',
-            assigneeId: '1',
-            assigneeName: 'Alice Johnson',
-            dueDate: '2024-02-15',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            isAiGenerated: false,
-            comments: ['Initial task created', 'Need to focus on revenue analysis']
-          },
-          {
-            id: '2',
-            title: 'Update API documentation',
-            description: 'Add new endpoint documentation for v2 API',
-            status: 'PENDING',
-            priority: 'MEDIUM',
-            assigneeId: '2',
-            assigneeName: 'Bob Smith',
-            dueDate: '2024-02-20',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            isAiGenerated: true,
-            comments: []
-          },
-          {
-            id: '3',
-            title: 'Design review for new features',
-            description: 'Review UI/UX designs for the upcoming features',
-            status: 'COMPLETED',
-            priority: 'LOW',
-            assigneeId: '3',
-            assigneeName: 'Carol Davis',
-            dueDate: '2024-02-10',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            isAiGenerated: false,
-            comments: ['Design looks good', 'Approved for development']
-          }
-        ];
+        // Fetch room data first to get room ID
+        const roomResponse = await fetch(`/api/meetings/${roomName}`);
+        if (!roomResponse.ok) {
+          throw new Error('Failed to fetch room data');
+        }
+        const roomData = await roomResponse.json();
+        
+        if (!roomData.success) {
+          throw new Error(roomData.error);
+        }
+        
+        const room = roomData.data;
+        setRoomId(room._id);
+        
+        // Fetch tasks for this room
+        const tasksResponse = await fetch(`/api/tasks?roomId=${room._id}`);
+        if (!tasksResponse.ok) {
+          throw new Error('Failed to fetch tasks');
+        }
+        const tasksData = await tasksResponse.json();
+        
+        // Transform tasks to match our interface
+        const transformedTasks: Task[] = tasksData.success ? tasksData.data.map((task: any) => ({
+          id: task._id,
+          title: task.title,
+          description: task.description,
+          status: task.status === 'TODO' ? 'PENDING' : task.status === 'DONE' ? 'COMPLETED' : 'PENDING',
+          priority: task.priority,
+          assigneeId: task.assignedTo || task.assignedToName?.toLowerCase().replace(/\s+/g, '-'),
+          assigneeName: task.assignedToName,
+          dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+          createdAt: task.createdAt,
+          updatedAt: task.updatedAt,
+          isAiGenerated: task.isAiGenerated,
+          comments: task.comments || []
+        })) : [];
+        
+        // Get participants from room data
+        const transformedParticipants = room.participants.map((participant: any) => ({
+          id: participant.userId || participant.name.toLowerCase().replace(/\s+/g, '-'),
+          name: participant.name
+        }));
 
-        const mockParticipants = [
-          { id: '1', name: 'Alice Johnson' },
-          { id: '2', name: 'Bob Smith' },
-          { id: '3', name: 'Carol Davis' },
-          { id: '4', name: 'David Wilson' }
-        ];
-
-        setTasks(mockTasks);
-        setParticipants(mockParticipants);
+        setTasks(transformedTasks);
+        setParticipants(transformedParticipants);
       } catch (error) {
         console.error('Error fetching data:', error);
+        setTasks([]);
+        setParticipants([]);
       } finally {
         setLoading(false);
       }
@@ -127,28 +125,69 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
   };
 
   const handleSaveNewTask = async () => {
-    if (!newTask.title.trim()) return;
-
-    const task: Task = {
-      id: Date.now().toString(),
-      title: newTask.title.trim(),
-      status: 'PENDING',
-      priority: newTask.priority,
-      assigneeName: newTask.assigneeName.trim() || undefined,
-      dueDate: newTask.dueDate || undefined,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      isAiGenerated: false,
-      comments: []
-    };
+    if (!newTask.title.trim() || !roomId) return;
 
     try {
-      // TODO: Replace with actual API call
-      console.log('Creating task:', task);
-      setTasks(prev => [task, ...prev]);
-      setIsAddingTask(false);
+      // Create task in database
+      const taskData = {
+        title: newTask.title.trim(),
+        description: '',
+        status: 'TODO', // Use database format
+        priority: newTask.priority,
+        assignedToName: newTask.assigneeName.trim() || undefined,
+        dueDate: newTask.dueDate || undefined,
+        roomId: roomId,
+        isAiGenerated: false
+      };
+
+      const response = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(taskData),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create task');
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // Transform the created task to match our interface
+        const createdTask: Task = {
+          id: result.data._id,
+          title: result.data.title,
+          description: result.data.description,
+          status: result.data.status === 'TODO' ? 'PENDING' : result.data.status === 'DONE' ? 'COMPLETED' : 'PENDING',
+          priority: result.data.priority,
+          assigneeId: result.data.assignedTo || result.data.assignedToName?.toLowerCase().replace(/\s+/g, '-'),
+          assigneeName: result.data.assignedToName,
+          dueDate: result.data.dueDate ? new Date(result.data.dueDate).toISOString().split('T')[0] : '',
+          createdAt: result.data.createdAt,
+          updatedAt: result.data.updatedAt,
+          isAiGenerated: result.data.isAiGenerated,
+          comments: result.data.comments || []
+        };
+
+        // Add to local state
+        setTasks(prev => [createdTask, ...prev]);
+        setIsAddingTask(false);
+        
+        // Reset form
+        setNewTask({
+          title: '',
+          assigneeName: '',
+          priority: 'MEDIUM',
+          dueDate: ''
+        });
+      } else {
+        throw new Error(result.error || 'Failed to create task');
+      }
     } catch (error) {
       console.error('Error creating task:', error);
+      alert('Failed to create task. Please try again.');
     }
   };
 
@@ -163,31 +202,134 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
   };
 
   const handleToggleTaskStatus = async (taskId: string) => {
-    setTasks(prev => prev.map(task => 
-      task.id === taskId 
-        ? { ...task, status: task.status === 'PENDING' ? 'COMPLETED' : 'PENDING' }
-        : task
-    ));
+    const taskToUpdate = tasks.find(task => task.id === taskId);
+    if (!taskToUpdate) return;
+
+    const newStatus = taskToUpdate.status === 'PENDING' ? 'COMPLETED' : 'PENDING';
+    const dbStatus = newStatus === 'PENDING' ? 'TODO' : 'DONE';
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: dbStatus }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update task status');
+      }
+
+      // Update local state
+      setTasks(prev => prev.map(task => 
+        task.id === taskId 
+          ? { ...task, status: newStatus, updatedAt: new Date().toISOString() }
+          : task
+      ));
+    } catch (error) {
+      console.error('Error updating task status:', error);
+      alert('Failed to update task status. Please try again.');
+    }
   };
 
-  const handleTaskClick = (task: Task) => {
-    setSelectedTask(task);
+  const handleTaskClick = async (task: Task) => {
+    try {
+      // Fetch fresh task data to ensure we have the latest comments
+      const response = await fetch(`/api/tasks/${task.id}`);
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Transform the fresh task data to match our interface
+          const freshTask: Task = {
+            id: result.data._id,
+            title: result.data.title,
+            description: result.data.description,
+            status: result.data.status === 'TODO' ? 'PENDING' : result.data.status === 'DONE' ? 'COMPLETED' : 'PENDING',
+            priority: result.data.priority,
+            assigneeId: result.data.assignedTo || result.data.assignedToName?.toLowerCase().replace(/\s+/g, '-'),
+            assigneeName: result.data.assignedToName,
+            dueDate: result.data.dueDate ? new Date(result.data.dueDate).toISOString().split('T')[0] : '',
+            createdAt: result.data.createdAt,
+            updatedAt: result.data.updatedAt,
+            isAiGenerated: result.data.isAiGenerated,
+            comments: result.data.comments || []
+          };
+          setSelectedTask(freshTask);
+        } else {
+          // Fallback to existing task data if fetch fails
+          setSelectedTask(task);
+        }
+      } else {
+        // Fallback to existing task data if fetch fails
+        setSelectedTask(task);
+      }
+    } catch (error) {
+      console.error('Error fetching fresh task data:', error);
+      // Fallback to existing task data if fetch fails
+      setSelectedTask(task);
+    }
     setShowTaskModal(true);
   };
 
   const handleUpdateTask = async (taskId: string, updates: Partial<Task>) => {
-    setTasks(prev => prev.map(task => 
-      task.id === taskId ? { ...task, ...updates, updatedAt: new Date().toISOString() } : task
-    ));
-    setShowTaskModal(false);
-    setSelectedTask(null);
+    try {
+      // Transform updates to database format
+      const dbUpdates: any = { ...updates };
+      if (updates.status) {
+        dbUpdates.status = updates.status === 'PENDING' ? 'TODO' : 'DONE';
+      }
+      if (updates.dueDate === '') {
+        dbUpdates.dueDate = null;
+      }
+      
+      // Remove comments from the main update - we'll handle them separately
+      delete dbUpdates.comments;
+
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dbUpdates),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update task');
+      }
+
+      // Update local state
+      setTasks(prev => prev.map(task => 
+        task.id === taskId ? { ...task, ...updates, updatedAt: new Date().toISOString() } : task
+      ));
+      setShowTaskModal(false);
+      setSelectedTask(null);
+    } catch (error) {
+      console.error('Error updating task:', error);
+      alert('Failed to update task. Please try again.');
+    }
   };
 
   const handleDeleteTask = async (taskId: string) => {
     if (!confirm('Are you sure you want to delete this task?')) return;
-    setTasks(prev => prev.filter(task => task.id !== taskId));
-    setShowTaskModal(false);
-    setSelectedTask(null);
+    
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete task');
+      }
+
+      // Remove from local state
+      setTasks(prev => prev.filter(task => task.id !== taskId));
+      setShowTaskModal(false);
+      setSelectedTask(null);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      alert('Failed to delete task. Please try again.');
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -441,15 +583,53 @@ function TaskDetailModal({ task, participants, onUpdate, onDelete, onClose }: Ta
   const [newComment, setNewComment] = useState('');
 
   const handleSave = () => {
-    onUpdate(task.id, editedTask);
+    // Create a copy without comments for the main update
+    const { comments, ...taskUpdates } = editedTask;
+    onUpdate(task.id, taskUpdates);
   };
 
-  const handleAddComment = () => {
+  const handleAddComment = async () => {
     if (!newComment.trim()) return;
     
-    const updatedComments = [...(editedTask.comments || []), newComment.trim()];
-    setEditedTask(prev => ({ ...prev, comments: updatedComments }));
-    setNewComment('');
+    try {
+      // Add comment via separate API call
+      const response = await fetch(`/api/tasks/${task.id}/comments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: newComment.trim(),
+          userName: 'Current User' // TODO: Get from auth context
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          // Update the edited task with the new comment
+          setEditedTask(prev => ({
+            ...prev,
+            comments: [...(prev.comments || []), result.data]
+          }));
+          setNewComment('');
+        }
+      }
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      // Fallback to local state update for now
+      const newCommentObj = {
+        userId: undefined,
+        userName: 'Current User',
+        text: newComment.trim(),
+        createdAt: new Date().toISOString()
+      };
+      setEditedTask(prev => ({
+        ...prev,
+        comments: [...(prev.comments || []), newCommentObj]
+      }));
+      setNewComment('');
+    }
   };
 
   return (
@@ -536,7 +716,13 @@ function TaskDetailModal({ task, participants, onUpdate, onDelete, onClose }: Ta
             <div className={styles.commentsList}>
               {editedTask.comments?.map((comment, index) => (
                 <div key={index} className={styles.comment}>
-                  <div className={styles.commentText}>{comment}</div>
+                  <div className={styles.commentHeader}>
+                    <span className={styles.commentAuthor}>{comment.userName}</span>
+                    <span className={styles.commentDate}>
+                      {new Date(comment.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className={styles.commentText}>{comment.text}</div>
                 </div>
               ))}
             </div>

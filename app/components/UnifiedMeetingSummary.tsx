@@ -78,99 +78,57 @@ export function UnifiedMeetingSummary({
       setLoading(true);
       setError(null);
       
-      // For now, using mock data - replace with actual API call later
-      const mockMeeting: Meeting = {
-        id: meetingId,
-        roomName: 'daily-standup-2024-01-15',
-        title: 'Morning Standup',
-        type: 'STANDUP',
-        startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-        endedAt: new Date(Date.now() - 90 * 60 * 1000),
-        duration: 30,
-        hasTranscripts: true,
-        hasSummary: true,
-        participants: [
-          {
+      // Fetch real meeting details from API - updated endpoint path
+      const response = await fetch(`/api/meeting-details/${meetingId}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch meeting details');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        const meetingData = data.data;
+        
+        // Transform the data to match our interface
+        const transformedMeeting: Meeting = {
+          id: meetingData._id,
+          roomName: meetingData.roomName,
+          title: meetingData.title || meetingData.type,
+          type: meetingData.type,
+          startedAt: new Date(meetingData.startedAt),
+          endedAt: meetingData.endedAt ? new Date(meetingData.endedAt) : undefined,
+          duration: meetingData.duration,
+          hasTranscripts: meetingData.transcripts && meetingData.transcripts.length > 0,
+          hasSummary: !!meetingData.summary,
+          participants: meetingData.participants.map((p: any) => ({
+            id: p.userId || p.name.toLowerCase().replace(/\s+/g, '-'),
+            participantName: p.name,
+            joinedAt: new Date(p.joinedAt),
+            leftAt: p.leftAt ? new Date(p.leftAt) : undefined,
+            isHost: p.isHost
+          })),
+          transcripts: meetingData.transcripts ? meetingData.transcripts.map((t: any) => ({
+            id: `${t.speaker}-${t.timestamp}`,
+            speaker: t.speaker,
+            text: t.text,
+            timestamp: new Date(t.timestamp)
+          })) : [],
+          summaries: meetingData.summary ? [{
             id: '1',
-            participantName: 'Alice Johnson',
-            joinedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-            leftAt: new Date(Date.now() - 90 * 60 * 1000),
-            isHost: true
-          },
-          {
-            id: '2',
-            participantName: 'Bob Smith',
-            joinedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-            leftAt: new Date(Date.now() - 90 * 60 * 1000),
-            isHost: false
-          },
-          {
-            id: '3',
-            participantName: 'Carol Davis',
-            joinedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-            leftAt: new Date(Date.now() - 90 * 60 * 1000),
-            isHost: false
-          }
-        ],
-        transcripts: [
-          {
-            id: '1',
-            speaker: 'Alice Johnson',
-            text: 'Good morning everyone! Let\'s start our weekly standup. Bob, would you like to go first?',
-            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000 + 60000)
-          },
-          {
-            id: '2',
-            speaker: 'Bob Smith',
-            text: 'Sure! This week I completed the user authentication module and started working on the dashboard. I\'m blocked on the API integration though.',
-            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000 + 120000)
-          },
-          {
-            id: '3',
-            speaker: 'Carol Davis',
-            text: 'I can help with that API integration, Bob. I just finished the backend endpoints yesterday.',
-            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000 + 180000)
-          },
-          {
-            id: '4',
-            speaker: 'Alice Johnson',
-            text: 'Perfect! Carol, can you sync with Bob after this meeting? What about you Carol, what did you work on?',
-            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000 + 240000)
-          },
-          {
-            id: '5',
-            speaker: 'Carol Davis',
-            text: 'I completed the API endpoints for user management and started the documentation. No blockers on my end.',
-            timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000 + 300000)
-          }
-        ],
-        summaries: [
-          {
-            id: '1',
-            summary: 'Weekly standup meeting focusing on progress updates and coordination. Team discussed authentication module completion, API integration challenges, and documentation progress. Key coordination established between Bob and Carol for API integration support.',
-            keyPoints: [
-              'User authentication module completed by Bob',
-              'Dashboard development in progress',
-              'API integration presenting challenges',
-              'Backend endpoints completed by Carol',
-              'Documentation work initiated'
-            ],
-            actionItems: [
-              'Bob and Carol to sync on API integration after meeting',
-              'Complete dashboard development',
-              'Finalize API documentation'
-            ],
-            decisions: [
-              'Carol will provide API integration support to Bob',
-              'Team to continue with current sprint priorities'
-            ],
-            generatedAt: new Date(Date.now() - 85 * 60 * 1000),
+            summary: meetingData.summary.content,
+            keyPoints: meetingData.summary.keyPoints || [],
+            actionItems: meetingData.summary.actionItems || [],
+            decisions: meetingData.summary.decisions || [],
+            generatedAt: new Date(meetingData.summary.generatedAt || meetingData.updatedAt),
             aiModel: 'Claude 3.5 Sonnet'
-          }
-        ]
-      };
+          }] : []
+        };
 
-      setMeeting(mockMeeting);
+        setMeeting(transformedMeeting);
+      } else {
+        setError(data.error || 'Failed to load meeting details');
+      }
     } catch (error) {
       console.error('Error fetching meeting details:', error);
       setError('Failed to load meeting details');

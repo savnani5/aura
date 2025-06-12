@@ -9,178 +9,117 @@ import { AllMeetingRoomsView } from './components/AllMeetingRoomsView';
 import { AllRecentMeetingsView } from './components/AllRecentMeetingsView';
 import styles from '@/styles/HomePage.module.css';
 
-// Mock data for meeting rooms - will be replaced with API calls
-const mockMeetingRooms = [
-  {
-    id: 'weekly-standup-123',
-    title: 'Weekly Team Standup',
-    type: 'Daily Standup',
-    description: 'Our regular team sync to discuss progress and blockers',
-    participantCount: 5,
-    lastActivity: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-    isActive: false,
-    recentMeetings: 12
-  },
-  {
-    id: 'client-review-456',
-    title: 'Client Project Review',
-    type: 'Client Review',
-    description: 'Monthly review with the client team',
-    participantCount: 8,
-    lastActivity: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-    isActive: true,
-    recentMeetings: 3
-  },
-  {
-    id: 'design-sync-789',
-    title: 'Design Team Sync',
-    type: 'Design Review',
-    description: 'Weekly design review and feedback session',
-    participantCount: 4,
-    lastActivity: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-    isActive: false,
-    recentMeetings: 8
-  },
-  {
-    id: 'sprint-planning-101',
-    title: 'Sprint Planning',
-    type: 'Project Planning',
-    description: 'Bi-weekly sprint planning and estimation',
-    participantCount: 6,
-    lastActivity: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 1 week ago
-    isActive: false,
-    recentMeetings: 6
-  },
-  {
-    id: 'engineering-sync-202',
-    title: 'Engineering Team Sync',
-    type: 'Team Sync',
-    description: 'Weekly engineering team synchronization meeting',
-    participantCount: 12,
-    lastActivity: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-    isActive: false,
-    recentMeetings: 15
-  },
-  {
-    id: 'product-review-303',
-    title: 'Product Review Meeting',
-    type: 'Product Review',
-    description: 'Monthly product roadmap and feature review',
-    participantCount: 7,
-    lastActivity: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-    isActive: false,
-    recentMeetings: 4
-  }
-];
+// TypeScript interfaces for API data
+interface MeetingRoom {
+  id: string;
+  title: string;
+  type: string;
+  description: string;
+  participantCount: number;
+  lastActivity: Date;
+  isActive: boolean;
+  recentMeetings: number;
+}
 
-// Mock data for one-off meetings - will be replaced with API calls
-const mockOneOffMeetings = [
-  {
-    id: 'instant-123',
-    roomName: 'daily-standup-2024-01-15',
-    title: 'Morning Standup',
-    type: 'STANDUP',
-    startedAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-    endedAt: new Date(Date.now() - 90 * 60 * 1000), // 90 minutes ago
-    participantCount: 4,
-    duration: 30,
-    hasTranscripts: true,
-    hasSummary: true
-  },
-  {
-    id: 'instant-124',
-    roomName: 'client-call-urgent',
-    title: 'Urgent Client Discussion',
-    type: 'CLIENT',
-    startedAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-    endedAt: new Date(Date.now() - 23 * 60 * 60 * 1000), // 23 hours ago
-    participantCount: 3,
-    duration: 45,
-    hasTranscripts: true,
-    hasSummary: false
-  },
-  {
-    id: 'instant-125',
-    roomName: 'quick-sync-backend',
-    type: 'SYNC',
-    startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
-    endedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 15 * 60 * 1000), // 3 days ago + 15 min
-    participantCount: 2,
-    duration: 15,
-    hasTranscripts: false,
-    hasSummary: false
-  },
-  {
-    id: 'instant-126',
-    roomName: 'product-demo-live',
-    title: 'Product Demo Session',
-    type: 'DEMO',
-    startedAt: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-    endedAt: undefined, // Still active
-    participantCount: 7,
-    duration: undefined,
-    hasTranscripts: true,
-    hasSummary: false
-  },
-  {
-    id: 'instant-127',
-    roomName: 'design-review-q4',
-    title: 'Q4 Design Review',
-    type: 'REVIEW',
-    startedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-    endedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000), // 5 days ago + 1 hour
-    participantCount: 6,
-    duration: 60,
-    hasTranscripts: true,
-    hasSummary: true
-  },
-  {
-    id: 'instant-128',
-    roomName: 'sprint-retrospective',
-    title: 'Sprint Retrospective',
-    type: 'REVIEW',
-    startedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000), // 1 week ago
-    endedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000 + 45 * 60 * 1000), // 1 week ago + 45 min
-    participantCount: 5,
-    duration: 45,
-    hasTranscripts: false,
-    hasSummary: true
-  },
-  {
-    id: 'instant-129',
-    roomName: 'bug-triage-session',
-    title: 'Critical Bug Triage',
-    type: 'PLANNING',
-    startedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // 10 days ago
-    endedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000 + 90 * 60 * 1000), // 10 days ago + 90 min
-    participantCount: 8,
-    duration: 90,
-    hasTranscripts: true,
-    hasSummary: false
-  }
-];
+interface OneOffMeeting {
+  id: string;
+  roomName: string;
+  title?: string;
+  type: string;
+  startedAt: Date;
+  endedAt?: Date;
+  participantCount: number;
+  duration?: number;
+  hasTranscripts: boolean;
+  hasSummary: boolean;
+}
 
 export default function HomePage() {
   const [showCreatePopup, setShowCreatePopup] = useState(false);
   const [showAllRooms, setShowAllRooms] = useState(false);
   const [showAllMeetings, setShowAllMeetings] = useState(false);
-  const [meetingRooms, setMeetingRooms] = useState(mockMeetingRooms);
-  const [oneOffMeetings, setOneOffMeetings] = useState(mockOneOffMeetings);
+  const [meetingRooms, setMeetingRooms] = useState<MeetingRoom[]>([]);
+  const [oneOffMeetings, setOneOffMeetings] = useState<OneOffMeeting[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // TODO: Replace with actual API calls
+  // Fetch real data from API endpoints
   const fetchData = async () => {
     setIsLoading(true);
+    setError(null);
+    
     try {
-      // Remove artificial delay - data loads instantly with proper caching
-      // await new Promise(resolve => setTimeout(resolve, 1000));
-      setMeetingRooms(mockMeetingRooms);
-      setOneOffMeetings(mockOneOffMeetings);
+      // Fetch meeting rooms and one-off meetings in parallel
+      const [roomsResponse, instantMeetingsResponse] = await Promise.all([
+        fetch('/api/meetings'), // Default: meeting rooms
+        fetch('/api/meetings?type=instant') // One-off meetings
+      ]);
+      
+      // Handle meeting rooms
+      if (roomsResponse.ok) {
+        const roomsData = await roomsResponse.json();
+        if (roomsData.success) {
+          // Convert API data to expected format
+          const formattedRooms: MeetingRoom[] = roomsData.data.map((room: any) => ({
+            id: room.id,
+            title: room.title,
+            type: room.type,
+            description: room.description || 'No description available',
+            participantCount: room.participantCount,
+            lastActivity: new Date(room.lastActivity || room.updatedAt || Date.now()),
+            isActive: room.isActive,
+            recentMeetings: room.recentMeetings || 0
+          }));
+          setMeetingRooms(formattedRooms);
+        } else {
+          console.error('Failed to fetch meeting rooms:', roomsData.error);
+          setMeetingRooms([]);
+        }
+      } else {
+        throw new Error('Failed to fetch meeting rooms');
+      }
+
+      // Handle one-off meetings
+      if (instantMeetingsResponse.ok) {
+        const instantData = await instantMeetingsResponse.json();
+        if (instantData.success) {
+          // Data is already in the correct OneOffMeeting format, but dates need conversion
+          const formattedInstantMeetings: OneOffMeeting[] = instantData.data.map((meeting: any) => ({
+            id: meeting.id,
+            roomName: meeting.roomName,
+            title: meeting.title,
+            type: meeting.type,
+            startedAt: new Date(meeting.startedAt), // Convert string to Date
+            endedAt: meeting.endedAt ? new Date(meeting.endedAt) : undefined, // Convert if exists
+            participantCount: meeting.participantCount,
+            duration: meeting.duration,
+            hasTranscripts: meeting.hasTranscripts,
+            hasSummary: meeting.hasSummary
+          }));
+          setOneOffMeetings(formattedInstantMeetings);
+        } else {
+          console.error('Failed to fetch instant meetings:', instantData.error);
+          setOneOffMeetings([]);
+        }
+      } else {
+        console.warn('Failed to fetch instant meetings');
+        setOneOffMeetings([]);
+      }
+      
     } catch (error) {
       console.error('Error fetching data:', error);
+      setError(error instanceof Error ? error.message : 'Failed to load data');
+      // Set empty arrays on error to prevent crashes
+      setMeetingRooms([]);
+      setOneOffMeetings([]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Refresh data when a new meeting is created (called manually if needed)
+  const handleMeetingCreated = () => {
+    fetchData(); // Just refresh all data
   };
 
   useEffect(() => {
@@ -217,12 +156,12 @@ export default function HomePage() {
         isLoading={isLoading}
       />
     );
-    }
+  }
 
   if (showAllMeetings) {
     return (
       <AllRecentMeetingsView 
-        meetings={sortedOneOffMeetings}
+        meetings={oneOffMeetings}
         onBack={() => setShowAllMeetings(false)}
         onRefresh={fetchData}
         isLoading={isLoading}

@@ -12,6 +12,12 @@ interface Meeting {
   startTime: string;
   endTime?: string;
   duration?: number;
+  isUpcoming?: boolean;
+  recurringPattern?: {
+    frequency: string;
+    day: string;
+    time: string;
+  };
   participants: Array<{
     name: string;
     joinedAt: string;
@@ -49,78 +55,58 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
   const fetchMeetings = async () => {
     try {
       setLoading(true);
-      // Remove artificial delay - history loads instantly from indexed database
-      // await new Promise(resolve => setTimeout(resolve, 1000));
       
-      const mockMeetings: Meeting[] = [
-        {
-          id: '1',
-          roomName,
-          title: 'Daily Standup - Sprint 23',
-          type: 'STANDUP',
-          startTime: '2024-01-15T09:00:00Z',
-          endTime: '2024-01-15T09:30:00Z',
-          duration: 30,
-          participants: [
-            { name: 'John Doe', joinedAt: '2024-01-15T09:00:00Z', leftAt: '2024-01-15T09:30:00Z', isHost: true },
-            { name: 'Jane Smith', joinedAt: '2024-01-15T09:02:00Z', leftAt: '2024-01-15T09:30:00Z', isHost: false },
-            { name: 'Mike Johnson', joinedAt: '2024-01-15T09:01:00Z', leftAt: '2024-01-15T09:28:00Z', isHost: false }
-          ],
-          summary: {
-            summary: 'Daily standup meeting covering sprint progress and blockers.',
-            keyPoints: ['Sprint is on track', 'New feature deployment scheduled', 'Team velocity improved'],
-            actionItems: ['Complete user authentication', 'Review pull requests', 'Update documentation'],
-            decisions: ['Deploy to staging environment', 'Schedule code review session']
-          },
-          transcript: [
-            { speaker: 'John Doe', text: 'Good morning everyone, let\'s start our daily standup.', timestamp: '09:00:15' },
-            { speaker: 'Jane Smith', text: 'Yesterday I completed the user profile feature.', timestamp: '09:01:22' },
-            { speaker: 'Mike Johnson', text: 'I\'m working on the API integration and should finish today.', timestamp: '09:02:45' }
-          ]
-        },
-        {
-          id: '2',
-          roomName,
-          title: 'Project Planning Session',
-          type: 'PROJECT',
-          startTime: '2024-01-14T14:00:00Z',
-          endTime: '2024-01-14T15:30:00Z',
-          duration: 90,
-          participants: [
-            { name: 'Alice Wilson', joinedAt: '2024-01-14T14:00:00Z', leftAt: '2024-01-14T15:30:00Z', isHost: true },
-            { name: 'Bob Brown', joinedAt: '2024-01-14T14:05:00Z', leftAt: '2024-01-14T15:25:00Z', isHost: false }
-          ],
-          summary: {
-            summary: 'Project planning session for Q1 roadmap and resource allocation.',
-            keyPoints: ['Q1 priorities defined', 'Resource allocation reviewed', 'Timeline established'],
-            actionItems: ['Create project timeline', 'Assign team members', 'Set up tracking tools'],
-            decisions: ['Focus on mobile app development', 'Hire additional developers']
-          }
-        },
-        {
-          id: '3',
-          roomName,
-          title: '1:1 with Team Lead',
-          type: 'ONE_ON_ONE',
-          startTime: '2024-01-13T16:00:00Z',
-          endTime: '2024-01-13T16:45:00Z',
-          duration: 45,
-          participants: [
-            { name: 'Sarah Davis', joinedAt: '2024-01-13T16:00:00Z', leftAt: '2024-01-13T16:45:00Z', isHost: true },
-            { name: 'Tom Wilson', joinedAt: '2024-01-13T16:00:00Z', leftAt: '2024-01-13T16:45:00Z', isHost: false }
-          ],
-          summary: {
-            summary: 'One-on-one meeting discussing career development and current projects.',
-            keyPoints: ['Career goals discussion', 'Current project feedback', 'Skill development plan'],
-            actionItems: ['Enroll in training course', 'Update portfolio', 'Schedule follow-up'],
-            decisions: ['Focus on full-stack development', 'Take on mentoring role']
-          }
-        }
-      ];
+      // Fetch real meeting history from API
+      const params = new URLSearchParams();
+      if (dateFilter !== 'all') {
+        params.append('dateFilter', dateFilter);
+      }
       
-      setMeetings(mockMeetings);
+      const response = await fetch(`/api/meetings/${roomName}/history?${params.toString()}`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch meeting history');
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Transform the data to match our interface
+        const transformedMeetings: Meeting[] = data.data.map((meeting: any) => ({
+          id: meeting._id,
+          roomName: meeting.roomName,
+          title: meeting.title || meeting.type,
+          type: meeting.type,
+          startTime: meeting.startedAt,
+          endTime: meeting.endedAt,
+          duration: meeting.duration,
+          isUpcoming: meeting.isUpcoming,
+          recurringPattern: meeting.recurringPattern,
+          participants: meeting.participants || [],
+          summary: meeting.summary ? {
+            summary: meeting.summary.content,
+            keyPoints: meeting.summary.keyPoints || [],
+            actionItems: meeting.summary.actionItems || [],
+            decisions: meeting.summary.decisions || []
+          } : undefined,
+          transcript: meeting.transcripts ? meeting.transcripts.map((t: any) => ({
+            speaker: t.speaker,
+            text: t.text,
+            timestamp: new Date(t.timestamp).toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })
+          })) : undefined
+        }));
+        
+        setMeetings(transformedMeetings);
+      } else {
+        console.error('API error:', data.error);
+        setMeetings([]);
+      }
     } catch (error) {
       console.error('Error fetching meetings:', error);
+      setMeetings([]);
     } finally {
       setLoading(false);
     }
@@ -135,9 +121,35 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
     return `${mins}m`;
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string, isUpcoming: boolean = false) => {
     const date = new Date(dateString);
     const now = new Date();
+    
+    if (isUpcoming) {
+      const diffTime = date.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      // Format time
+      const timeStr = date.toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      });
+      
+      // Format day
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
+      const dateStr = date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      
+      if (diffDays === 0) return `Today at ${timeStr}`;
+      if (diffDays === 1) return `Tomorrow at ${timeStr}`;
+      if (diffDays < 7) return `${dayName} at ${timeStr}`;
+      return `${dayName}, ${dateStr} at ${timeStr}`;
+    }
+    
+    // Existing logic for past meetings
     const diffTime = Math.abs(now.getTime() - date.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -244,9 +256,20 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
           filteredMeetings.map((meeting) => (
             <div
               key={meeting.id}
-              className={styles.meetingCard}
-              onClick={() => setSelectedMeetingId(meeting.id)}
+              className={`${styles.meetingCard} ${meeting.isUpcoming ? styles.upcomingMeeting : ''}`}
+              onClick={() => meeting.isUpcoming ? null : setSelectedMeetingId(meeting.id)}
+              style={{ cursor: meeting.isUpcoming ? 'default' : 'pointer' }}
             >
+              {meeting.isUpcoming && (
+                <div className={styles.upcomingBadge}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M12 6V12L16 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                  Upcoming
+                </div>
+              )}
+              
               <div className={styles.meetingHeader}>
                 <div className={styles.meetingInfo}>
                   <h4 className={styles.meetingTitle}>{meeting.title}</h4>
@@ -254,12 +277,17 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
                     <span className={`${styles.meetingType} ${styles[meeting.type.toLowerCase()]}`}>
                       {meeting.type}
                     </span>
-                    <span className={styles.meetingDate}>
-                      {formatDate(meeting.startTime)}
+                    <span className={`${styles.meetingDate} ${meeting.isUpcoming ? styles.upcomingDate : ''}`}>
+                      {formatDate(meeting.startTime, meeting.isUpcoming)}
                     </span>
-                    {meeting.duration && (
+                    {meeting.duration && !meeting.isUpcoming && (
                       <span className={styles.meetingDuration}>
                         {formatDuration(meeting.duration)}
+                      </span>
+                    )}
+                    {meeting.isUpcoming && meeting.recurringPattern && (
+                      <span className={styles.recurringInfo}>
+                        {meeting.recurringPattern.frequency} • {meeting.recurringPattern.day}s
                       </span>
                     )}
                   </div>
@@ -278,9 +306,22 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
                 </div>
               </div>
 
-              {meeting.summary && (
+              {meeting.summary && !meeting.isUpcoming && (
                 <div className={styles.meetingSummary}>
                   <p>{meeting.summary.summary}</p>
+                </div>
+              )}
+              
+              {meeting.isUpcoming && (
+                <div className={styles.upcomingActions}>
+                  <button className={styles.joinButton}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <path d="M15 3H21V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M21 3L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M21 14V20C21 21.1 20.1 22 19 22H5C3.9 22 3 21.1 3 20V6C3 4.9 3.9 4 5 4H11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Join Meeting
+                  </button>
                 </div>
               )}
 

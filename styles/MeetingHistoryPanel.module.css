@@ -491,4 +491,72 @@
 
 .contentWrapper::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
+}
+
+/* Upcoming Meeting Styles */
+.upcomingMeeting {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.1);
+  position: relative;
+}
+
+.upcomingMeeting:hover {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(34, 197, 94, 0.07) 100%);
+  border-color: rgba(34, 197, 94, 0.3);
+  transform: none; /* Disable hover transform for upcoming meetings */
+}
+
+.upcomingBadge {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+  padding: 0.375rem 0.75rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  backdrop-filter: blur(4px);
+}
+
+.upcomingDate {
+  color: rgba(34, 197, 94, 0.9) !important;
+  font-weight: 600;
+}
+
+.recurringInfo {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}
+
+.upcomingActions {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.joinButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.joinButton:hover {
+  background: rgba(34, 197, 94, 1);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
 } 

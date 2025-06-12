@@ -636,11 +636,28 @@
   padding: 0.75rem;
 }
 
+.commentHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.commentAuthor {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.commentDate {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .commentText {
   color: rgba(255, 255, 255, 0.8);
   font-size: 0.875rem;
   line-height: 1.5;
-  margin: 0;
 }
 
 .addComment {

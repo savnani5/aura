@@ -35,21 +35,13 @@ interface MeetingRoomDashboardProps {
 export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
   const router = useRouter();
   const [room, setRoom] = useState<MeetingRoom | null>(null);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activePanel, setActivePanel] = useState<'prep' | 'history' | 'tasks'>('prep');
 
   // Mock current user for demo purposes
   const currentUser = 'Demo User';
-
-  // Mock participants data
-  const participants: Participant[] = [
-    { id: '1', name: 'Alex Chen', email: 'alex@company.com', isOnline: true, isHost: true },
-    { id: '2', name: 'Sarah Johnson', email: 'sarah@company.com', isOnline: true },
-    { id: '3', name: 'Mike Rodriguez', email: 'mike@company.com', isOnline: false },
-    { id: '4', name: 'Emily Watson', email: 'emily@company.com', isOnline: true },
-    { id: '5', name: 'David Kim', email: 'david@company.com', isOnline: true },
-  ];
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -59,16 +51,31 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
   const displayParticipants = onlineParticipants.slice(0, 4);
   const remainingCount = onlineParticipants.length - displayParticipants.length;
 
-  // Fetch room data
+  // Fetch room data and participants
   useEffect(() => {
-    const fetchRoom = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch(`/api/meetings/${roomName}`);
-        if (!response.ok) {
+        // Fetch room data
+        const roomResponse = await fetch(`/api/meetings/${roomName}`);
+        if (!roomResponse.ok) {
           throw new Error('Room not found');
         }
-        const roomData = await response.json();
-        setRoom(roomData);
+        const roomData = await roomResponse.json();
+        
+        if (!roomData.success) {
+          throw new Error(roomData.error);
+        }
+        
+        setRoom(roomData.data);
+        
+        // Fetch participants data
+        const participantsResponse = await fetch(`/api/participants/${roomName}`);
+        if (participantsResponse.ok) {
+          const participantsData = await participantsResponse.json();
+          if (participantsData.success) {
+            setParticipants(participantsData.data);
+          }
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load room');
       } finally {
@@ -76,7 +83,7 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
       }
     };
 
-    fetchRoom();
+    fetchData();
   }, [roomName]);
 
   const handleBackToHome = () => {

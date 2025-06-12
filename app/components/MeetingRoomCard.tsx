@@ -95,14 +95,6 @@ export function MeetingRoomCard({ room }: MeetingRoomCardProps) {
       className={`${styles.card} ${room.isActive ? styles.cardActive : ''}`}
       onClick={handleCardClick}
     >
-      {/* Active indicator */}
-      {room.isActive && (
-        <div className={styles.activeIndicator}>
-          <div className={styles.activePulse}></div>
-          <span className={styles.activeText}>Live</span>
-        </div>
-      )}
-
       {/* Card Header */}
       <div className={styles.cardHeader}>
         <div className={styles.titleSection}>

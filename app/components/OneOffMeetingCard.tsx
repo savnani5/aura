@@ -74,11 +74,9 @@ export function OneOffMeetingCard({ meeting }: OneOffMeetingCardProps) {
     return '📞'; // Default meeting icon
   };
 
-  const isActive = meeting.startedAt && !meeting.endedAt;
-
   return (
     <div 
-      className={`${styles.meetingCard} ${isActive ? styles.active : ''}`}
+      className={styles.meetingCard}
       onClick={handleCardClick}
     >
       <div className={styles.cardHeader}>
@@ -90,21 +88,6 @@ export function OneOffMeetingCard({ meeting }: OneOffMeetingCardProps) {
             {meeting.title || `${meeting.type} Meeting`}
           </h3>
           <span className={styles.meetingType}>{meeting.type}</span>
-        </div>
-        <div className={styles.statusBadge}>
-          {isActive ? (
-            <span className={styles.activeBadge}>
-              <span className={styles.pulseDot}></span>
-              Live
-            </span>
-          ) : (
-            <span className={styles.completedBadge}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Done
-            </span>
-          )}
         </div>
       </div>
 
