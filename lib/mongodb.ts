@@ -338,7 +338,7 @@ export function fromCreateMeetingForm(formData: {
     isRecurring: formData.isRecurring,
     recurringPattern: formData.isRecurring ? {
       frequency: formData.frequency,
-      day: formData.recurringDay,
+      day: formData.frequency === 'daily' ? undefined : formData.recurringDay,
       time: formData.recurringTime,
       startDate: formData.startDate ? new Date(formData.startDate) : undefined,
       endDate: formData.endDate ? new Date(formData.endDate) : undefined
@@ -677,6 +677,18 @@ export class DatabaseService {
     return meeting as IMeeting | null;
   }
   
+  async updateMeeting(meetingId: string, updates: Partial<IMeeting>): Promise<IMeeting | null> {
+    await this.ensureConnection();
+    
+    const meeting = await Meeting.findByIdAndUpdate(
+      meetingId,
+      { $set: updates },
+      { new: true }
+    ).lean();
+    
+    return meeting as unknown as IMeeting | null;
+  }
+  
   async getMeetingsByRoomWithFilters(options: {
     roomId: string;
     limit?: number;
@@ -720,7 +732,7 @@ export class DatabaseService {
     
     const { frequency, day, time, startDate, endDate } = room.recurringPattern;
     
-    if (!frequency || !day || !time) {
+    if (!frequency || !time) {
       return null;
     }
     
@@ -738,47 +750,60 @@ export class DatabaseService {
     // Set the time
     nextDate.setHours(hours, minutes, 0, 0);
     
-    // Find the next occurrence of the specified day
-    const dayIndex = this.getDayIndex(day);
-    const currentDayIndex = nextDate.getDay();
-    
-    let daysUntilNext = dayIndex - currentDayIndex;
-    if (daysUntilNext <= 0 || (daysUntilNext === 0 && nextDate <= now)) {
-      // If it's today but time has passed, or it's in the past, move to next week
-      daysUntilNext += 7;
-    }
-    
-    nextDate.setDate(nextDate.getDate() + daysUntilNext);
-    
-    // Handle different frequencies
-    if (frequency === 'biweekly') {
-      // For biweekly, we need to check if this is the right week
-      if (startDate) {
-        const weeksSinceStart = Math.floor((nextDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
-        if (weeksSinceStart % 2 !== 0) {
-          nextDate.setDate(nextDate.getDate() + 7);
-        }
+    if (frequency === 'daily') {
+      // For daily meetings, just check if today's meeting time has passed
+      if (nextDate <= now) {
+        // Move to tomorrow
+        nextDate.setDate(nextDate.getDate() + 1);
       }
-    } else if (frequency === 'monthly') {
-      // For monthly, find the next occurrence of the day in the month
-      const startOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth(), 1);
-      const firstOccurrence = new Date(startOfMonth);
-      const firstDayIndex = firstOccurrence.getDay();
-      const daysToFirst = (dayIndex - firstDayIndex + 7) % 7;
-      firstOccurrence.setDate(1 + daysToFirst);
+    } else {
+      // For other frequencies, we need a specific day
+      if (!day) {
+        return null;
+      }
       
-      // Find which week of the month the pattern started
-      if (startDate) {
-        const startWeekOfMonth = Math.ceil(startDate.getDate() / 7);
-        const targetDate = new Date(firstOccurrence);
-        targetDate.setDate(firstOccurrence.getDate() + (startWeekOfMonth - 1) * 7);
+      // Find the next occurrence of the specified day
+      const dayIndex = this.getDayIndex(day);
+      const currentDayIndex = nextDate.getDay();
+      
+      let daysUntilNext = dayIndex - currentDayIndex;
+      if (daysUntilNext <= 0 || (daysUntilNext === 0 && nextDate <= now)) {
+        // If it's today but time has passed, or it's in the past, move to next week
+        daysUntilNext += 7;
+      }
+      
+      nextDate.setDate(nextDate.getDate() + daysUntilNext);
+      
+      // Handle different frequencies
+      if (frequency === 'biweekly') {
+        // For biweekly, we need to check if this is the right week
+        if (startDate) {
+          const weeksSinceStart = Math.floor((nextDate.getTime() - startDate.getTime()) / (7 * 24 * 60 * 60 * 1000));
+          if (weeksSinceStart % 2 !== 0) {
+            nextDate.setDate(nextDate.getDate() + 7);
+          }
+        }
+      } else if (frequency === 'monthly') {
+        // For monthly, find the next occurrence of the day in the month
+        const startOfMonth = new Date(nextDate.getFullYear(), nextDate.getMonth(), 1);
+        const firstOccurrence = new Date(startOfMonth);
+        const firstDayIndex = firstOccurrence.getDay();
+        const daysToFirst = (dayIndex - firstDayIndex + 7) % 7;
+        firstOccurrence.setDate(1 + daysToFirst);
         
-        if (targetDate >= now) {
-          nextDate = targetDate;
-        } else {
-          // Move to next month
-          nextDate = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 1);
-          nextDate.setDate(1 + daysToFirst + (startWeekOfMonth - 1) * 7);
+        // Find which week of the month the pattern started
+        if (startDate) {
+          const startWeekOfMonth = Math.ceil(startDate.getDate() / 7);
+          const targetDate = new Date(firstOccurrence);
+          targetDate.setDate(firstOccurrence.getDate() + (startWeekOfMonth - 1) * 7);
+          
+          if (targetDate >= now) {
+            nextDate = targetDate;
+          } else {
+            // Move to next month
+            nextDate = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 1);
+            nextDate.setDate(1 + daysToFirst + (startWeekOfMonth - 1) * 7);
+          }
         }
       }
     }

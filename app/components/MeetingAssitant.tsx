@@ -42,13 +42,17 @@ interface GroupedChatMessage {
   groupId: string;
 }
 
-type TabView = 'notes' | 'transcript' | 'chat';
+type MainView = 'public' | 'private';
+type PublicSubView = 'chat' | 'transcript';
+type PrivateSubView = 'notes' | 'ohm';
 
 export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [sharedTranscripts, setSharedTranscripts] = useState<DisplayTranscript[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabView>('notes');
+  const [activeView, setActiveView] = useState<MainView>('private');
+  const [publicSubView, setPublicSubView] = useState<PublicSubView>('chat');
+  const [privateSubView, setPrivateSubView] = useState<PrivateSubView>('notes');
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -63,13 +67,13 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     sharedTranscriptsRef.current = sharedTranscripts;
   }, [sharedTranscripts]);
 
-  // Chat functionality
+  // Regular Chat functionality (LiveKit)
   const { chatMessages, send: sendMessage, isSending } = useChat();
   const [chatInput, setChatInput] = useState('');
   const [groupedChatMessages, setGroupedChatMessages] = useState<GroupedChatMessage[]>([]);
   const chatMessagesRef = React.useRef<HTMLDivElement>(null);
 
-  // AI Chat functionality
+  // AI Chat functionality (separate from regular chat)
   const [aiChatHistory, setAiChatHistory] = useState<Array<{
     id: string;
     type: 'user' | 'ai';
@@ -81,6 +85,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     usedWebSearch?: boolean;
     citations?: string[];
   }>>([]);
+  const [aiChatInput, setAiChatInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   // Question suggestions for AI chat
@@ -89,7 +94,6 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     "What are the action items from last meeting?",
     "What are the key topics covered in this meeting?",
     "What questions were raised but not answered?",
-    "@web Latest industry trends and news"
   ];
 
   // Add transcript messages ref for auto-scrolling
@@ -173,28 +177,34 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     }
   }, [sharedTranscripts]);
 
+  // Regular chat submit (LiveKit)
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || isSending) return;
 
-    const message = chatInput.trim();
-    const isAiCommand = message.toLowerCase().startsWith('@ohm ') || message.toLowerCase().startsWith('@web ');
+    await sendMessage(chatInput);
+    setChatInput('');
+  };
 
-    if (isAiCommand) {
-      // Handle AI command - remove the @ohm or @web prefix (case-insensitive)
-      let aiMessage = message;
-      if (message.toLowerCase().startsWith('@ohm ')) {
-        aiMessage = message.slice(message.toLowerCase().indexOf('@ohm ') + 5);
-      } else if (message.toLowerCase().startsWith('@web ')) {
-        aiMessage = message; // Keep @web prefix for backend processing
-      }
-      await handleAiChat(aiMessage);
+  // AI chat submit (separate)
+  const handleAiChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiChatInput.trim() || isAiProcessing) return;
+
+    const messageText = aiChatInput.trim();
+    
+    // Process web search or send directly to AI
+    let aiMessage = messageText;
+    if (messageText.toLowerCase().startsWith('@web ')) {
+      // Keep @web prefix for backend processing
+      aiMessage = messageText;
     } else {
-      // Handle regular chat
-      await sendMessage(chatInput);
+      // Send directly to AI without @ohm prefix
+      aiMessage = messageText;
     }
     
-    setChatInput('');
+    await handleAiChat(aiMessage);
+    setAiChatInput('');
   };
 
   const handleAiChat = async (message: string) => {
@@ -555,362 +565,403 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
             </span>
           )}
         </h3>
-        <div className="tab-container">
+        
+        {/* Main View Toggle */}
+        <div className="main-view-toggle">
           <button 
-            className={`tab-button ${activeTab === 'notes' ? 'tab-button--active' : ''}`}
+            className={`view-toggle-button ${activeView === 'private' ? 'view-toggle-button--active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (isMobile) {
-                // If clicking the active tab and expanded, collapse it
-                if (activeTab === 'notes' && isExpanded) {
+                if (activeView === 'private' && isExpanded) {
                   setIsExpanded(false);
                 } else {
-                  setActiveTab('notes');
+                  setActiveView('private');
                   setIsExpanded(true);
                 }
               } else {
-                setActiveTab('notes');
+                setActiveView('private');
               }
             }}
           >
-            Notes
+            Private
+            {(aiChatHistory.length > 0 || notes.trim()) && (
+              <span className="notification-dot"></span>
+            )}
           </button>
           <button 
-            className={`tab-button ${activeTab === 'transcript' ? 'tab-button--active' : ''}`}
+            className={`view-toggle-button ${activeView === 'public' ? 'view-toggle-button--active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (isMobile) {
-                // If clicking the active tab and expanded, collapse it
-                if (activeTab === 'transcript' && isExpanded) {
+                if (activeView === 'public' && isExpanded) {
                   setIsExpanded(false);
                 } else {
-                  setActiveTab('transcript');
+                  setActiveView('public');
                   setIsExpanded(true);
                 }
               } else {
-                setActiveTab('transcript');
+                setActiveView('public');
               }
             }}
           >
-            Transcript
-          </button>
-          <button 
-            className={`tab-button ${activeTab === 'chat' ? 'tab-button--active' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isMobile) {
-                // If clicking the active tab and expanded, collapse it
-                if (activeTab === 'chat' && isExpanded) {
-                  setIsExpanded(false);
-                } else {
-                  setActiveTab('chat');
-                  setIsExpanded(true);
-                }
-              } else {
-                setActiveTab('chat');
-              }
-            }}
-          >
-            Ohm
-            {chatMessages.length > 0 && (
-              <span className="chat-badge">{chatMessages.length}</span>
+            Public
+            {(chatMessages.length > 0 || sharedTranscripts.length > 0) && (
+              <span className="notification-dot"></span>
             )}
           </button>
         </div>
       </div>
 
       <div className="meeting-assistant-content">
-        {activeTab === 'notes' && (
-          <div className="notes-tab">
-            <div className="notes-header">
-              <div className="notes-actions">
-                <button onClick={exportNotes} className="action-button" disabled={!notes.trim()}>
-                  Export
-                </button>
-                <button onClick={clearNotes} className="action-button action-button--danger" disabled={!notes.trim()}>
-                  Clear
-                </button>
-              </div>
-              <div className="save-status">
-                <span className={`save-indicator save-indicator--${saveStatus}`}>
-                  {saveStatus === 'saved' && '✓ Saved'}
-                  {saveStatus === 'saving' && '⏳ Saving...'}
-                  {saveStatus === 'unsaved' && '● Unsaved'}
-                </span>
-              </div>
+        {activeView === 'public' && (
+          <div className="public-view">
+            {/* Sub-tabs for public content */}
+            <div className="sub-tab-container">
+              <button 
+                className={`sub-tab-button ${publicSubView === 'chat' ? 'sub-tab-button--active' : ''}`}
+                onClick={() => setPublicSubView('chat')}
+              >
+                Chat
+                {chatMessages.length > 0 && (
+                  <span className="chat-badge">{chatMessages.length}</span>
+                )}
+              </button>
+              <button 
+                className={`sub-tab-button ${publicSubView === 'transcript' ? 'sub-tab-button--active' : ''}`}
+                onClick={() => setPublicSubView('transcript')}
+              >
+                Transcript
+                {isRecording && (
+                  <span className="recording-dot"></span>
+                )}
+              </button>
             </div>
-            <textarea
-              className="notes-textarea"
-              placeholder="Take notes during the meeting..."
-              value={notes}
-              onChange={(e) => {
-                setNotes(e.target.value);
-                setSaveStatus('unsaved');
-              }}
-            />
-            <div className="notes-footer">
-              <span className="character-count">{notes.length} characters</span>
-            </div>
-          </div>
-        )}
 
-        {activeTab === 'transcript' && (
-          <div className="transcript-tab">
-            <div className="transcript-controls">
-              {isRecording && (
-                <div className="recording-indicator">
-                  <div className="recording-pulse"></div>
-                  <span className="recording-text">Recording</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="transcript-messages" ref={transcriptMessagesRef}>
-              {sharedTranscripts.length === 0 ? (
-                <div className="transcript-empty">
-                  <p>Transcription will appear here once the meeting starts</p>
-                </div>
-              ) : (
-                sharedTranscripts.map((transcript) => (
-                  <div key={transcript.entryId} className="transcript-message">
-                    <div className={`speaker-badge ${getSpeakerColor(transcript.speaker)}`}>
-                      {transcript.speaker}
+            {publicSubView === 'chat' && (
+              <div className="public-chat-tab">
+                <div className="chat-messages" ref={chatMessagesRef}>
+                  {groupedChatMessages.length === 0 ? (
+                    <div className="chat-empty">
+                      <p>No messages yet. Start a conversation with other participants!</p>
                     </div>
-                    <p className="transcript-text">{transcript.text}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'chat' && (
-          <div className="chat-tab">
-            <div className="chat-messages" ref={chatMessagesRef}>
-              {groupedChatMessages.length === 0 && aiChatHistory.length === 0 ? (
-                <div className="chat-empty">
-                  <p>No messages yet. Start a conversation!</p>
-                  <p className="chat-tip">
-                    💡 Tip: Use <strong>@ohm</strong> for AI assistant, <strong>@web</strong> for web search
-                  </p>
-                  
-                  <div className="ai-suggestions">
-                    <p className="suggestions-title">Try asking Ohm:</p>
-                    <div className="suggestion-buttons">
-                      {questionSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          className="suggestion-button"
-                          onClick={async () => {
-                            if (suggestion.startsWith('@web')) {
-                              await handleAiChat(suggestion);
-                            } else {
-                              await handleAiChat(`@ohm ${suggestion}`);
-                            }
-                          }}
-                          disabled={isSending || isAiProcessing}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Show suggestions at the top for any chat activity */}
-                  <div className="ai-suggestions-compact">
-                    <p className="suggestions-title-compact">💡 Ask Ohm AI:</p>
-                    <div className="suggestion-buttons-compact">
-                      {questionSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          className="suggestion-button-compact"
-                          onClick={async () => {
-                            if (suggestion.startsWith('@web')) {
-                              await handleAiChat(suggestion);
-                            } else {
-                              await handleAiChat(`@ohm ${suggestion}`);
-                            }
-                          }}
-                          disabled={isSending || isAiProcessing}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Regular Chat Messages */}
-                  {groupedChatMessages.map((group) => (
-                    <div key={group.groupId} className="chat-message-group">
-                      <div className="chat-message-header">
-                        <span className="chat-sender">
-                          {group.senderName}
-                        </span>
-                        <span className="chat-timestamp">
-                          {formatTimestamp(group.latestTimestamp)}
-                        </span>
-                      </div>
-                      <div className="chat-message-text">
-                        {group.messages.map((msg) => (
-                          <div key={msg.id} className="chat-message">
-                            {msg.text}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* AI Chat Messages */}
-                  {aiChatHistory.map((aiMsg) => (
-                    <div key={aiMsg.id} className={`chat-message-group ${aiMsg.type === 'ai' ? 'ai-message' : 'user-ai-message'}`}>
-                      <div className="chat-message-header">
-                        <span className="chat-sender">
-                          {aiMsg.type === 'ai' ? (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              🤖 Ohm AI
-                              {aiMsg.usedWebSearch && (
-                                <span style={{ 
-                                  fontSize: '0.625rem', 
-                                  background: '#4ade80', 
-                                  color: 'white',
-                                  padding: '0.125rem 0.25rem',
-                                  borderRadius: '4px'
-                                }}>
-                                  🌐 web
-                                </span>
-                              )}
-                              {aiMsg.usedContext && (
-                                <span style={{ 
-                                  fontSize: '0.625rem', 
-                                  background: 'var(--lk-accent-bg)', 
-                                  color: 'var(--lk-accent-fg)',
-                                  padding: '0.125rem 0.25rem',
-                                  borderRadius: '4px'
-                                }}>
-                                  {aiMsg.relevantTranscripts ? `${aiMsg.relevantTranscripts} refs` : 'context'}
-                                </span>
-                              )}
-                            </span>
-                          ) : (
-                            `${aiMsg.userName} → 🤖 AI`
-                          )}
-                        </span>
-                        <span className="chat-timestamp">
-                          {formatTimestamp(aiMsg.timestamp)}
-                        </span>
-                      </div>
-                      <div className="chat-message-text">
-                        <div className="chat-message">
-                          <ReactMarkdown>{aiMsg.message}</ReactMarkdown>
-                        </div>
-                        {aiMsg.citations && aiMsg.citations.length > 0 && (
-                          <div className="message-citations">
-                            <div className="citations-label">Sources:</div>
-                            <div className="citations-list">
-                              {aiMsg.citations.map((url, index) => (
-                                <a 
-                                  key={index}
-                                  href={url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="citation-link"
-                                >
-                                  🔗 {new URL(url).hostname}
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* AI Processing Indicator */}
-                  {isAiProcessing && (
-                    <div className="chat-message-group ai-message">
-                      <div className="chat-message-header">
-                        <span className="chat-sender">🤖 Ohm AI</span>
-                        <span className="chat-timestamp">Processing...</span>
-                      </div>
-                      <div className="chat-message-text">
-                        <div className="chat-message ai-processing">
-                          <span className="ai-typing-indicator">
-                            <span></span>
-                            <span></span>
-                            <span></span>
+                  ) : (
+                    groupedChatMessages.map((group) => (
+                      <div key={group.groupId} className="chat-message-group">
+                        <div className="chat-message-header">
+                          <span className="chat-sender">
+                            {group.senderName}
                           </span>
-                          Thinking...
+                          <span className="chat-timestamp">
+                            {formatTimestamp(group.latestTimestamp)}
+                          </span>
+                        </div>
+                        <div className="chat-message-text">
+                          {group.messages.map((msg) => (
+                            <div key={msg.id} className="chat-message">
+                              {msg.text}
+                            </div>
+                          ))}
                         </div>
                       </div>
+                    ))
+                  )}
+                </div>
+                
+                <form className="chat-input-form" onSubmit={handleChatSubmit}>
+                  <div className="chat-input-row">
+                    <input
+                      type="text"
+                      className="chat-input"
+                      placeholder="Message to participants..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      disabled={isSending}
+                    />
+                    <button 
+                      type="submit" 
+                      className="chat-send-button"
+                      disabled={isSending || !chatInput.trim()}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {publicSubView === 'transcript' && (
+              <div className="transcript-tab">
+                <div className="transcript-controls">
+                  {isRecording && (
+                    <div className="recording-indicator">
+                      <div className="recording-pulse"></div>
+                      <span className="recording-text">Recording</span>
                     </div>
                   )}
-                </>
-              )}
+                </div>
+                
+                <div className="transcript-messages" ref={transcriptMessagesRef}>
+                  {sharedTranscripts.length === 0 ? (
+                    <div className="transcript-empty">
+                      <p>Transcription will appear here once the meeting starts</p>
+                    </div>
+                  ) : (
+                    sharedTranscripts.map((transcript) => (
+                      <div key={transcript.entryId} className="transcript-message">
+                        <div className={`speaker-badge ${getSpeakerColor(transcript.speaker)}`}>
+                          {transcript.speaker}
+                        </div>
+                        <p className="transcript-text">{transcript.text}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeView === 'private' && (
+          <div className="private-view">
+            {/* Sub-tabs for private content */}
+            <div className="sub-tab-container">
+              <button 
+                className={`sub-tab-button ${privateSubView === 'notes' ? 'sub-tab-button--active' : ''}`}
+                onClick={() => setPrivateSubView('notes')}
+              >
+                Notes
+                {notes.trim() && (
+                  <span className="notification-dot"></span>
+                )}
+              </button>
+              <button 
+                className={`sub-tab-button ${privateSubView === 'ohm' ? 'sub-tab-button--active' : ''}`}
+                onClick={() => setPrivateSubView('ohm')}
+              >
+                Ohm AI
+                {aiChatHistory.length > 0 && (
+                  <span className="chat-badge">{aiChatHistory.length}</span>
+                )}
+              </button>
             </div>
-            
-            <form className="chat-input-form" onSubmit={handleChatSubmit}>
-              <div className="chat-command-buttons">
-                <button
-                  type="button"
-                  className={`command-button ${chatInput.toLowerCase().startsWith('@ohm ') ? 'active' : ''}`}
-                  onClick={() => {
-                    if (chatInput.toLowerCase().startsWith('@ohm ')) {
-                      // Remove @ohm prefix if already present
-                      setChatInput(chatInput.slice(5));
-                    } else if (chatInput.toLowerCase().startsWith('@web ')) {
-                      // Replace @web with @ohm
-                      setChatInput(`@ohm ${chatInput.slice(5)}`);
-                    } else {
-                      // Add @ohm prefix
-                      setChatInput(`@ohm ${chatInput}`);
-                    }
+
+            {privateSubView === 'notes' && (
+              <div className="notes-tab">
+                <div className="notes-header">
+                  <div className="notes-actions">
+                    <button onClick={exportNotes} className="action-button" disabled={!notes.trim()}>
+                      Export
+                    </button>
+                    <button onClick={clearNotes} className="action-button action-button--danger" disabled={!notes.trim()}>
+                      Clear
+                    </button>
+                  </div>
+                  <div className="save-status">
+                    <span className={`save-indicator save-indicator--${saveStatus}`}>
+                      {saveStatus === 'saved' && '✓ Saved'}
+                      {saveStatus === 'saving' && '⏳ Saving...'}
+                      {saveStatus === 'unsaved' && '● Unsaved'}
+                    </span>
+                  </div>
+                </div>
+                <textarea
+                  className="notes-textarea"
+                  placeholder="Take notes during the meeting..."
+                  value={notes}
+                  onChange={(e) => {
+                    setNotes(e.target.value);
+                    setSaveStatus('unsaved');
                   }}
-                  disabled={isSending || isAiProcessing}
-                  title="AI Assistant"
-                >
-                  🤖 AI
-                </button>
-                <button
-                  type="button"
-                  className={`command-button ${chatInput.toLowerCase().startsWith('@web ') ? 'active' : ''}`}
-                  onClick={() => {
-                    if (chatInput.toLowerCase().startsWith('@web ')) {
-                      // Remove @web prefix if already present
-                      setChatInput(chatInput.slice(5));
-                    } else if (chatInput.toLowerCase().startsWith('@ohm ')) {
-                      // Replace @ohm with @web
-                      setChatInput(`@web ${chatInput.slice(5)}`);
-                    } else {
-                      // Add @web prefix
-                      setChatInput(`@web ${chatInput}`);
-                    }
-                  }}
-                  disabled={isSending || isAiProcessing}
-                  title="Web Search"
-                >
-                  🌐 Web
-                </button>
-              </div>
-              <div className="chat-input-row">
-                <input
-                  type="text"
-                  className="chat-input"
-                  placeholder={chatInput.toLowerCase().startsWith('@ohm ') || chatInput.toLowerCase().startsWith('@web ') ? "Ask AI about the meeting or search the web..." : "Type a message ..."}
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  disabled={isSending || isAiProcessing}
                 />
-                <button 
-                  type="submit" 
-                  className="chat-send-button"
-                  disabled={isSending || isAiProcessing || !chatInput.trim()}
-                >
-                  {chatInput.toLowerCase().startsWith('@ohm ') || chatInput.toLowerCase().startsWith('@web ') ? '🤖' : 'Send'}
-                </button>
+                <div className="notes-footer">
+                  <span className="character-count">{notes.length} characters</span>
+                </div>
               </div>
-            </form>
+            )}
+
+            {privateSubView === 'ohm' && (
+              <div className="ai-chat-tab">
+                <div className="chat-messages" ref={chatMessagesRef}>
+                  {aiChatHistory.length === 0 ? (
+                    <div className="chat-empty">
+                      <p>Ask Ohm about the meeting, participants, or search the web!</p>
+                      
+                      <div className="ai-suggestions" style={{ marginTop: '0.75rem' }}>
+                        <p className="suggestions-title">Try asking Ohm:</p>
+                        <div className="suggestion-buttons">
+                          {questionSuggestions.map((suggestion, index) => (
+                            <button
+                              key={index}
+                              className="suggestion-button"
+                              onClick={async () => {
+                                if (suggestion.startsWith('@web')) {
+                                  await handleAiChat(suggestion);
+                                } else {
+                                  await handleAiChat(suggestion);
+                                }
+                              }}
+                              disabled={isAiProcessing}
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Show suggestions at the top for any chat activity */}
+                      <div className="ai-suggestions-compact">
+                        <p className="suggestions-title-compact">💡 Ask Ohm AI:</p>
+                        <div className="suggestion-buttons-compact">
+                          {questionSuggestions.slice(0, 3).map((suggestion, index) => (
+                            <button
+                              key={index}
+                              className="suggestion-button-compact"
+                              onClick={async () => {
+                                if (suggestion.startsWith('@web')) {
+                                  await handleAiChat(suggestion);
+                                } else {
+                                  await handleAiChat(suggestion);
+                                }
+                              }}
+                              disabled={isAiProcessing}
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* AI Chat Messages */}
+                      {aiChatHistory.map((aiMsg) => (
+                        <div key={aiMsg.id} className={`chat-message-group ${aiMsg.type === 'ai' ? 'ai-message' : 'user-ai-message'}`}>
+                          <div className="chat-message-header">
+                            <span className="chat-sender">
+                              {aiMsg.type === 'ai' ? (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  🤖 Ohm AI
+                                  {aiMsg.usedWebSearch && (
+                                    <span style={{ 
+                                      fontSize: '0.625rem', 
+                                      background: '#4ade80', 
+                                      color: 'white',
+                                      padding: '0.125rem 0.25rem',
+                                      borderRadius: '4px'
+                                    }}>
+                                      🌐 web
+                                    </span>
+                                  )}
+                                  {aiMsg.usedContext && (
+                                    <span style={{ 
+                                      fontSize: '0.625rem', 
+                                      background: 'var(--lk-accent-bg)', 
+                                      color: 'var(--lk-accent-fg)',
+                                      padding: '0.125rem 0.25rem',
+                                      borderRadius: '4px'
+                                    }}>
+                                      {aiMsg.relevantTranscripts ? `${aiMsg.relevantTranscripts} refs` : 'context'}
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                `${aiMsg.userName} → 🤖 AI`
+                              )}
+                            </span>
+                            <span className="chat-timestamp">
+                              {formatTimestamp(aiMsg.timestamp)}
+                            </span>
+                          </div>
+                          <div className="chat-message-text">
+                            <div className="chat-message">
+                              <ReactMarkdown>{aiMsg.message}</ReactMarkdown>
+                            </div>
+                            {aiMsg.citations && aiMsg.citations.length > 0 && (
+                              <div className="message-citations">
+                                <div className="citations-label">Sources:</div>
+                                <div className="citations-list">
+                                  {aiMsg.citations.map((url, index) => (
+                                    <a 
+                                      key={index}
+                                      href={url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="citation-link"
+                                    >
+                                      🔗 {new URL(url).hostname}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* AI Processing Indicator */}
+                      {isAiProcessing && (
+                        <div className="chat-message-group ai-message">
+                          <div className="chat-message-header">
+                            <span className="chat-sender">🤖 Ohm AI</span>
+                            <span className="chat-timestamp">Processing...</span>
+                          </div>
+                          <div className="chat-message-text">
+                            <div className="chat-message ai-processing">
+                              <span className="ai-typing-indicator">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                              </span>
+                              Thinking...
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                
+                <form className="chat-input-form" onSubmit={handleAiChatSubmit}>
+                  <div className="ai-command-buttons">
+                    <button
+                      type="button"
+                      className={`command-button ${aiChatInput.toLowerCase().startsWith('@web ') ? 'active' : ''}`}
+                      onClick={() => {
+                        if (aiChatInput.toLowerCase().startsWith('@web ')) {
+                          // Remove @web prefix
+                          setAiChatInput(aiChatInput.slice(5));
+                        } else {
+                          // Add @web prefix
+                          setAiChatInput(`@web ${aiChatInput}`);
+                        }
+                      }}
+                      disabled={isAiProcessing}
+                      title="Web Search"
+                    >
+                      Web
+                    </button>
+                  </div>
+                  <div className="chat-input-row">
+                    <input
+                      type="text"
+                      className="chat-input"
+                      placeholder={aiChatInput.toLowerCase().startsWith('@web ') ? "Search the web..." : "Ask Ohm about the meeting..."}
+                      value={aiChatInput}
+                      onChange={(e) => setAiChatInput(e.target.value)}
+                      disabled={isAiProcessing}
+                    />
+                    <button 
+                      type="submit" 
+                      className="chat-send-button"
+                      disabled={isAiProcessing || !aiChatInput.trim()}
+                    >
+                      Send
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         )}
       </div>

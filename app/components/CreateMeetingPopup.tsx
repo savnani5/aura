@@ -8,6 +8,7 @@ import styles from '@/styles/CreateMeetingPopup.module.css';
 interface CreateMeetingPopupProps {
   isOpen: boolean;
   onClose: () => void;
+  onMeetingCreated?: () => void;
 }
 
 interface MeetingRoomForm {
@@ -60,7 +61,7 @@ const TIME_SLOTS = [
   '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
 ];
 
-export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps) {
+export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: CreateMeetingPopupProps) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'instant' | 'create'>('instant');
   const [isLoading, setIsLoading] = useState(false);
@@ -114,6 +115,9 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
       if (response.ok) {
         const data = await response.json();
         console.log('One-off meeting created:', data);
+        
+        // Notify parent component that a meeting was created
+        onMeetingCreated?.();
       } else {
         console.warn('Failed to create meeting record, proceeding anyway');
       }
@@ -126,6 +130,9 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
       // Fallback: navigate without database record
       const roomId = generateRoomId();
       const meetingName = instantForm.name.trim();
+      
+      // Still notify parent even on fallback
+      onMeetingCreated?.();
       
       if (meetingName) {
         router.push(`/rooms/${roomId}?name=${encodeURIComponent(meetingName)}`);
@@ -180,8 +187,11 @@ export function CreateMeetingPopup({ isOpen, onClose }: CreateMeetingPopupProps)
       const data = await response.json();
       console.log('Meeting room created:', data);
 
+      // Notify parent component that a meeting room was created
+      onMeetingCreated?.();
+
       // Navigate to the meeting room
-      router.push(`/room/${roomId}`);
+      router.push(`/meetingroom/${roomId}`);
     } catch (error) {
       console.error('Error creating meeting room:', error);
       alert('Failed to create meeting room. Please try again.');

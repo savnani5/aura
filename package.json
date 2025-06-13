@@ -21,6 +21,7 @@
     "@livekit/krisp-noise-filter": "0.2.16",
     "@livekit/track-processors": "^0.5.4",
     "@types/mongoose": "^5.11.96",
+    "dotenv": "^16.5.0",
     "livekit-client": "2.13.3",
     "livekit-server-sdk": "2.13.0",
     "lucide-react": "^0.511.0",

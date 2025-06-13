@@ -68,13 +68,17 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
         
         setRoom(roomData.data);
         
-        // Fetch participants data
-        const participantsResponse = await fetch(`/api/participants/${roomName}`);
-        if (participantsResponse.ok) {
-          const participantsData = await participantsResponse.json();
-          if (participantsData.success) {
-            setParticipants(participantsData.data);
-          }
+        // Transform room participants to match our interface
+        if (roomData.data.participants) {
+          const transformedParticipants: Participant[] = roomData.data.participants.map((p: any, index: number) => ({
+            id: p._id || `participant-${index}`,
+            name: p.name,
+            email: p.email || `${p.name.toLowerCase().replace(' ', '.')}@example.com`,
+            avatar: p.avatar,
+            isOnline: true, // Assume all participants are online for demo
+            isHost: p.role === 'host'
+          }));
+          setParticipants(transformedParticipants);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load room');

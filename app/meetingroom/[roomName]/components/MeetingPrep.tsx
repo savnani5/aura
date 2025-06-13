@@ -41,10 +41,33 @@ export function MeetingPrep({ roomName }: MeetingPrepProps) {
         localStorage.setItem(`meeting-notes-${roomName}`, notes);
       }
       
+      // Create meeting record in database
+      const response = await fetch('/api/meetings/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomName: roomName,
+          roomId: roomName, // Use roomName as roomId to find the meeting room
+          participantName: 'Host' // Default participant name
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Meeting started:', data);
+      } else {
+        console.warn('Failed to create meeting record, proceeding anyway');
+      }
+      
       // Navigate to the live video meeting
       router.push(`/rooms/${roomName}`);
     } catch (error) {
       console.error('Error starting meeting:', error);
+      // Still navigate to meeting even if database record creation fails
+      router.push(`/rooms/${roomName}`);
+    } finally {
       setIsLoading(false);
     }
   };

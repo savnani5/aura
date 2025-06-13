@@ -3,7 +3,7 @@ import { AIChatbot } from '@/lib/ai-chatbot';
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, roomName, userName } = await request.json();
+    const { message, roomName, userName, currentTranscripts, isLiveMeeting } = await request.json();
 
     // Validate required fields
     if (!message || !roomName || !userName) {
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if Anthropic API key is configured
+    // Check if required API keys are configured
     if (!process.env.ANTHROPIC_API_KEY) {
       return NextResponse.json(
         { error: 'Anthropic API key not configured' },
@@ -21,19 +21,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json(
+        { error: 'OpenAI API key not configured' },
+        { status: 500 }
+      );
+    }
+
     const chatbot = AIChatbot.getInstance();
     
-    // Process the chat message
+    // Process the chat message with optional current transcripts
     const response = await chatbot.processChat(
       message,
       roomName,
-      userName
+      userName,
+      currentTranscripts,
+      isLiveMeeting || false
     );
 
     return NextResponse.json({
       success: true,
       response: response.message,
       usedWebSearch: response.usedWebSearch || false,
+      usedContext: response.usedContext || false,
+      relevantTranscripts: response.relevantTranscripts || 0,
       citations: response.citations,
       timestamp: Date.now(),
     });

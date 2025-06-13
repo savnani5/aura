@@ -8,27 +8,27 @@ export async function GET(
 ) {
   try {
     const { roomName } = await params;
-    
     const db = DatabaseService.getInstance();
-    const meetingRoom = await db.getMeetingRoomByName(roomName);
     
-    if (!meetingRoom) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Meeting room not found' 
+    // Get the room by name instead of ID
+    const room = await db.getMeetingRoomByName(roomName);
+    if (!room) {
+      return NextResponse.json({
+        success: false,
+        error: 'Meeting room not found'
       }, { status: 404 });
     }
     
     // Get recent meetings and tasks for this room
     const [recentMeetings, tasks] = await Promise.all([
-      db.getMeetingsByRoom(meetingRoom._id, 10), // Last 10 meetings
-      db.getTasksByRoom(meetingRoom._id)
+      db.getMeetingsByRoom(room._id, 10), // Last 10 meetings
+      db.getTasksByRoom(room._id)
     ]);
     
     return NextResponse.json({ 
       success: true, 
       data: {
-        ...meetingRoom,
+        ...room,
         recentMeetings,
         tasks
       }

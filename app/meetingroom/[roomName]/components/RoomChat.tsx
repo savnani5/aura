@@ -1,15 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import styles from '@/styles/RoomChat.module.css';
-
-interface ChatMessage {
-  id: string;
-  sender: string;
-  message: string;
-  timestamp: Date;
-  type: 'user' | 'system';
-}
 
 interface AiChatMessage {
   id: string;
@@ -29,10 +22,8 @@ interface RoomChatProps {
 }
 
 export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [aiChatHistory, setAiChatHistory] = useState<AiChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -46,57 +37,22 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || isLoading) return;
+    if (!newMessage.trim() || isAiProcessing) return;
 
     const messageText = newMessage.trim();
-    const isAiCommand = messageText.toLowerCase().startsWith('@ohm ') || messageText.toLowerCase().startsWith('@web ');
-
-    if (isAiCommand) {
-      // Handle AI command
-      let aiMessage = messageText;
-      if (messageText.toLowerCase().startsWith('@ohm ')) {
-        aiMessage = messageText.slice(messageText.toLowerCase().indexOf('@ohm ') + 5);
-      } else if (messageText.toLowerCase().startsWith('@web ')) {
-        aiMessage = messageText; // Keep @web prefix for backend processing
-      }
-      await handleAiChat(aiMessage);
+    
+    // Process web search or send directly to AI
+    let aiMessage = messageText;
+    if (messageText.toLowerCase().startsWith('@web ')) {
+      // Keep @web prefix for backend processing
+      aiMessage = messageText;
     } else {
-      // Handle regular chat
-      await sendRegularMessage(messageText);
+      // Send directly to AI without @ohm prefix
+      aiMessage = messageText;
     }
     
+    await handleAiChat(aiMessage);
     setNewMessage('');
-  };
-
-  const sendRegularMessage = async (messageText: string) => {
-    setIsLoading(true);
-
-    // Create new message
-    const message: ChatMessage = {
-      id: Date.now().toString(),
-      sender: currentUser,
-      message: messageText,
-      timestamp: new Date(),
-      type: 'user'
-    };
-
-    // Add message to state
-    setMessages(prev => [...prev, message]);
-
-    try {
-      // TODO: Send message to API
-      console.log('Sending message:', message);
-      
-      // Remove artificial delay - chat messages send instantly
-      // await new Promise(resolve => setTimeout(resolve, 500));
-      
-    } catch (error) {
-      console.error('Error sending message:', error);
-      // Remove message on error
-      setMessages(prev => prev.filter(m => m.id !== message.id));
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleAiChat = async (message: string) => {
@@ -181,8 +137,8 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
     }
   };
 
-  const formatTimestamp = (timestamp: Date | number) => {
-    const date = typeof timestamp === 'number' ? new Date(timestamp) : timestamp;
+  const formatTimestamp = (timestamp: number) => {
+    const date = new Date(timestamp);
     const now = new Date();
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
     
@@ -197,12 +153,6 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
     
     return date.toLocaleDateString();
   };
-
-  const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
-
-  const hasAnyMessages = messages.length > 0 || aiChatHistory.length > 0;
 
   return (
     <div className={styles.roomChat}>
@@ -222,11 +172,11 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
       {/* Messages Container */}
       <div className={styles.messagesContainer}>
         <div className={styles.messagesList}>
-          {!hasAnyMessages ? (
+          {aiChatHistory.length === 0 ? (
             <div className={styles.emptyState}>
-              <p>Get insights about meetings, participants, and decisions. Use <strong>@ohm</strong> for room context or <strong>@web</strong> for web search.</p>
+              <p>Get insights about meetings, participants, and decisions.</p>
               
-              <div className={styles.aiSuggestions}>
+              <div className={styles.aiSuggestions} style={{ marginTop: '0.75rem' }}>
                 <p className={styles.suggestionsTitle}>Popular questions:</p>
                 <div className={styles.suggestionGrid}>
                   {questionSuggestions.map((suggestion, index) => (
@@ -236,7 +186,7 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
                       onClick={async () => {
                         await handleAiChat(suggestion);
                       }}
-                      disabled={isLoading || isAiProcessing}
+                      disabled={isAiProcessing}
                     >
                       {suggestion}
                     </button>
@@ -257,31 +207,13 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
                       onClick={async () => {
                         await handleAiChat(suggestion);
                       }}
-                      disabled={isLoading || isAiProcessing}
+                      disabled={isAiProcessing}
                     >
                       {suggestion}
                     </button>
                   ))}
                 </div>
               </div>
-
-              {/* Regular Chat Messages */}
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`${styles.messageGroup} ${message.sender === currentUser ? styles.ownMessage : ''}`}
-                >
-                  <div className={styles.messageHeader}>
-                    <span className={styles.senderName}>{message.sender}</span>
-                    <span className={styles.timestamp}>
-                      {formatTimestamp(message.timestamp)}
-                    </span>
-                  </div>
-                  <div className={styles.messageText}>
-                    {message.message}
-                  </div>
-                </div>
-              ))}
 
               {/* AI Chat Messages */}
               {aiChatHistory.map((aiMsg) => (
@@ -314,7 +246,7 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
                     </span>
                   </div>
                   <div className={styles.messageText}>
-                    {aiMsg.message}
+                    <ReactMarkdown>{aiMsg.message}</ReactMarkdown>
                     {aiMsg.citations && aiMsg.citations.length > 0 && (
                       <div className={styles.citations}>
                         <p>Sources:</p>
@@ -358,40 +290,17 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
         <div className={styles.commandButtons}>
           <button
             type="button"
-            className={`${styles.commandButton} ${newMessage.toLowerCase().startsWith('@ohm ') ? styles.active : ''}`}
-            onClick={() => {
-              if (newMessage.toLowerCase().startsWith('@ohm ')) {
-                // Remove @ohm prefix if already present
-                setNewMessage(newMessage.slice(5));
-              } else if (newMessage.toLowerCase().startsWith('@web ')) {
-                // Replace @web with @ohm
-                setNewMessage(`@ohm ${newMessage.slice(5)}`);
-              } else {
-                // Add @ohm prefix
-                setNewMessage(`@ohm ${newMessage}`);
-              }
-            }}
-            disabled={isLoading || isAiProcessing}
-            title="AI Assistant"
-          >
-            🤖 AI
-          </button>
-          <button
-            type="button"
             className={`${styles.commandButton} ${newMessage.toLowerCase().startsWith('@web ') ? styles.active : ''}`}
             onClick={() => {
               if (newMessage.toLowerCase().startsWith('@web ')) {
-                // Remove @web prefix if already present
+                // Remove @web prefix
                 setNewMessage(newMessage.slice(5));
-              } else if (newMessage.toLowerCase().startsWith('@ohm ')) {
-                // Replace @ohm with @web
-                setNewMessage(`@web ${newMessage.slice(5)}`);
               } else {
                 // Add @web prefix
                 setNewMessage(`@web ${newMessage}`);
               }
             }}
-            disabled={isLoading || isAiProcessing}
+            disabled={isAiProcessing}
             title="Web Search"
           >
             🌐 Web
@@ -404,28 +313,23 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder={
-              newMessage.toLowerCase().startsWith('@ohm ') || newMessage.toLowerCase().startsWith('@web ') 
-                ? "Ask AI about the room or search the web..." 
-                : "Ask Ohm anything..."
+              newMessage.toLowerCase().startsWith('@web ') 
+                ? "Search the web..." 
+                : "Ask Ohm anything about the room..."
             }
             className={styles.messageInput}
             rows={1}
-            disabled={isLoading || isAiProcessing}
+            disabled={isAiProcessing}
           />
           <button
             type="submit"
-            disabled={!newMessage.trim() || isLoading || isAiProcessing}
+            disabled={!newMessage.trim() || isAiProcessing}
             className={styles.sendButton}
           >
-            {isLoading || isAiProcessing ? (
+            {isAiProcessing ? (
               <div className={styles.spinner} />
-            ) : newMessage.toLowerCase().startsWith('@ohm ') || newMessage.toLowerCase().startsWith('@web ') ? (
-              '🤖'
             ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <line x1="22" y1="2" x2="11" y2="13" stroke="currentColor" strokeWidth="2"/>
-                <polygon points="22,2 15,21 11,13 3,9 22,2" fill="currentColor"/>
-              </svg>
+              '🤖'
             )}
           </button>
         </div>

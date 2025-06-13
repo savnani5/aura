@@ -499,6 +499,7 @@
   border: 1px solid rgba(34, 197, 94, 0.2);
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.1);
   position: relative;
+  padding-bottom: 4rem; /* Add extra padding for join button */
 }
 
 .upcomingMeeting:hover {
@@ -521,6 +522,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   backdrop-filter: blur(4px);
+  z-index: 2;
 }
 
 .upcomingDate {
@@ -535,14 +537,17 @@
 }
 
 .upcomingActions {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  right: 1rem;
+  z-index: 3;
 }
 
 .joinButton {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
   background: rgba(34, 197, 94, 0.9);
   color: white;
@@ -553,10 +558,45 @@
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
+  width: 100%;
 }
 
 .joinButton:hover {
   background: rgba(34, 197, 94, 1);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
+}
+
+.joinButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.joinButton:disabled:hover {
+  background: rgba(34, 197, 94, 0.9);
+  transform: none;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.1);
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid #ffffff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Adjust participant bubbles for upcoming meetings */
+.upcomingMeeting .meetingParticipants {
+  position: absolute;
+  bottom: 4.5rem; /* Position above the join button */
+  right: 1rem;
+  z-index: 2;
 } 

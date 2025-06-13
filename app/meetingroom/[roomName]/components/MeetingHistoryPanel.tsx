@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import styles from '@/styles/MeetingHistoryPanel.module.css';
 import { MeetingModal } from './MeetingModal';
 
@@ -42,11 +43,13 @@ interface MeetingHistoryPanelProps {
 }
 
 export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
+  const router = useRouter();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState('all');
+  const [joiningMeeting, setJoiningMeeting] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMeetings();
@@ -73,12 +76,12 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
       if (data.success) {
         // Transform the data to match our interface
         const transformedMeetings: Meeting[] = data.data.map((meeting: any) => ({
-          id: meeting._id,
+          id: meeting.id || meeting._id,
           roomName: meeting.roomName,
           title: meeting.title || meeting.type,
           type: meeting.type,
-          startTime: meeting.startedAt,
-          endTime: meeting.endedAt,
+          startTime: meeting.startTime || meeting.startedAt,
+          endTime: meeting.endTime || meeting.endedAt,
           duration: meeting.duration,
           isUpcoming: meeting.isUpcoming,
           recurringPattern: meeting.recurringPattern,
@@ -109,6 +112,44 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
       setMeetings([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleJoinMeeting = async (meeting: Meeting) => {
+    setJoiningMeeting(meeting.id);
+    
+    try {
+      // Create meeting record in database
+      const response = await fetch('/api/meetings/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomName: roomName,
+          roomId: roomName, // Use roomName as roomId to find the meeting room
+          title: meeting.title,
+          type: meeting.type,
+          participantName: 'Participant', // Default participant name
+          isUpcoming: true
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Joined meeting:', data);
+      } else {
+        console.warn('Failed to create meeting record, proceeding anyway');
+      }
+      
+      // Navigate to the live video meeting
+      router.push(`/rooms/${roomName}`);
+    } catch (error) {
+      console.error('Error joining meeting:', error);
+      // Still navigate to meeting even if database record creation fails
+      router.push(`/rooms/${roomName}`);
+    } finally {
+      setJoiningMeeting(null);
     }
   };
 
@@ -255,7 +296,7 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
         ) : (
           filteredMeetings.map((meeting) => (
             <div
-              key={meeting.id}
+              key={meeting.isUpcoming ? `upcoming-${meeting.startTime}` : meeting.id}
               className={`${styles.meetingCard} ${meeting.isUpcoming ? styles.upcomingMeeting : ''}`}
               onClick={() => meeting.isUpcoming ? null : setSelectedMeetingId(meeting.id)}
               style={{ cursor: meeting.isUpcoming ? 'default' : 'pointer' }}
@@ -314,13 +355,26 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
               
               {meeting.isUpcoming && (
                 <div className={styles.upcomingActions}>
-                  <button className={styles.joinButton}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                      <path d="M15 3H21V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M21 3L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M21 14V20C21 21.1 20.1 22 19 22H5C3.9 22 3 21.1 3 20V6C3 4.9 3.9 4 5 4H11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    Join Meeting
+                  <button 
+                    className={styles.joinButton} 
+                    onClick={(e) => { e.stopPropagation(); handleJoinMeeting(meeting); }}
+                    disabled={joiningMeeting === meeting.id}
+                  >
+                    {joiningMeeting === meeting.id ? (
+                      <>
+                        <div className={styles.spinner} />
+                        Joining...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <path d="M15 3H21V9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M21 3L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M21 14V20C21 21.1 20.1 22 19 22H5C3.9 22 3 21.1 3 20V6C3.9 4 5 4H11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Join Meeting
+                      </>
+                    )}
                   </button>
                 </div>
               )}

@@ -391,6 +391,10 @@ export default function HomePage() {
       <CreateMeetingPopup 
         isOpen={showCreatePopup}
         onClose={() => setShowCreatePopup(false)}
+        onMeetingCreated={() => {
+          handleMeetingCreated();
+          setShowCreatePopup(false);
+        }}
       />
     </div>
   );

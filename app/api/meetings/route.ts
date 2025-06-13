@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
       // Create meeting room (existing logic)
       
       // Check if room already exists
-      const existingRoom = await db.getMeetingRoom(roomName);
+      const existingRoom = await db.getMeetingRoomByName(roomName);
       if (existingRoom) {
         return NextResponse.json({ 
           success: false, 

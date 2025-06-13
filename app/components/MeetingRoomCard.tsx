@@ -26,6 +26,39 @@ export function MeetingRoomCard({ room }: MeetingRoomCardProps) {
     router.push(`/meetingroom/${room.id}`);
   };
 
+  const handleQuickJoin = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    try {
+      // Create meeting record in database
+      const response = await fetch('/api/meetings/start', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomName: room.id,
+          roomId: room.id,
+          participantName: 'Quick Join User'
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('Quick joined meeting:', data);
+      } else {
+        console.warn('Failed to create meeting record, proceeding anyway');
+      }
+      
+      // Navigate directly to the video meeting
+      router.push(`/rooms/${room.id}`);
+    } catch (error) {
+      console.error('Error quick joining meeting:', error);
+      // Still navigate to meeting even if database record creation fails
+      router.push(`/rooms/${room.id}`);
+    }
+  };
+
   const formatLastActivity = (date?: Date) => {
     if (!date) return 'No recent activity';
     
@@ -148,11 +181,7 @@ export function MeetingRoomCard({ room }: MeetingRoomCardProps) {
         <div className={styles.cardActions}>
           <button 
             className={styles.actionButton}
-            onClick={(e) => {
-              e.stopPropagation();
-              // TODO: Quick join meeting functionality
-              console.log('Quick join meeting:', room.id);
-            }}
+            onClick={handleQuickJoin}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { DatabaseService } from './mongodb';
+import { RAGService } from './rag-service';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -14,16 +15,20 @@ export interface ChatMessage {
 export interface AIChatResponse {
   message: string;
   usedWebSearch?: boolean;
+  usedContext?: boolean;
+  relevantTranscripts?: number;
   citations?: string[];
 }
 
 export class AIChatbot {
   private static instance: AIChatbot;
   private dbService: DatabaseService;
+  private ragService: RAGService;
   private conversationHistory: Map<string, ChatMessage[]> = new Map();
 
   constructor() {
     this.dbService = DatabaseService.getInstance();
+    this.ragService = RAGService.getInstance();
   }
 
   static getInstance(): AIChatbot {
@@ -46,7 +51,9 @@ Help with:
 
 Be brief, direct, and helpful. When users ask about tasks or action items, you can suggest creating tasks with priorities and assignments.
 
-Note: Meeting types are flexible - users can define any custom meeting type name (like "Daily Standup", "Client Review", "Sprint Planning", etc.).`;
+Note: Meeting types are flexible - users can define any custom meeting type name (like "Daily Standup", "Client Review", "Sprint Planning", etc.).
+
+When provided with meeting context (current transcripts or historical context), use it to give more relevant and specific answers. Reference specific participants, decisions, or topics mentioned in the context.`;
   }
 
   // Check if message is a web search request
@@ -69,37 +76,13 @@ Note: Meeting types are flexible - users can define any custom meeting type name
     return message;
   }
 
-  // Get meeting context for AI
-  private async getMeetingContext(roomName: string): Promise<string> {
-    try {
-      const meeting = await this.dbService.getMeeting(roomName);
-      if (!meeting) return '';
-
-      let context = `Current meeting: ${meeting.title || meeting.type}\n`;
-      
-      if (meeting.participants.length > 0) {
-        context += `Participants: ${meeting.participants.map(p => p.name).join(', ')}\n`;
-      }
-
-      if (meeting.tasks.length > 0) {
-        context += `\nCurrent tasks:\n`;
-        meeting.tasks.forEach(task => {
-          context += `- ${task.title} (${task.status}${task.assigneeName ? `, assigned to ${task.assigneeName}` : ''})\n`;
-        });
-      }
-
-      return context;
-    } catch (error) {
-      console.error('Error getting meeting context:', error);
-      return '';
-    }
-  }
-
   // Process AI chat request
   async processChat(
     message: string,
     roomName: string,
-    userName: string
+    userName: string,
+    currentTranscripts?: string,
+    isLiveMeeting: boolean = false
   ): Promise<AIChatResponse> {
     try {
       // Get conversation history for this room
@@ -122,15 +105,39 @@ Note: Meeting types are flexible - users can define any custom meeting type name
         searchQuery = this.extractWebSearchQuery(message);
       }
 
-      // Get meeting context
-      const meetingContext = await this.getMeetingContext(roomName);
+      // Get RAG context (current + historical)
+      const ragContext = await this.ragService.getContextForQuery(
+        roomName,
+        message,
+        currentTranscripts,
+        isLiveMeeting
+      );
+
+      // Get room stats for additional context
+      const roomStats = await this.ragService.getRoomStats(roomName);
 
       // Prepare system prompt with context
       let systemPrompt = this.getSystemPrompt();
       
+      // Add room context
+      if (roomStats.totalMeetings > 0) {
+        systemPrompt += `\n\nROOM CONTEXT:`;
+        systemPrompt += `\nRoom: ${roomName}`;
+        systemPrompt += `\nTotal meetings: ${roomStats.totalMeetings}`;
+        systemPrompt += `\nTotal transcripts: ${roomStats.totalTranscripts}`;
+        if (roomStats.recentMeetingTypes.length > 0) {
+          systemPrompt += `\nMeeting types: ${roomStats.recentMeetingTypes.join(', ')}`;
+        }
+        if (roomStats.frequentParticipants.length > 0) {
+          systemPrompt += `\nFrequent participants: ${roomStats.frequentParticipants.join(', ')}`;
+        }
+      }
+
       // Add meeting context if available
-      if (meetingContext.trim()) {
-        systemPrompt += `\n\nCURRENT MEETING CONTEXT:\n${meetingContext}`;
+      const contextPrompt = this.ragService.formatContextForPrompt(ragContext);
+      if (contextPrompt.trim()) {
+        systemPrompt += `\n\n${contextPrompt}`;
+        systemPrompt += `Use this context to provide more specific and relevant answers. Reference specific participants, decisions, or topics when relevant.`;
       }
 
       // If web search is needed, modify the system prompt
@@ -209,6 +216,8 @@ Note: Meeting types are flexible - users can define any custom meeting type name
       return {
         message: aiResponse,
         usedWebSearch,
+        usedContext: ragContext.usedContext,
+        relevantTranscripts: ragContext.totalRelevantTranscripts,
         citations: citations.length > 0 ? citations : undefined,
       };
 

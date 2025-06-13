@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/mongodb';
 
-// GET /api/meetings/[roomName]/history - Get meeting history for a specific room
+// GET /api/meetings/[roomName]/history - Get meeting history and upcoming meetings for a room
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> }
@@ -13,7 +13,7 @@ export async function GET(
     
     const db = DatabaseService.getInstance();
     
-    // Get the room first to check if it's recurring
+    // Get the meeting room
     const room = await db.getMeetingRoomByName(roomName);
     if (!room) {
       return NextResponse.json({
@@ -22,14 +22,12 @@ export async function GET(
       }, { status: 404 });
     }
     
-    // Build date filter query
+    // Build date query based on filter
     let dateQuery = {};
-    
     if (dateFilter === 'today') {
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-      
       dateQuery = {
         startedAt: {
           $gte: startOfDay,
@@ -39,52 +37,54 @@ export async function GET(
     } else if (dateFilter === 'week') {
       const weekAgo = new Date();
       weekAgo.setDate(weekAgo.getDate() - 7);
-      
       dateQuery = {
-        startedAt: {
-          $gte: weekAgo
-        }
+        startedAt: { $gte: weekAgo }
       };
     }
     
-    // Fetch past meetings
-    const pastMeetings = await db.getMeetingsByRoomWithFilters({
+    // Get historical meetings
+    const historicalMeetings = await db.getMeetingsByRoomWithFilters({
       roomId: room._id,
-      dateQuery: {
-        ...dateQuery,
-        endedAt: { $exists: true } // Only completed meetings
-      },
-      limit: 50
+      limit: 50,
+      dateQuery
     });
     
-    let upcomingMeeting = null;
-    
-    // If it's a recurring room, calculate the next meeting
+    // Calculate upcoming meetings for recurring rooms
+    const upcomingMeetings = [];
     if (room.isRecurring && room.recurringPattern) {
       const nextMeetingDate = db.calculateNextMeetingDate(room);
       if (nextMeetingDate) {
-        upcomingMeeting = {
-          id: 'upcoming',
+        upcomingMeetings.push({
+          id: `upcoming-${nextMeetingDate.getTime()}`,
           roomName: room.roomName,
           title: room.title,
           type: room.type,
           startTime: nextMeetingDate.toISOString(),
           isUpcoming: true,
-          participants: room.participants || [],
-          recurringPattern: room.recurringPattern
-        };
+          recurringPattern: {
+            frequency: room.recurringPattern.frequency || '',
+            day: room.recurringPattern.day || '',
+            time: room.recurringPattern.time || ''
+          },
+          participants: room.participants.map(p => ({
+            name: p.name,
+            joinedAt: nextMeetingDate.toISOString(),
+            isHost: p.role === 'host'
+          }))
+        });
       }
     }
     
-    // Transform past meetings data
-    const transformedMeetings = pastMeetings.map((meeting: any) => ({
+    // Transform historical meetings to match frontend interface
+    const transformedHistoricalMeetings = historicalMeetings.map(meeting => ({
       id: meeting._id,
       roomName: meeting.roomName,
       title: meeting.title || meeting.type,
       type: meeting.type,
-      startTime: meeting.startedAt,
-      endTime: meeting.endedAt,
+      startTime: meeting.startedAt.toISOString(),
+      endTime: meeting.endedAt?.toISOString(),
       duration: meeting.duration,
+      isUpcoming: false,
       participants: meeting.participants || [],
       summary: meeting.summary ? {
         content: meeting.summary.content,
@@ -95,19 +95,15 @@ export async function GET(
       transcripts: meeting.transcripts || []
     }));
     
-    // Combine upcoming and past meetings
-    const allMeetings = upcomingMeeting 
-      ? [upcomingMeeting, ...transformedMeetings]
-      : transformedMeetings;
+    // Combine and sort all meetings (upcoming first, then historical by date)
+    const allMeetings = [
+      ...upcomingMeetings,
+      ...transformedHistoricalMeetings
+    ];
     
     return NextResponse.json({
       success: true,
-      data: allMeetings,
-      meta: {
-        isRecurring: room.isRecurring,
-        hasUpcoming: !!upcomingMeeting,
-        pastMeetingsCount: transformedMeetings.length
-      }
+      data: allMeetings
     });
     
   } catch (error) {
