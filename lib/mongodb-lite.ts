@@ -31,7 +31,7 @@ export async function connectDB(): Promise<mongoose.Mongoose> {
   };
 
   try {
-    cached = await mongoose.connect(MONGODB_URI, opts);
+    cached = await mongoose.connect(MONGODB_URI!, opts);
     return cached;
   } catch (error) {
     cached = null;
@@ -217,7 +217,7 @@ export class FastDB {
   static async getAllRooms(): Promise<IMeetingRoom[]> {
     return this.withConnection(async () => {
       const rooms = await MeetingRoom.find({}).sort({ updatedAt: -1 }).lean();
-      return rooms as IMeetingRoom[];
+      return rooms as unknown as IMeetingRoom[];
     });
   }
 
@@ -238,7 +238,7 @@ export class FastDB {
       } catch (error: any) {
         if (error.code === 11000) {
           const existing = await User.findOne({ clerkId: data.clerkId }).lean();
-          return existing as IUser;
+          return existing as unknown as IUser;
         }
         throw error;
       }
@@ -264,7 +264,7 @@ export class FastDB {
   static async getMeetingsByRoom(roomId: string, limit = 10): Promise<IMeeting[]> {
     return this.withConnection(async () => {
       const meetings = await Meeting.find({ roomId }).sort({ startedAt: -1 }).limit(limit).lean();
-      return meetings as IMeeting[];
+      return meetings as unknown as IMeeting[];
     });
   }
 
@@ -294,7 +294,7 @@ export class FastDB {
   static async getTasksByRoom(roomId: string): Promise<ITask[]> {
     return this.withConnection(async () => {
       const tasks = await Task.find({ roomId }).sort({ createdAt: -1 }).lean();
-      return tasks as ITask[];
+      return tasks as unknown as ITask[];
     });
   }
 
@@ -324,7 +324,7 @@ export class FastDB {
   static async getOneOffMeetings(limit = 10): Promise<IMeeting[]> {
     return this.withConnection(async () => {
       const meetings = await Meeting.find({ isOneOff: true }).sort({ startedAt: -1 }).limit(limit).lean();
-      return meetings as IMeeting[];
+      return meetings as unknown as IMeeting[];
     });
   }
 } 
