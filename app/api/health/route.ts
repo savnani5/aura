@@ -1,32 +1,35 @@
 import { NextResponse } from 'next/server';
-import { DatabaseService } from '@/lib/mongodb';
+import { isDatabaseConnected, connectToDatabase } from '@/lib/mongodb';
 
 // GET /api/health - Health check for database and services
 export async function GET() {
   try {
-    const db = DatabaseService.getInstance();
-    await db.ensureConnection();
+    // Check if already connected
+    const isConnected = await isDatabaseConnected();
+    
+    if (!isConnected) {
+      // Try to connect
+      await connectToDatabase();
+    }
+    
+    // Verify connection again
+    const finalConnectionState = await isDatabaseConnected();
     
     return NextResponse.json({
       success: true,
-      message: 'Ohm API is healthy',
+      connected: finalConnectionState,
       timestamp: new Date().toISOString(),
-      services: {
-        database: 'connected',
-        api: 'running'
-      }
+      environment: process.env.NODE_ENV || 'unknown'
     });
   } catch (error) {
     console.error('Health check failed:', error);
+    
     return NextResponse.json({
       success: false,
-      message: 'Health check failed',
+      connected: false,
       error: error instanceof Error ? error.message : 'Unknown error',
       timestamp: new Date().toISOString(),
-      services: {
-        database: 'disconnected',
-        api: 'running'
-      }
-    }, { status: 503 });
+      environment: process.env.NODE_ENV || 'unknown'
+    }, { status: 500 });
   }
 } 

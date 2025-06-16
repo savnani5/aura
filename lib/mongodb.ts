@@ -9,138 +9,153 @@ if (!MONGODB_URI) {
 interface MongooseCache {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose> | null;
+  isConnecting: boolean;
 }
 
-// Global mongoose cache for Next.js
+// Global mongoose cache for serverless environments
 declare global {
   var mongooseCache: MongooseCache | undefined;
 }
 
-let cached: MongooseCache = global.mongooseCache || { conn: null, promise: null };
+let cached: MongooseCache = global.mongooseCache || { 
+  conn: null, 
+  promise: null,
+  isConnecting: false
+};
 
 if (!global.mongooseCache) {
   global.mongooseCache = cached;
 }
 
-// Connection state tracking
-let connectionState = {
-  isConnecting: false,
-  lastConnected: null as Date | null,
-  connectionAttempts: 0,
-  maxRetries: 3
-};
-
+// Serverless-optimized connection function
 export async function connectToDatabase(): Promise<typeof mongoose> {
-  // Check if we have a healthy connection
+  // If we have a healthy connection, return it immediately
   if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
   }
 
-  // If connection is stale or closed, reset the cache
+  // If connection is in a bad state, reset everything
   if (cached.conn && mongoose.connection.readyState !== 1) {
-    console.log('🔄 Resetting stale MongoDB connection');
+    console.log('🔄 Resetting stale MongoDB connection for serverless');
     cached.conn = null;
     cached.promise = null;
+    cached.isConnecting = false;
   }
 
-  // Prevent multiple simultaneous connection attempts
+  // Prevent concurrent connections in serverless
+  if (cached.isConnecting) {
+    // Wait for the existing connection attempt
+    if (cached.promise) {
+      return await cached.promise;
+    }
+  }
+
+  // If no connection exists, create one
   if (!cached.promise) {
-    connectionState.isConnecting = true;
+    cached.isConnecting = true;
     
+    // Serverless-optimized MongoDB options
     const opts = {
-      bufferCommands: false, // Disable mongoose buffering
+      bufferCommands: false, // Critical for serverless - don't buffer commands
       
-      // Connection timeout settings - more aggressive
-      serverSelectionTimeoutMS: 15000, // 15 seconds (reduced from 30)
-      socketTimeoutMS: 20000, // 20 seconds (reduced from 45) 
-      connectTimeoutMS: 15000, // 15 seconds (reduced from 30)
+      // Aggressive timeouts for serverless (faster failure = better UX)
+      serverSelectionTimeoutMS: 5000, // 5 seconds max to select server
+      socketTimeoutMS: 10000, // 10 seconds socket timeout
+      connectTimeoutMS: 5000, // 5 seconds to connect
       
-      // Connection pool settings - optimized for Next.js
-      maxPoolSize: 5, // Reduced from 10 for better resource management
-      minPoolSize: 1, // Reduced from 2
-      maxIdleTimeMS: 10000, // Reduced idle time to 10 seconds
+      // Minimal connection pool for serverless
+      maxPoolSize: 1, // Single connection per function instance
+      minPoolSize: 0, // No minimum connections
+      maxIdleTimeMS: 5000, // Close idle connections quickly
       
       // Retry settings
       retryWrites: true,
       retryReads: true,
       
-      // Monitoring - more frequent checks
-      heartbeatFrequencyMS: 5000, // Check every 5 seconds
-      
-      // Additional stability options
-      autoIndex: false, // Don't build indexes
-      autoCreate: false, // Don't create collections
+      // Heartbeat for connection health
+      heartbeatFrequencyMS: 30000, // Check every 30 seconds
     };
 
-    console.log(`🔌 Attempting MongoDB connection (attempt ${connectionState.connectionAttempts + 1}/${connectionState.maxRetries})`);
+    console.log('🔌 Connecting to MongoDB (serverless mode)');
     
     cached.promise = mongoose.connect(MONGODB_URI!, opts)
       .then((mongooseInstance) => {
-        connectionState.isConnecting = false;
-        connectionState.lastConnected = new Date();
-        connectionState.connectionAttempts = 0;
-        console.log('✅ MongoDB connected successfully');
-        
-        // Set up connection event listeners
-        mongoose.connection.on('disconnected', () => {
-          console.log('⚠️ MongoDB disconnected');
-          cached.conn = null;
-          cached.promise = null;
-        });
-        
-        mongoose.connection.on('error', (err) => {
-          console.error('❌ MongoDB connection error:', err);
-          cached.conn = null;
-          cached.promise = null;
-        });
-        
-        mongoose.connection.on('reconnected', () => {
-          console.log('🔄 MongoDB reconnected');
-          connectionState.lastConnected = new Date();
-        });
-        
+        cached.isConnecting = false;
+        console.log('✅ MongoDB connected successfully (serverless)');
         return mongooseInstance;
       })
       .catch((error) => {
-        connectionState.isConnecting = false;
-        connectionState.connectionAttempts++;
+        cached.isConnecting = false;
         cached.promise = null;
-        console.error(`❌ MongoDB connection failed (attempt ${connectionState.connectionAttempts}):`, error);
+        console.error('❌ MongoDB connection failed:', error);
         throw error;
       });
   }
 
   try {
     cached.conn = await cached.promise;
+    return cached.conn;
   } catch (e) {
     cached.promise = null;
-    connectionState.isConnecting = false;
+    cached.isConnecting = false;
     throw e;
   }
-
-  return cached.conn;
 }
 
-// Health check function
-export async function checkDatabaseHealth(): Promise<boolean> {
+// Simplified health check for serverless
+export async function isDatabaseConnected(): Promise<boolean> {
   try {
-    if (!cached.conn || mongoose.connection.readyState !== 1) {
-      return false;
-    }
-    
-    // Try a simple ping operation
-    const db = mongoose.connection.db;
-    if (!db) {
-      return false;
-    }
-    
-    await db.admin().ping();
-    return true;
-  } catch (error) {
-    console.error('Database health check failed:', error);
+    return mongoose.connection.readyState === 1;
+  } catch {
     return false;
   }
 }
+
+// Graceful disconnection for serverless cleanup
+export async function disconnectFromDatabase(): Promise<void> {
+  if (cached.conn) {
+    await mongoose.disconnect();
+    cached.conn = null;
+    cached.promise = null;
+    cached.isConnecting = false;
+    console.log('🔌 MongoDB disconnected (serverless cleanup)');
+  }
+}
+
+// Serverless wrapper function that handles common connection issues
+export async function withDatabaseConnection<T>(
+  operation: () => Promise<T>,
+  operationName: string = 'database operation'
+): Promise<T> {
+  try {
+    // Ensure we have a connection
+    await connectToDatabase();
+    
+    // Execute the operation
+    const result = await operation();
+    
+    return result;
+  } catch (error) {
+    console.error(`❌ ${operationName} failed:`, error);
+    
+    // If it's a connection error, reset the cache for next time
+    if (error instanceof Error && (
+      error.message.includes('connection') ||
+      error.message.includes('timeout') ||
+      error.message.includes('ENOTFOUND') ||
+      error.message.includes('ECONNRESET')
+    )) {
+      console.log('🔄 Resetting connection cache due to connection error');
+      cached.conn = null;
+      cached.promise = null;
+      cached.isConnecting = false;
+    }
+    
+    throw error;
+  }
+}
+
+// ============= SCHEMAS & MODELS =============
 
 // User Schema
 const UserSchema = new mongoose.Schema({
@@ -515,42 +530,39 @@ export class DatabaseService {
     return DatabaseService.instance;
   }
 
-  async ensureConnection(retries: number = 3): Promise<void> {
+  async ensureConnection(retries: number = 2): Promise<void> {
+    // In serverless, we want fast failure and retry
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        // First check if we have a healthy connection
-        const isHealthy = await checkDatabaseHealth();
-        if (isHealthy) {
-          return; // Connection is healthy, no need to reconnect
+        // Check if already connected
+        if (await isDatabaseConnected()) {
+          return;
         }
         
-        // If not healthy, try to establish a new connection
+        // Try to establish connection
         await connectToDatabase();
         
-        // Verify the new connection is working
-        const isNewConnectionHealthy = await checkDatabaseHealth();
-        if (isNewConnectionHealthy) {
-          return; // Success, exit the retry loop
+        // Verify connection is working
+        if (await isDatabaseConnected()) {
+          return; // Success
         } else {
-          throw new Error('Connection established but health check failed');
+          throw new Error('Connection established but verification failed');
         }
       } catch (error) {
         console.error(`❌ Database connection attempt ${attempt}/${retries} failed:`, error);
         
-        // Reset connection cache on failure
+        // Clear cache on failure for fresh retry
         cached.conn = null;
         cached.promise = null;
+        cached.isConnecting = false;
         
         if (attempt === retries) {
-          throw new Error(`Failed to connect to database after ${retries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          throw new Error(`Serverless DB connection failed after ${retries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
         
-        // Wait before retrying (exponential backoff with jitter)
-        const baseDelay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-        const jitter = Math.random() * 1000; // Add up to 1 second of random delay
-        const delay = baseDelay + jitter;
-        
-        console.log(`⏳ Retrying database connection in ${Math.round(delay)}ms...`);
+        // Short delay for serverless (we want fast failure)
+        const delay = attempt * 500; // 500ms, 1000ms
+        console.log(`⏳ Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -559,31 +571,32 @@ export class DatabaseService {
   // ===== MEETING ROOM OPERATIONS =====
   
   async createMeetingRoom(roomData: Partial<IMeetingRoom>): Promise<IMeetingRoom> {
-    await this.ensureConnection();
-    const room = new MeetingRoom(roomData);
-    const savedRoom = await room.save();
-    return savedRoom.toObject() as IMeetingRoom;
+    return withDatabaseConnection(async () => {
+      const room = new MeetingRoom(roomData);
+      const savedRoom = await room.save();
+      return savedRoom.toObject() as IMeetingRoom;
+    }, 'createMeetingRoom');
   }
 
   async getMeetingRooms(): Promise<IMeetingRoom[]> {
-    await this.ensureConnection();
-    
-    const rooms = await MeetingRoom.find({}).lean();
-    return rooms as unknown as IMeetingRoom[];
+    return withDatabaseConnection(async () => {
+      const rooms = await MeetingRoom.find({}).lean();
+      return rooms as unknown as IMeetingRoom[];
+    }, 'getMeetingRooms');
   }
   
   async getMeetingRoom(roomId: string): Promise<IMeetingRoom | null> {
-    await this.ensureConnection();
-    
-    const room = await MeetingRoom.findById(roomId).lean();
-    return room as IMeetingRoom | null;
+    return withDatabaseConnection(async () => {
+      const room = await MeetingRoom.findById(roomId).lean();
+      return room as IMeetingRoom | null;
+    }, 'getMeetingRoom');
   }
   
   async getMeetingRoomByName(roomName: string): Promise<IMeetingRoom | null> {
-    await this.ensureConnection();
-    
-    const room = await MeetingRoom.findOne({ roomName }).lean();
-    return room as IMeetingRoom | null;
+    return withDatabaseConnection(async () => {
+      const room = await MeetingRoom.findOne({ roomName }).lean();
+      return room as IMeetingRoom | null;
+    }, 'getMeetingRoomByName');
   }
 
   async getAllMeetingRooms(limit?: number): Promise<IMeetingRoom[]> {
@@ -755,38 +768,38 @@ export class DatabaseService {
     joinedAt: Date;
     lastActive: Date;
   }): Promise<IUser> {
-    await this.ensureConnection();
-    
-    try {
-      const user = new User(userData);
-      const savedUser = await user.save();
-      return savedUser.toObject() as IUser;
-    } catch (error: any) {
-      // Handle duplicate key error (E11000)
-      if (error.code === 11000 && error.keyPattern?.clerkId) {
-        console.log(`User with clerkId ${userData.clerkId} already exists, returning existing user`);
-        // Return the existing user instead of throwing an error
-        const existingUser = await User.findOne({ clerkId: userData.clerkId }).lean();
-        if (existingUser) {
-          return existingUser as unknown as IUser;
+    return withDatabaseConnection(async () => {
+      try {
+        const user = new User(userData);
+        const savedUser = await user.save();
+        return savedUser.toObject() as IUser;
+      } catch (error: any) {
+        // Handle duplicate key error (E11000)
+        if (error.code === 11000 && error.keyPattern?.clerkId) {
+          console.log(`User with clerkId ${userData.clerkId} already exists, returning existing user`);
+          // Return the existing user instead of throwing an error
+          const existingUser = await User.findOne({ clerkId: userData.clerkId }).lean();
+          if (existingUser) {
+            return existingUser as unknown as IUser;
+          }
         }
+        
+        console.error('Error creating user:', error);
+        throw error;
       }
-      
-      console.error('Error creating user:', error);
-      throw error;
-    }
+    }, 'createUser');
   }
 
   async getUserByClerkId(clerkId: string): Promise<IUser | null> {
-    await this.ensureConnection();
-    
-    try {
-      const user = await User.findOne({ clerkId }).lean();
-      return user as IUser | null;
-    } catch (error) {
-      console.error('Error finding user by clerkId:', error);
-      return null;
-    }
+    return withDatabaseConnection(async () => {
+      try {
+        const user = await User.findOne({ clerkId }).lean();
+        return user as IUser | null;
+      } catch (error) {
+        console.error('Error finding user by clerkId:', error);
+        return null;
+      }
+    }, 'getUserByClerkId');
   }
 
   async updateUser(clerkId: string, updates: Partial<IUser>): Promise<IUser | null> {
