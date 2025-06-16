@@ -2,7 +2,8 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { generateRoomId } from '@/lib/client-utils';
+import { useUser } from '@clerk/nextjs';
+import toast from 'react-hot-toast';
 import styles from '@/styles/CreateMeetingPopup.module.css';
 
 interface CreateMeetingPopupProps {
@@ -20,10 +21,6 @@ interface MeetingRoomForm {
   frequency: string;
   recurringDay: string;
   recurringTime: string;
-}
-
-interface InstantMeetingForm {
-  name: string;
 }
 
 const MEETING_TYPE_SUGGESTIONS = [
@@ -63,13 +60,8 @@ const TIME_SLOTS = [
 
 export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: CreateMeetingPopupProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'instant' | 'create'>('instant');
+  const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
-  
-  // Form state for instant meeting
-  const [instantForm, setInstantForm] = useState<InstantMeetingForm>({
-    name: ''
-  });
   
   // Form state for creating meeting room
   const [form, setForm] = useState<MeetingRoomForm>({
@@ -90,60 +82,6 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
 
-  const handleInstantMeeting = async () => {
-    setIsLoading(true);
-    
-    try {
-      const roomId = generateRoomId();
-      const meetingName = instantForm.name.trim() || 'Instant Meeting';
-      
-      // Create one-off meeting record in database
-      const response = await fetch('/api/meetings', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          roomName: roomId,
-          title: meetingName,
-          type: 'Instant Meeting',
-          isRecurring: false, // This creates a one-off meeting
-          participantName: 'Host' // Default participant name
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('One-off meeting created:', data);
-        
-        // Notify parent component that a meeting was created
-        onMeetingCreated?.();
-      } else {
-        console.warn('Failed to create meeting record, proceeding anyway');
-      }
-
-      // Navigate to LiveKit room
-      router.push(`/rooms/${roomId}?name=${encodeURIComponent(meetingName)}`);
-      
-    } catch (error) {
-      console.error('Error creating instant meeting:', error);
-      // Fallback: navigate without database record
-      const roomId = generateRoomId();
-      const meetingName = instantForm.name.trim();
-      
-      // Still notify parent even on fallback
-      onMeetingCreated?.();
-      
-      if (meetingName) {
-        router.push(`/rooms/${roomId}?name=${encodeURIComponent(meetingName)}`);
-      } else {
-        router.push(`/rooms/${roomId}`);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim() || !form.type.trim()) return;
@@ -151,14 +89,44 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
     setIsLoading(true);
     
     try {
-      // Filter out empty participants
+      // Filter out empty participants and add current user as host
       const validParticipants = form.participants.filter(p => p.trim());
       
-      // Generate room ID from title (you can modify this logic)
+      // Add current user as the host/creator
+      const allParticipants = [
+        {
+          email: user?.emailAddresses[0]?.emailAddress || '',
+          name: user?.fullName || user?.firstName || 'Host',
+          role: 'host'
+        },
+        // Add other participants as regular participants
+        ...validParticipants.map(email => ({
+          email: email.trim(),
+          name: '', // Will be filled when they join
+          role: 'participant'
+        }))
+      ];
+      
+      // Generate room ID from title
       const roomId = form.title.toLowerCase()
         .replace(/[^a-z0-9\s]/g, '')
         .replace(/\s+/g, '-')
         .substring(0, 30) + '-' + Date.now().toString(36);
+
+      const requestData = {
+        roomName: roomId,
+        title: form.title.trim(),
+        type: form.type.trim(),
+        isRecurring: true, // Meeting rooms are persistent/recurring
+        participants: allParticipants,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        frequency: form.frequency,
+        recurringDay: form.recurringDay,
+        recurringTime: form.recurringTime
+      };
+
+      console.log('Creating meeting room with data:', requestData);
 
       // Create meeting room via API
       const response = await fetch('/api/meetings', {
@@ -166,35 +134,40 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          roomName: roomId,
-          title: form.title.trim(),
-          type: form.type.trim(),
-          isRecurring: true, // Meeting rooms are persistent/recurring
-          participants: validParticipants,
-          startDate: form.startDate,
-          endDate: form.endDate,
-          frequency: form.frequency,
-          recurringDay: form.recurringDay,
-          recurringTime: form.recurringTime
-        }),
+        body: JSON.stringify(requestData),
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create meeting room');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('API Error:', response.status, errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to create meeting room`);
       }
 
       const data = await response.json();
       console.log('Meeting room created:', data);
 
-      // Notify parent component that a meeting room was created
+      // Show success message
+      toast.success(`Meeting room "${form.title}" created successfully! You can now see it in your meeting rooms.`);
+
+      // Reset form for next use
+      setForm({
+        title: '',
+        type: '',
+        participants: [''],
+        startDate: '',
+        endDate: '',
+        frequency: 'daily',
+        recurringDay: '',
+        recurringTime: ''
+      });
+
+      // Notify parent component that a meeting room was created (this will refresh the data and close popup)
       onMeetingCreated?.();
 
-      // Navigate to the meeting room
-      router.push(`/meetingroom/${roomId}`);
     } catch (error) {
       console.error('Error creating meeting room:', error);
-      alert('Failed to create meeting room. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create meeting room. Please try again.';
+      toast.error(errorMessage);
       setIsLoading(false);
     }
   };
@@ -241,11 +214,14 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
     }));
   };
 
+  // Get user display name for host
+  const userDisplayName = user?.fullName || user?.firstName || 'You';
+
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.popup} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
-          <h2 className={styles.title}>Start Meeting</h2>
+          <h2 className={styles.title}>Create Meeting Room</h2>
           <button onClick={onClose} className={styles.closeButton}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -254,69 +230,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
           </button>
         </div>
 
-        <div className={styles.tabs}>
-          <button 
-            className={`${styles.tab} ${activeTab === 'instant' ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab('instant')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-              <polygon points="10,8 16,12 10,16" fill="currentColor"/>
-            </svg>
-            Instant Meeting
-          </button>
-          <button 
-            className={`${styles.tab} ${activeTab === 'create' ? styles.tabActive : ''}`}
-            onClick={() => setActiveTab('create')}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" stroke="currentColor" strokeWidth="2"/>
-              <polyline points="14,2 14,8 20,8" stroke="currentColor" strokeWidth="2"/>
-            </svg>
-            Create Meeting Room
-          </button>
-        </div>
-
         <div className={styles.content}>
-          {activeTab === 'instant' ? (
-            <div className={styles.instantTab}>
-              <div className={styles.instantIcon}>
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                  <polygon points="10,8 16,12 10,16" fill="currentColor"/>
-                </svg>
-              </div>
-              <h3 className={styles.instantTitle}>Start Instant Meeting</h3>
-              <p className={styles.instantDescription}>
-                Create a quick video conference room that you can share with others
-              </p>
-              
-              <div className={styles.instantForm}>
-                <div className={styles.formGroup}>
-                  <label htmlFor="meetingName" className={styles.label}>
-                    Meeting Name (Optional)
-                  </label>
-                  <input
-                    id="meetingName"
-                    type="text"
-                    value={instantForm.name}
-                    onChange={(e) => setInstantForm(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="e.g., Quick Team Sync"
-                    className={styles.input}
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-              
-              <button 
-                onClick={handleInstantMeeting}
-                disabled={isLoading}
-                className={styles.primaryButton}
-              >
-                {isLoading ? 'Starting...' : 'Start Meeting Now'}
-              </button>
-            </div>
-          ) : (
             <form onSubmit={handleCreateRoom} className={styles.createForm}>
               <div className={styles.formGroup}>
                 <label htmlFor="title" className={styles.label}>
@@ -474,6 +388,26 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
                   Participants
                 </label>
                 <div className={styles.participantsList}>
+                {/* Current user as host/creator - always first */}
+                <div className={styles.participantRow}>
+                  <div className={styles.hostParticipant}>
+                    <input
+                      type="text"
+                      value={`${userDisplayName} (Host)`}
+                      className={`${styles.input} ${styles.hostInput}`}
+                      disabled
+                      readOnly
+                    />
+                    <div className={styles.hostBadge}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>
+                      </svg>
+                      Host
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Additional participants */}
                   {form.participants.map((participant, index) => (
                     <div key={index} className={styles.participantRow}>
                       <input
@@ -529,7 +463,6 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
                 </button>
               </div>
             </form>
-          )}
         </div>
       </div>
     </div>

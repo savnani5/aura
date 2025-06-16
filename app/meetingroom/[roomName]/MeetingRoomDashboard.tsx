@@ -2,10 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import { MeetingHistoryPanel } from './components/MeetingHistoryPanel';
 import { TaskBoard } from './components/TaskBoard';
 import RoomChat from './components/RoomChat';
 import { MeetingPrep } from './components/MeetingPrep';
+import { RoomSettings } from './components/RoomSettings';
+import { MeetingModal } from './components/MeetingModal';
 import styles from '@/styles/MeetingRoomDashboard.module.css';
 
 interface MeetingRoom {
@@ -17,6 +20,15 @@ interface MeetingRoom {
   isRecurring: boolean;
   createdAt: string;
   updatedAt: string;
+  participants: Array<{
+    _id?: string;
+    userId?: string;
+    name: string;
+    email: string;
+    role: string;
+    avatar?: string;
+    linkedAt?: string;
+  }>;
 }
 
 interface Participant {
@@ -34,14 +46,16 @@ interface MeetingRoomDashboardProps {
 
 export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
   const router = useRouter();
+  const { user, isLoaded } = useUser();
   const [room, setRoom] = useState<MeetingRoom | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activePanel, setActivePanel] = useState<'prep' | 'history' | 'tasks'>('prep');
-
-  // Mock current user for demo purposes
-  const currentUser = 'Demo User';
+  const [activePanel, setActivePanel] = useState<'prep' | 'history' | 'tasks' | 'settings'>('prep');
+  const [isCurrentUserHost, setIsCurrentUserHost] = useState(false);
+  
+  // Modal state for auto-opening after meeting ends
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -51,8 +65,45 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
   const displayParticipants = onlineParticipants.slice(0, 4);
   const remainingCount = onlineParticipants.length - displayParticipants.length;
 
+  // Function to refresh room data after settings update
+  const refreshRoomData = async () => {
+    try {
+      const roomResponse = await fetch(`/api/meetings/${roomName}`);
+      if (roomResponse.ok) {
+        const roomData = await roomResponse.json();
+        if (roomData.success) {
+          setRoom(roomData.data);
+          
+          // Update participants and check if current user is host
+          if (roomData.data.participants && user?.emailAddresses?.[0]?.emailAddress) {
+            const currentUserEmail = user.emailAddresses[0].emailAddress;
+            const transformedParticipants: Participant[] = roomData.data.participants.map((p: any, index: number) => ({
+              id: p._id || `participant-${index}`,
+              name: p.name,
+              email: p.email,
+              avatar: p.avatar,
+              isOnline: true,
+              isHost: p.role === 'host'
+            }));
+            setParticipants(transformedParticipants);
+            
+            // Check if current user is host by comparing email addresses
+            const currentUserParticipant = roomData.data.participants.find(
+              (p: any) => p.email === currentUserEmail && p.role === 'host'
+            );
+            setIsCurrentUserHost(!!currentUserParticipant);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error refreshing room data:', err);
+    }
+  };
+
   // Fetch room data and participants
   useEffect(() => {
+    if (!isLoaded || !user) return;
+
     const fetchData = async () => {
       try {
         // Fetch room data
@@ -68,17 +119,24 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
         
         setRoom(roomData.data);
         
-        // Transform room participants to match our interface
-        if (roomData.data.participants) {
+        // Transform room participants to match our interface and check if current user is host
+        if (roomData.data.participants && user?.emailAddresses?.[0]?.emailAddress) {
+          const currentUserEmail = user.emailAddresses[0].emailAddress;
           const transformedParticipants: Participant[] = roomData.data.participants.map((p: any, index: number) => ({
             id: p._id || `participant-${index}`,
             name: p.name,
-            email: p.email || `${p.name.toLowerCase().replace(' ', '.')}@example.com`,
+            email: p.email,
             avatar: p.avatar,
             isOnline: true, // Assume all participants are online for demo
             isHost: p.role === 'host'
           }));
           setParticipants(transformedParticipants);
+          
+          // Check if current user is host by comparing email addresses
+          const currentUserParticipant = roomData.data.participants.find(
+            (p: any) => p.email === currentUserEmail && p.role === 'host'
+          );
+          setIsCurrentUserHost(!!currentUserParticipant);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load room');
@@ -88,13 +146,38 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
     };
 
     fetchData();
-  }, [roomName]);
+  }, [roomName, user, isLoaded]);
+
+  // Check for auto-open meeting modal after meeting ends
+  useEffect(() => {
+    const checkForAutoOpenModal = () => {
+      const meetingIdToOpen = localStorage.getItem('open-meeting-modal');
+      if (meetingIdToOpen) {
+        console.log('🔍 Auto-opening meeting modal for meeting ID:', meetingIdToOpen);
+        setSelectedMeetingId(meetingIdToOpen);
+        // Clear the flag so it doesn't auto-open again
+        localStorage.removeItem('open-meeting-modal');
+        // Also switch to history panel to make it clear what happened
+        setActivePanel('history');
+      }
+    };
+
+    // Check immediately when component mounts
+    if (isLoaded && user) {
+      checkForAutoOpenModal();
+    }
+
+    // Also check periodically in case the modal flag is set while this page is open
+    const interval = setInterval(checkForAutoOpenModal, 1000);
+    return () => clearInterval(interval);
+  }, [isLoaded, user]);
 
   const handleBackToHome = () => {
     router.push('/');
   };
 
-  if (loading) {
+  // Show loading while Clerk is loading
+  if (!isLoaded || loading) {
     return (
       <div className={styles.container}>
         <div className={styles.loadingState}>
@@ -103,6 +186,12 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
         </div>
       </div>
     );
+  }
+
+  // Redirect to sign in if not authenticated
+  if (!user) {
+    router.push('/');
+    return null;
   }
 
   if (error || !room) {
@@ -146,6 +235,9 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
               <div className={styles.roomMeta}>
                 <span className={styles.roomType}>{room.type}</span>
                 <span className={styles.roomName}>#{roomName}</span>
+                {isCurrentUserHost && (
+                  <span className={styles.hostBadge}>Host</span>
+                )}
               </div>
             </div>
           </div>
@@ -210,6 +302,20 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
                 </svg>
                 History
               </button>
+
+              {/* Only show Settings tab if current user is host */}
+              {isCurrentUserHost && (
+                <button
+                  onClick={() => setActivePanel('settings')}
+                  className={`${styles.navButton} ${activePanel === 'settings' ? styles.navButtonActive : ''}`}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.07a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" strokeWidth="2"/>
+                  </svg>
+                  Settings
+                </button>
+              )}
             </nav>
             
             {/* Compact Participants below navigation */}
@@ -220,7 +326,10 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
             {activePanel === 'prep' && (
               <div className={styles.meetingPrepLayout}>
                 <div className={styles.chatSection}>
-                  <RoomChat roomName={roomName} currentUser={currentUser} />
+                  <RoomChat 
+                    roomName={roomName} 
+                    currentUser={user.fullName || user.firstName || 'Anonymous'} 
+                  />
                 </div>
                 <div className={styles.prepSection}>
                   <MeetingPrep roomName={roomName} />
@@ -229,9 +338,25 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
             )}
             {activePanel === 'tasks' && <TaskBoard roomName={roomName} />}
             {activePanel === 'history' && <MeetingHistoryPanel roomName={roomName} />}
+            {activePanel === 'settings' && room && isCurrentUserHost && (
+              <RoomSettings 
+                room={room} 
+                roomName={roomName}
+                onRoomUpdated={refreshRoomData}
+              />
+            )}
           </div>
         </div>
       </main>
+      
+      {/* Meeting Modal - auto-opens after meeting ends */}
+      {selectedMeetingId && (
+        <MeetingModal
+          meetingId={selectedMeetingId}
+          isOpen={!!selectedMeetingId}
+          onClose={() => setSelectedMeetingId(null)}
+        />
+      )}
     </div>
   );
 } 

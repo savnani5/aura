@@ -36,7 +36,32 @@ export class RAGService {
   }
 
   /**
-   * Get context for AI chat - combines current transcripts with historical context
+   * Detect if query requires comprehensive data or targeted search
+   */
+  private detectQueryType(query: string): 'comprehensive' | 'targeted' {
+    const comprehensiveKeywords = [
+      'summarize', 'summary', 'overview', 'all', 'everything', 'comprehensive',
+      'recurring', 'frequent', 'patterns', 'trends', 'overall', 'general',
+      'action items', 'decisions', 'conclusions', 'outcomes', 'results',
+      'discussions', 'topics', 'agenda', 'meetings', 'previous',
+      'history', 'past', 'recent', 'lately', 'so far'
+    ];
+
+    const queryLower = query.toLowerCase();
+    
+    // Check for comprehensive keywords
+    const hasComprehensiveKeywords = comprehensiveKeywords.some(keyword => 
+      queryLower.includes(keyword)
+    );
+
+    // Check for question words that typically need broad context
+    const hasBroadQuestionWords = /^(what (are|were|have)|how (many|much)|list|show|tell me about)/i.test(query);
+
+    return hasComprehensiveKeywords || hasBroadQuestionWords ? 'comprehensive' : 'targeted';
+  }
+
+  /**
+   * Get context for query with appropriate retrieval strategy
    */
   async getContextForQuery(
     roomName: string,
@@ -45,12 +70,11 @@ export class RAGService {
     isLiveMeeting: boolean = false
   ): Promise<RAGContext> {
     try {
-      // Generate embedding for the user query
-      const queryEmbedding = await this.embeddingsService.generateEmbedding(query);
-
-      // Get room information
+      console.log(`🔍 RAG Context Request - Room: ${roomName}, Query: "${query}"`);
+      
       const room = await this.dbService.getMeetingRoomByName(roomName);
       if (!room) {
+        console.log(`❌ Room not found: ${roomName}`);
         return {
           currentTranscripts: [],
           historicalContext: [],
@@ -59,9 +83,17 @@ export class RAGService {
         };
       }
 
-      // Process current transcripts if provided (for live meetings)
+      // Detect query type
+      const queryType = this.detectQueryType(query);
+      console.log(`🎯 Query type detected: ${queryType}`);
+
+      // Generate embedding for query
+      const queryEmbedding = await this.embeddingsService.generateEmbedding(query);
+
+      // Process current transcripts if any
       const currentTranscriptContext: TranscriptContext[] = [];
       if (currentTranscripts && isLiveMeeting) {
+        console.log(`🎙️ Processing current transcripts: "${currentTranscripts.substring(0, 100)}..."`);
         const lines = currentTranscripts.split('\n').filter(line => line.trim());
         for (const line of lines) {
           const match = line.match(/^([^:]+):\s*(.+)$/);
@@ -75,13 +107,18 @@ export class RAGService {
             });
           }
         }
+        console.log(`📝 Processed ${currentTranscriptContext.length} current transcript entries`);
+      } else {
+        console.log(`🚫 No current transcripts - currentTranscripts: ${!!currentTranscripts}, isLiveMeeting: ${isLiveMeeting}`);
       }
 
       // Get historical meetings for this room
       const historicalMeetings = await this.dbService.getMeetingsByRoomWithFilters({
         roomId: room._id,
-        limit: 50, // Get recent meetings
+        limit: queryType === 'comprehensive' ? 20 : 10, // More meetings for comprehensive queries
       });
+
+      console.log(`📚 Found ${historicalMeetings.length} historical meetings`);
 
       // Extract all historical transcripts with embeddings
       const historicalTranscripts: Array<{
@@ -109,24 +146,95 @@ export class RAGService {
         }
       }
 
-      // Find most relevant historical context
-      const relevantHistorical = this.embeddingsService.findMostSimilar(
-        queryEmbedding.embedding,
-        historicalTranscripts,
-        5, // Top 5 most relevant
-        0.6 // Lower threshold for more context
-      );
+      console.log(`📝 Found ${historicalTranscripts.length} historical transcripts with embeddings`);
 
-      const historicalContext = relevantHistorical.map(item => ({
-        ...item.metadata,
-        similarity: item.similarity,
-      }));
+      let historicalContext: TranscriptContext[] = [];
 
+      if (queryType === 'comprehensive') {
+        // For comprehensive queries, include more context with lower threshold
+        console.log(`🌐 Using comprehensive retrieval strategy`);
+        
+        // Get more results with a lower threshold for comprehensive coverage
+        const relevantHistorical = this.embeddingsService.findMostSimilar(
+          queryEmbedding.embedding,
+          historicalTranscripts,
+          25, // More results for comprehensive queries
+          0.3  // Lower threshold to capture more relevant content
+        );
+
+        // If we still don't get enough results, include recent transcripts
+        if (relevantHistorical.length < 15) {
+          console.log(`📈 Comprehensive query needs more context, including recent transcripts`);
+          
+          // Sort by recency and include recent transcripts even with lower similarity
+          const recentTranscripts = historicalTranscripts
+            .map(item => ({
+              ...item.metadata,
+              similarity: this.embeddingsService.calculateCosineSimilarity(
+                queryEmbedding.embedding, 
+                item.embedding
+              ),
+            }))
+            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+            .slice(0, 20); // Top 20 most recent
+
+          // Combine similarity-based and recency-based results
+          const combinedResults = new Map();
+          
+          // Add similarity-based results first
+          relevantHistorical.forEach(item => {
+            combinedResults.set(`${item.metadata.meetingId}-${item.metadata.timestamp}`, {
+              ...item.metadata,
+              similarity: item.similarity,
+            });
+          });
+
+          // Add recent results if not already included
+          recentTranscripts.forEach(item => {
+            const key = `${item.meetingId}-${item.timestamp}`;
+            if (!combinedResults.has(key) && combinedResults.size < 25) {
+              combinedResults.set(key, item);
+            }
+          });
+
+          historicalContext = Array.from(combinedResults.values());
+        } else {
+          historicalContext = relevantHistorical.map(item => ({
+            ...item.metadata,
+            similarity: item.similarity,
+          }));
+        }
+
+      } else {
+        // For targeted queries, use higher threshold and fewer results
+        console.log(`🎯 Using targeted retrieval strategy`);
+        
+        const relevantHistorical = this.embeddingsService.findMostSimilar(
+          queryEmbedding.embedding,
+          historicalTranscripts,
+          8, // Fewer, more relevant results
+          0.5 // Higher threshold for more precise matches
+        );
+
+        historicalContext = relevantHistorical.map(item => ({
+          ...item.metadata,
+          similarity: item.similarity,
+        }));
+      }
+
+      console.log(`✅ Retrieved ${historicalContext.length} relevant historical transcripts`);
+      console.log(`📋 Current transcript context: ${currentTranscriptContext.length} entries`);
+      
+      const totalRelevantTranscripts = historicalContext.length + currentTranscriptContext.length;
+      const usedContext = historicalContext.length > 0 || currentTranscriptContext.length > 0;
+      
+      console.log(`🎯 Total relevant transcripts: ${totalRelevantTranscripts}, Used context: ${usedContext}`);
+      
       return {
         currentTranscripts: currentTranscriptContext,
         historicalContext,
-        totalRelevantTranscripts: historicalContext.length,
-        usedContext: historicalContext.length > 0 || currentTranscriptContext.length > 0,
+        totalRelevantTranscripts,
+        usedContext,
       };
 
     } catch (error) {

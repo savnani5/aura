@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { DatabaseService } from '@/lib/mongodb';
 
 // GET /api/tasks?roomId=xxx - Get tasks for a specific room
 export async function GET(request: NextRequest) {
   try {
+    // Check authentication
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unauthorized' 
+      }, { status: 401 });
+    }
+    
     const { searchParams } = new URL(request.url);
     const roomId = searchParams.get('roomId');
     
@@ -13,7 +23,7 @@ export async function GET(request: NextRequest) {
         error: 'roomId parameter is required' 
       }, { status: 400 });
     }
-    
+
     const db = DatabaseService.getInstance();
     const tasks = await db.getTasksByRoom(roomId);
     
@@ -33,6 +43,15 @@ export async function GET(request: NextRequest) {
 // POST /api/tasks - Create a new task
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unauthorized' 
+      }, { status: 401 });
+    }
+    
     const body = await request.json();
     const { 
       roomId, 
@@ -88,6 +107,15 @@ export async function POST(request: NextRequest) {
 // PUT /api/tasks - Update a task
 export async function PUT(request: NextRequest) {
   try {
+    // Check authentication
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Unauthorized' 
+      }, { status: 401 });
+    }
+    
     const body = await request.json();
     const { taskId, ...updates } = body;
 

@@ -22,33 +22,129 @@ if (!global.mongooseCache) {
   global.mongooseCache = cached;
 }
 
+// Connection state tracking
+let connectionState = {
+  isConnecting: false,
+  lastConnected: null as Date | null,
+  connectionAttempts: 0,
+  maxRetries: 3
+};
+
 export async function connectToDatabase(): Promise<typeof mongoose> {
-  if (cached.conn) {
+  // Check if we have a healthy connection
+  if (cached.conn && mongoose.connection.readyState === 1) {
     return cached.conn;
   }
 
+  // If connection is stale or closed, reset the cache
+  if (cached.conn && mongoose.connection.readyState !== 1) {
+    console.log('🔄 Resetting stale MongoDB connection');
+    cached.conn = null;
+    cached.promise = null;
+  }
+
+  // Prevent multiple simultaneous connection attempts
   if (!cached.promise) {
+    connectionState.isConnecting = true;
+    
     const opts = {
-      bufferCommands: false,
+      bufferCommands: false, // Disable mongoose buffering
+      
+      // Connection timeout settings - more aggressive
+      serverSelectionTimeoutMS: 15000, // 15 seconds (reduced from 30)
+      socketTimeoutMS: 20000, // 20 seconds (reduced from 45) 
+      connectTimeoutMS: 15000, // 15 seconds (reduced from 30)
+      
+      // Connection pool settings - optimized for Next.js
+      maxPoolSize: 5, // Reduced from 10 for better resource management
+      minPoolSize: 1, // Reduced from 2
+      maxIdleTimeMS: 10000, // Reduced idle time to 10 seconds
+      
+      // Retry settings
+      retryWrites: true,
+      retryReads: true,
+      
+      // Monitoring - more frequent checks
+      heartbeatFrequencyMS: 5000, // Check every 5 seconds
+      
+      // Additional stability options
+      autoIndex: false, // Don't build indexes
+      autoCreate: false, // Don't create collections
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI!, opts);
+    console.log(`🔌 Attempting MongoDB connection (attempt ${connectionState.connectionAttempts + 1}/${connectionState.maxRetries})`);
+    
+    cached.promise = mongoose.connect(MONGODB_URI!, opts)
+      .then((mongooseInstance) => {
+        connectionState.isConnecting = false;
+        connectionState.lastConnected = new Date();
+        connectionState.connectionAttempts = 0;
+        console.log('✅ MongoDB connected successfully');
+        
+        // Set up connection event listeners
+        mongoose.connection.on('disconnected', () => {
+          console.log('⚠️ MongoDB disconnected');
+          cached.conn = null;
+          cached.promise = null;
+        });
+        
+        mongoose.connection.on('error', (err) => {
+          console.error('❌ MongoDB connection error:', err);
+          cached.conn = null;
+          cached.promise = null;
+        });
+        
+        mongoose.connection.on('reconnected', () => {
+          console.log('🔄 MongoDB reconnected');
+          connectionState.lastConnected = new Date();
+        });
+        
+        return mongooseInstance;
+      })
+      .catch((error) => {
+        connectionState.isConnecting = false;
+        connectionState.connectionAttempts++;
+        cached.promise = null;
+        console.error(`❌ MongoDB connection failed (attempt ${connectionState.connectionAttempts}):`, error);
+        throw error;
+      });
   }
 
   try {
     cached.conn = await cached.promise;
   } catch (e) {
     cached.promise = null;
+    connectionState.isConnecting = false;
     throw e;
   }
 
   return cached.conn;
 }
 
-// ============= SCHEMAS & MODELS =============
+// Health check function
+export async function checkDatabaseHealth(): Promise<boolean> {
+  try {
+    if (!cached.conn || mongoose.connection.readyState !== 1) {
+      return false;
+    }
+    
+    // Try a simple ping operation
+    const db = mongoose.connection.db;
+    if (!db) {
+      return false;
+    }
+    
+    await db.admin().ping();
+    return true;
+  } catch (error) {
+    console.error('Database health check failed:', error);
+    return false;
+  }
+}
 
 // User Schema
 const UserSchema = new mongoose.Schema({
+  clerkId: { type: String, required: true, unique: true }, // Clerk user ID
   name: { type: String, required: true },
   email: { type: String }, // Optional for now
   avatar: { type: String },
@@ -75,13 +171,16 @@ const MeetingRoomSchema = new mongoose.Schema({
     endDate: { type: Date }
   },
   
-  // Participants
+  // Participants - Updated to support email-based invitations
   participants: [{
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Set when user signs up
+    email: { type: String, required: true }, // Always store email for invitations
     name: { type: String, required: true }, // Store name directly for easier access
     role: { type: String, enum: ['host', 'member'], default: 'member' },
     joinedAt: { type: Date, default: Date.now },
-    notes: { type: String } // Individual participant notes
+    notes: { type: String }, // Individual participant notes
+    invitedAt: { type: Date, default: Date.now }, // When they were invited
+    linkedAt: { type: Date } // When they linked their account (signed up)
   }],
   
   // Related data (populated)
@@ -194,6 +293,7 @@ export const Task = mongoose.models.Task || mongoose.model('Task', TaskSchema);
 
 export interface IUser {
   _id: string;
+  clerkId: string;
   name: string;
   email?: string;
   avatar?: string;
@@ -216,11 +316,14 @@ export interface IMeetingRoom {
     endDate?: Date;
   };
   participants: Array<{
-    userId?: string;
+    userId?: string; // Set when user signs up
+    email: string; // Always store email for invitations
     name: string;
     role: 'host' | 'member';
     joinedAt: Date;
     notes?: string;
+    invitedAt: Date; // When they were invited
+    linkedAt?: Date; // When they linked their account (signed up)
   }>;
   meetings: string[];
   tasks: string[];
@@ -324,13 +427,35 @@ export function fromCreateMeetingForm(formData: {
   title: string;
   type: string;
   isRecurring: boolean;
-  participants: string[];
+  participants: Array<{email: string, name: string, role: string}>;
   startDate?: string;
   endDate?: string;
   frequency?: string;
   recurringDay?: string;
   recurringTime?: string;
 }, createdBy?: string): Partial<IMeetingRoom> {
+  // Create participants array from the frontend participant objects
+  const participants: Array<{
+    userId?: string;
+    email: string;
+    name: string;
+    role: 'host' | 'member';
+    joinedAt: Date;
+    notes?: string;
+    invitedAt: Date;
+    linkedAt?: Date;
+  }> = formData.participants
+    .filter(p => p.email.trim()) // Filter out empty participants
+    .map(p => ({
+      userId: p.role === 'host' ? createdBy : undefined, // Set userId for host
+      email: p.email.trim(),
+      name: p.name.trim() || p.email.trim(), // Use name if provided, otherwise use email
+      role: p.role === 'host' ? 'host' : 'member',
+      joinedAt: new Date(),
+      invitedAt: new Date(),
+      linkedAt: p.role === 'host' ? new Date() : undefined // Host is already linked
+    }));
+
   return {
     roomName: formData.roomName,
     title: formData.title,
@@ -343,13 +468,7 @@ export function fromCreateMeetingForm(formData: {
       startDate: formData.startDate ? new Date(formData.startDate) : undefined,
       endDate: formData.endDate ? new Date(formData.endDate) : undefined
     } : undefined,
-    participants: formData.participants
-      .filter(name => name.trim())
-      .map(name => ({
-        name: name.trim(),
-        role: 'member' as const,
-        joinedAt: new Date()
-      })),
+    participants,
     createdBy,
     isActive: false,
     meetings: [],
@@ -396,8 +515,45 @@ export class DatabaseService {
     return DatabaseService.instance;
   }
 
-  async ensureConnection() {
-    await connectToDatabase();
+  async ensureConnection(retries: number = 3): Promise<void> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        // First check if we have a healthy connection
+        const isHealthy = await checkDatabaseHealth();
+        if (isHealthy) {
+          return; // Connection is healthy, no need to reconnect
+        }
+        
+        // If not healthy, try to establish a new connection
+        await connectToDatabase();
+        
+        // Verify the new connection is working
+        const isNewConnectionHealthy = await checkDatabaseHealth();
+        if (isNewConnectionHealthy) {
+          return; // Success, exit the retry loop
+        } else {
+          throw new Error('Connection established but health check failed');
+        }
+      } catch (error) {
+        console.error(`❌ Database connection attempt ${attempt}/${retries} failed:`, error);
+        
+        // Reset connection cache on failure
+        cached.conn = null;
+        cached.promise = null;
+        
+        if (attempt === retries) {
+          throw new Error(`Failed to connect to database after ${retries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+        
+        // Wait before retrying (exponential backoff with jitter)
+        const baseDelay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        const jitter = Math.random() * 1000; // Add up to 1 second of random delay
+        const delay = baseDelay + jitter;
+        
+        console.log(`⏳ Retrying database connection in ${Math.round(delay)}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
 
   // ===== MEETING ROOM OPERATIONS =====
@@ -591,6 +747,67 @@ export class DatabaseService {
 
   // ===== USER OPERATIONS =====
 
+  async createUser(userData: {
+    clerkId: string;
+    name: string;
+    email?: string;
+    avatar?: string;
+    joinedAt: Date;
+    lastActive: Date;
+  }): Promise<IUser> {
+    await this.ensureConnection();
+    
+    try {
+      const user = new User(userData);
+      const savedUser = await user.save();
+      return savedUser.toObject() as IUser;
+    } catch (error: any) {
+      // Handle duplicate key error (E11000)
+      if (error.code === 11000 && error.keyPattern?.clerkId) {
+        console.log(`User with clerkId ${userData.clerkId} already exists, returning existing user`);
+        // Return the existing user instead of throwing an error
+        const existingUser = await User.findOne({ clerkId: userData.clerkId }).lean();
+        if (existingUser) {
+          return existingUser as unknown as IUser;
+        }
+      }
+      
+      console.error('Error creating user:', error);
+      throw error;
+    }
+  }
+
+  async getUserByClerkId(clerkId: string): Promise<IUser | null> {
+    await this.ensureConnection();
+    
+    try {
+      const user = await User.findOne({ clerkId }).lean();
+      return user as IUser | null;
+    } catch (error) {
+      console.error('Error finding user by clerkId:', error);
+      return null;
+    }
+  }
+
+  async updateUser(clerkId: string, updates: Partial<IUser>): Promise<IUser | null> {
+    await this.ensureConnection();
+    
+    const user = await User.findOneAndUpdate(
+      { clerkId },
+      { $set: { ...updates, lastActive: new Date() } },
+      { new: true }
+    ).lean();
+    
+    return user as IUser | null;
+  }
+
+  async deleteUser(clerkId: string): Promise<IUser | null> {
+    await this.ensureConnection();
+    
+    const user = await User.findOneAndDelete({ clerkId }).lean();
+    return user as IUser | null;
+  }
+
   async createOrGetUser(name: string, email?: string): Promise<IUser> {
     await this.ensureConnection();
     
@@ -610,8 +827,13 @@ export class DatabaseService {
       return existingUser as unknown as IUser;
     }
 
-    // Create new user
-    const user = new User({ name, email, lastActive: new Date() });
+    // Create new user (fallback for non-Clerk users)
+    const user = new User({ 
+      clerkId: `temp-${Date.now()}`, // Temporary ID for non-Clerk users
+      name, 
+      email, 
+      lastActive: new Date() 
+    });
     const savedUser = await user.save();
     return savedUser.toObject() as IUser;
   }
@@ -623,6 +845,7 @@ export class DatabaseService {
     title?: string;
     type?: string;
     participantName?: string;
+    userId?: string;
   }): Promise<IMeeting> {
     await this.ensureConnection();
     
@@ -632,15 +855,16 @@ export class DatabaseService {
       type: meetingData.type || 'Instant Meeting',
       isOneOff: true,
       startedAt: new Date(),
-      participants: meetingData.participantName ? [{
-        name: meetingData.participantName,
+      participants: [{
+        userId: meetingData.userId,
+        name: meetingData.participantName || 'Anonymous',
         joinedAt: new Date(),
         isHost: true
-      }] : []
+      }]
     });
     
     const savedMeeting = await meeting.save();
-    return savedMeeting.toObject() as IMeeting;
+    return savedMeeting.toObject() as unknown as IMeeting;
   }
   
   async getOneOffMeetings(limit?: number): Promise<IMeeting[]> {
@@ -666,6 +890,13 @@ export class DatabaseService {
     }).lean();
     
     return meeting as IMeeting | null;
+  }
+
+  async deleteAllOneOffMeetings(): Promise<{ deletedCount: number }> {
+    await this.ensureConnection();
+    
+    const deleteResult = await Meeting.deleteMany({ isOneOff: true });
+    return { deletedCount: deleteResult.deletedCount || 0 };
   }
 
   // ============= ADDITIONAL MEETING METHODS =============
@@ -831,12 +1062,12 @@ export class DatabaseService {
     if (!room || !room.isRecurring || !room.recurringPattern) {
       throw new Error('Room is not a recurring meeting room');
     }
-    
+
     const { frequency, day, time } = room.recurringPattern;
     if (!frequency || !day || !time) {
       throw new Error('Invalid recurring pattern');
     }
-    
+
     const [hours, minutes] = time.split(':').map(Number);
     const dayIndex = this.getDayIndex(day);
     const meetings: IMeeting[] = [];
@@ -872,6 +1103,14 @@ export class DatabaseService {
           leftAt: endTime,
           isHost: p.role === 'host'
         }));
+
+      // Generate mock transcripts for the meeting
+      const transcripts = this.generateMockTranscripts(
+        meetingParticipants.map(p => p.name), 
+        room.type, 
+        meetingDate,
+        duration
+      );
       
       const meeting: Partial<IMeeting> = {
         roomId: roomId,
@@ -883,7 +1122,7 @@ export class DatabaseService {
         endedAt: endTime,
         duration: duration,
         participants: meetingParticipants,
-        transcripts: [],
+        transcripts: transcripts,
         summary: Math.random() < 0.7 ? { // 70% chance of having a summary
           content: this.generateMockSummary(room.type),
           keyPoints: this.generateMockKeyPoints(),
@@ -899,6 +1138,100 @@ export class DatabaseService {
     }
     
     return meetings;
+  }
+
+  private generateMockTranscripts(
+    participants: string[], 
+    meetingType: string, 
+    meetingDate: Date,
+    durationMinutes: number
+  ): Array<{
+    speaker: string;
+    text: string;
+    timestamp: Date;
+    embedding?: number[];
+  }> {
+    const transcripts: Array<{
+      speaker: string;
+      text: string;
+      timestamp: Date;
+      embedding?: number[];
+    }> = [];
+
+    // Generate 15-30 transcript entries based on meeting duration
+    const numTranscripts = Math.floor(durationMinutes / 2) + Math.floor(Math.random() * 10) + 5;
+    
+    // Transcript templates based on meeting type
+    const transcriptTemplates = {
+      'Daily Standup': [
+        "Yesterday I completed the user authentication module and fixed the database connection issues.",
+        "Today I'm planning to work on the API endpoints for user profile management.",
+        "I'm blocked on the third-party integration - waiting for API keys from the vendor.",
+        "The sprint is going well, we're about 70% complete with our planned features.",
+        "I finished the code review for the payment system and it looks good to merge.",
+        "Today I'll be focusing on the frontend components for the dashboard.",
+        "No blockers for me today, everything is on track.",
+        "I need help with the deployment pipeline - having some Docker issues.",
+        "The testing suite is now covering 85% of our codebase which is great progress.",
+        "I'll be pairing with [teammate] on the search functionality this afternoon."
+      ],
+      'Project Planning': [
+        "Let's review the project timeline and see if we need to adjust any milestones.",
+        "The client has requested some additional features - we need to evaluate the scope impact.",
+        "Our current velocity suggests we can complete Phase 1 by the end of next month.",
+        "We should allocate more resources to the testing phase based on complexity.",
+        "The integration with the external API is taking longer than expected.",
+        "Let's prioritize the core features first and move the nice-to-haves to Phase 2.",
+        "We need to coordinate with the design team on the new user interface mockups.",
+        "The database migration should be scheduled for the weekend to minimize downtime.",
+        "Risk assessment shows we might need a backup plan for the cloud deployment.",
+        "Budget tracking shows we're on target but need to monitor the external contractor costs.",
+        "The MVP features are well-defined, we should focus on getting those rock solid.",
+        "Quality assurance will need an extra week for thorough testing of the payment system."
+      ],
+      'Client Review': [
+        "The client is happy with the progress on the user dashboard functionality.",
+        "They've requested a few UI changes to better match their brand guidelines.",
+        "The performance improvements are meeting their expectations - 40% faster load times.",
+        "We need to clarify the requirements for the reporting module.",
+        "The client wants to add mobile support to the scope for this quarter.",
+        "Security audit results look good, just a few minor recommendations to implement.",
+        "They're impressed with the new analytics features and want to expand them.",
+        "The deployment went smoothly and users are adapting well to the new interface.",
+        "Client feedback on the beta version is very positive overall.",
+        "We should schedule a demo of the upcoming features for their stakeholders."
+      ]
+    };
+
+    const templates = transcriptTemplates[meetingType as keyof typeof transcriptTemplates] || transcriptTemplates['Daily Standup'];
+    
+    for (let i = 0; i < numTranscripts; i++) {
+      // Pick a random participant
+      const speaker = participants[Math.floor(Math.random() * participants.length)];
+      
+      // Pick a random template and customize it
+      let text = templates[Math.floor(Math.random() * templates.length)];
+      
+      // Replace [teammate] placeholder with actual participant name
+      if (text.includes('[teammate]')) {
+        const otherParticipants = participants.filter(p => p !== speaker);
+        const teammate = otherParticipants[Math.floor(Math.random() * otherParticipants.length)] || 'the team';
+        text = text.replace('[teammate]', teammate);
+      }
+      
+      // Calculate timestamp within the meeting duration
+      const minutesIntoMeeting = Math.floor((i / numTranscripts) * durationMinutes);
+      const timestamp = new Date(meetingDate.getTime() + minutesIntoMeeting * 60 * 1000);
+      
+      transcripts.push({
+        speaker,
+        text,
+        timestamp,
+        // Note: embeddings will be generated later by the RAG service
+      });
+    }
+
+    return transcripts;
   }
   
   private generateMockSummary(meetingType: string): string {
@@ -967,5 +1300,93 @@ export class DatabaseService {
     
     const count = Math.floor(Math.random() * 3); // 0-2 decisions
     return decisions.sort(() => 0.5 - Math.random()).slice(0, count);
+  }
+
+  // ============= USER-SPECIFIC DATA METHODS =============
+  
+  /**
+   * Get meeting rooms where the user is a participant or creator
+   * This includes rooms where they were invited by email before signing up
+   */
+  async getMeetingRoomsByUser(userId: string, userEmail?: string, limit?: number): Promise<IMeetingRoom[]> {
+    await this.ensureConnection();
+    
+    // Build query to find rooms where user is participant by userId, email, or creator
+    const query: any = {
+      $or: [
+        { 'participants.userId': userId }, // User is linked as participant
+        { createdBy: userId } // User is the creator
+      ]
+    };
+    
+    // If user email is provided, also search by email for unlinked invitations
+    if (userEmail) {
+      query.$or.push({ 'participants.email': userEmail });
+    }
+    
+    const queryBuilder = MeetingRoom.find(query).sort({ lastMeetingAt: -1, updatedAt: -1 });
+    
+    if (limit) {
+      queryBuilder.limit(limit);
+    }
+    
+    return await queryBuilder.lean() as unknown as IMeetingRoom[];
+  }
+  
+  /**
+   * Get one-off meetings where the user participated
+   */
+  async getOneOffMeetingsByUser(userId: string, limit?: number): Promise<IMeeting[]> {
+    await this.ensureConnection();
+    
+    const query = Meeting.find({
+      isOneOff: true,
+      'participants.userId': userId
+    }).sort({ startedAt: -1 });
+    
+    if (limit) {
+      query.limit(limit);
+    }
+    
+    return await query.lean() as unknown as IMeeting[];
+  }
+  
+  /**
+   * Check if user is participant in a meeting room
+   */
+  async isUserParticipant(roomId: string, userId: string): Promise<boolean> {
+    await this.ensureConnection();
+    
+    const room = await MeetingRoom.findOne({
+      _id: roomId,
+      'participants.userId': userId
+    }).lean();
+    
+    return !!room;
+  }
+
+  /**
+   * Link a user to meeting rooms where they were invited by email
+   * This should be called when a user signs up or updates their email
+   */
+  async linkUserToInvitedRooms(userId: string, userEmail: string): Promise<number> {
+    await this.ensureConnection();
+    
+    // Find all rooms where this email is a participant but not yet linked
+    const result = await MeetingRoom.updateMany(
+      { 
+        'participants.email': userEmail,
+        'participants.userId': { $exists: false }
+      },
+      { 
+        $set: { 
+          'participants.$.userId': userId,
+          'participants.$.linkedAt': new Date()
+        }
+      }
+    );
+    
+    console.log(`🔗 Linked user ${userId} to ${result.modifiedCount} meeting rooms via email ${userEmail}`);
+    return result.modifiedCount || 0;
   }
 } 

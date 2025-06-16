@@ -5,9 +5,10 @@ import { useTracks, useRoomContext, useChat, useDataChannel } from '@livekit/com
 import { Track } from 'livekit-client';
 import { Transcript, TranscriptionService } from '@/lib/transcription-service';
 import ReactMarkdown from 'react-markdown';
+import { useUser } from '@clerk/nextjs';
 
 interface TranscriptTabProps {
-  onMeetingEnd?: (transcripts: Transcript[]) => void;
+  onTranscriptsChange?: (transcripts: Transcript[]) => void;
 }
 
 interface DisplayTranscript {
@@ -46,7 +47,8 @@ type MainView = 'public' | 'private';
 type PublicSubView = 'chat' | 'transcript';
 type PrivateSubView = 'notes' | 'ohm';
 
-export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
+export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
+  const { user } = useUser();
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [sharedTranscripts, setSharedTranscripts] = useState<DisplayTranscript[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -90,10 +92,10 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
 
   // Question suggestions for AI chat
   const questionSuggestions = [
-    "Summarize what's been decided so far?",
-    "What are the action items from last meeting?",
-    "What are the key topics covered in this meeting?",
-    "What questions were raised but not answered?",
+    "Summarize our room's previous discussions",
+    "What are the recurring topics in our meetings?", 
+    "Create a summary of action items",
+    "What decisions were made recently"
   ];
 
   // Add transcript messages ref for auto-scrolling
@@ -227,10 +229,13 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     setIsAiProcessing(true);
 
     try {
-      // Get current transcripts for context
+      // Get current transcripts for context (from live meeting)
       const currentTranscripts = sharedTranscripts
         .map(t => `${t.speaker}: ${t.text}`)
         .join('\n');
+
+      console.log('🎙️ Sending current transcripts to AI:', currentTranscripts.length > 0 ? 'Yes' : 'No');
+      console.log('📝 Current transcript sample:', currentTranscripts.substring(0, 200) + '...');
 
       // Send AI chat request
       const response = await fetch('/api/ai-chat', {
@@ -243,6 +248,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
           roomName,
           userName: currentUser,
           currentTranscripts,
+          isLiveMeeting: true, // Important: Set this to true for live meetings
         }),
       });
 
@@ -286,40 +292,6 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
       setIsAiProcessing(false);
     }
   };
-
-  // Store transcripts for AI context periodically
-  React.useEffect(() => {
-    if (sharedTranscripts.length === 0) return;
-
-    const storeTranscripts = async () => {
-      const transcriptText = sharedTranscripts
-        .map(t => `${t.speaker}: ${t.text}`)
-        .join('\n');
-
-      const participants = Array.from(new Set(sharedTranscripts.map(t => t.speaker)));
-      const roomName = room?.name || 'unknown';
-
-      try {
-        await fetch('/api/ai-chat', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            roomName,
-            transcriptText,
-            participants,
-          }),
-        });
-      } catch (error) {
-        console.error('Error storing transcript for AI:', error);
-      }
-    };
-
-    // Store transcripts every 30 seconds if there are new ones
-    const interval = setInterval(storeTranscripts, 30000);
-    return () => clearInterval(interval);
-  }, [sharedTranscripts, room?.name]);
 
   const transcriptionService = React.useMemo(() => new TranscriptionService(room), [room]);
 
@@ -395,6 +367,13 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
         const decoder = new TextDecoder();
         const data = JSON.parse(decoder.decode(payload)) as SharedTranscript;
         
+        // Skip if this transcript is from the current user (prevents duplication)
+        const currentUserId = room.localParticipant?.identity || room.localParticipant?.name || user?.id;
+        if (data.participantId === currentUserId) {
+          console.log('🔍 TRANSCRIPT DEBUG: Skipping own transcript from data channel to prevent duplication');
+          return;
+        }
+        
         if (data.type === 'transcript' || data.type === 'transcript_update') {
           setSharedTranscripts(prev => {
             // Check if this is an update to an existing entry
@@ -449,7 +428,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     return () => {
       room.off('dataReceived', handleDataReceived);
     };
-  }, [room]);
+  }, [room, user?.id]);
 
   // Auto-start transcription when audio tracks are available
   const startTranscription = useCallback(async () => {
@@ -466,11 +445,25 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
         return;
       }
 
+      console.log('🔍 TRANSCRIPTION DEBUG: Starting transcription service...');
       const audioTrack = track.mediaStreamTrack;
       await transcriptionService.startTranscription(audioTrack, (transcript: Transcript) => {
-        setTranscripts(prev => [...prev, transcript]);
+        console.log('🔍 TRANSCRIPTION DEBUG: Received transcript from service:', {
+          speaker: transcript.speaker,
+          text: transcript.text,
+          timestamp: new Date(transcript.timestamp).toLocaleTimeString(),
+          timestampRaw: transcript.timestamp
+        });
+        
+        setTranscripts(prev => {
+          const updated = [...prev, transcript];
+          console.log('🔍 TRANSCRIPTION DEBUG: Updated local transcripts count:', updated.length);
+          return updated;
+        });
+        
         shareTranscript(transcript); // Share with other participants
       });
+      console.log('🔍 TRANSCRIPTION DEBUG: Transcription service started successfully');
     } catch (error) {
       console.error('Failed to start transcription:', error);
       setIsRecording(false);
@@ -485,42 +478,75 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     }
   }, [tracks, startTranscription, isRecording]);
 
-  // Notes persistence
-  const roomName = room?.name || 'unknown';
-  const participantId = room?.localParticipant?.identity || 'unknown';
-
   // Load notes on mount
   useEffect(() => {
-    const storageKey = `meeting-notes-${roomName}-${participantId}`;
+    if (!user || !room?.name) return;
+    
+    // Use consistent storage key format: meeting-notes-${roomName}-${userId}
+    const storageKey = `meeting-notes-${room.name}-${user.id}`;
     const savedNotes = localStorage.getItem(storageKey);
     if (savedNotes) {
       setNotes(savedNotes);
     }
-  }, [roomName, participantId]);
+  }, [user, room?.name]);
+
+  // Notify parent component when transcripts change
+  useEffect(() => {
+    if (onTranscriptsChange) {
+      // Combine local transcripts and shared transcripts
+      const allTranscripts: Transcript[] = [
+        ...transcripts,
+        ...sharedTranscripts.map(st => ({
+          speaker: st.speaker,
+          text: st.text,
+          timestamp: st.timestamp
+        }))
+      ];
+      
+      // Sort by timestamp
+      allTranscripts.sort((a, b) => a.timestamp - b.timestamp);
+      
+      console.log('🔍 CALLBACK DEBUG: Sending combined transcripts to parent:', {
+        localCount: transcripts.length,
+        sharedCount: sharedTranscripts.length,
+        totalCount: allTranscripts.length,
+        transcripts: allTranscripts.map((t, i) => ({
+          index: i,
+          speaker: t.speaker,
+          text: t.text.substring(0, 50) + (t.text.length > 50 ? '...' : ''),
+          timestamp: new Date(t.timestamp).toLocaleTimeString(),
+          source: i < transcripts.length ? 'local' : 'shared'
+        }))
+      });
+      
+      onTranscriptsChange(allTranscripts);
+    }
+  }, [transcripts, sharedTranscripts, onTranscriptsChange]);
 
   // Auto-save notes
   useEffect(() => {
-    if (!notes) return;
+    if (!notes || !user || !room?.name) return;
 
     setSaveStatus('saving');
     const timeoutId = setTimeout(() => {
-      const storageKey = `meeting-notes-${roomName}-${participantId}`;
+      // Use consistent storage key format: meeting-notes-${roomName}-${userId}
+      const storageKey = `meeting-notes-${room.name}-${user.id}`;
       localStorage.setItem(storageKey, notes);
       setSaveStatus('saved');
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [notes, roomName, participantId]);
+  }, [notes, user, room?.name]);
 
   const exportNotes = () => {
     const timestamp = new Date().toISOString().split('T')[0];
-    const content = `Ohm Meeting Notes - ${roomName}\nDate: ${timestamp}\n\n${notes}`;
+    const content = `Ohm Meeting Notes - ${room?.name}\nDate: ${timestamp}\n\n${notes}`;
     
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `ohm-notes-${roomName}-${timestamp}.txt`;
+    link.download = `ohm-notes-${room?.name}-${timestamp}.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -528,8 +554,11 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   const clearNotes = () => {
     if (confirm('Are you sure you want to clear all notes?')) {
       setNotes('');
-      const storageKey = `meeting-notes-${roomName}-${participantId}`;
-      localStorage.removeItem(storageKey);
+      if (user && room?.name) {
+        // Use consistent storage key format: meeting-notes-${roomName}-${userId}
+        const storageKey = `meeting-notes-${room.name}-${user.id}`;
+        localStorage.removeItem(storageKey);
+      }
     }
   };
 
@@ -558,7 +587,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     <div className={`meeting-assistant ${isMobile && isExpanded ? 'expanded' : ''}`}>
       <div className="meeting-assistant-header" onClick={handleMobileHeaderClick}>
         <h3 className="meeting-assistant-title">
-          Meeting Assistant
+          🤖 Meeting Assistant
           {isMobile && (
             <span className="expand-indicator">
               {isExpanded ? '▼' : '▲'}
@@ -566,10 +595,10 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
           )}
         </h3>
         
-        {/* Main View Toggle */}
-        <div className="main-view-toggle">
+        {/* Main View Toggle - More compact design */}
+        <div className="main-view-toggle compact">
           <button 
-            className={`view-toggle-button ${activeView === 'private' ? 'view-toggle-button--active' : ''}`}
+            className={`view-toggle-button compact ${activeView === 'private' ? 'view-toggle-button--active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (isMobile) {
@@ -584,13 +613,13 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
               }
             }}
           >
-            Private
+            🔒 Private
             {(aiChatHistory.length > 0 || notes.trim()) && (
               <span className="notification-dot"></span>
             )}
           </button>
           <button 
-            className={`view-toggle-button ${activeView === 'public' ? 'view-toggle-button--active' : ''}`}
+            className={`view-toggle-button compact ${activeView === 'public' ? 'view-toggle-button--active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (isMobile) {
@@ -605,7 +634,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
               }
             }}
           >
-            Public
+            👥 Public
             {(chatMessages.length > 0 || sharedTranscripts.length > 0) && (
               <span className="notification-dot"></span>
             )}
@@ -622,7 +651,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 className={`sub-tab-button ${publicSubView === 'chat' ? 'sub-tab-button--active' : ''}`}
                 onClick={() => setPublicSubView('chat')}
               >
-                Chat
+                💬 Chat
                 {chatMessages.length > 0 && (
                   <span className="chat-badge">{chatMessages.length}</span>
                 )}
@@ -631,7 +660,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 className={`sub-tab-button ${publicSubView === 'transcript' ? 'sub-tab-button--active' : ''}`}
                 onClick={() => setPublicSubView('transcript')}
               >
-                Transcript
+                📝 Transcript
                 {isRecording && (
                   <span className="recording-dot"></span>
                 )}
@@ -643,6 +672,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 <div className="chat-messages" ref={chatMessagesRef}>
                   {groupedChatMessages.length === 0 ? (
                     <div className="chat-empty">
+                      <div className="empty-icon">💬</div>
                       <p>No messages yet. Start a conversation with other participants!</p>
                     </div>
                   ) : (
@@ -650,7 +680,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                       <div key={group.groupId} className="chat-message-group">
                         <div className="chat-message-header">
                           <span className="chat-sender">
-                            {group.senderName}
+                            👤 {group.senderName}
                           </span>
                           <span className="chat-timestamp">
                             {formatTimestamp(group.latestTimestamp)}
@@ -673,7 +703,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                     <input
                       type="text"
                       className="chat-input"
-                      placeholder="Message to participants..."
+                      placeholder="💬 Message to participants..."
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
                       disabled={isSending}
@@ -682,8 +712,9 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                       type="submit" 
                       className="chat-send-button"
                       disabled={isSending || !chatInput.trim()}
+                      title="Send message"
                     >
-                      Send
+                      {isSending ? '⏳' : '📤'}
                     </button>
                   </div>
                 </form>
@@ -696,7 +727,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                   {isRecording && (
                     <div className="recording-indicator">
                       <div className="recording-pulse"></div>
-                      <span className="recording-text">Recording</span>
+                      <span className="recording-text">🔴 Recording</span>
                     </div>
                   )}
                 </div>
@@ -704,13 +735,14 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 <div className="transcript-messages" ref={transcriptMessagesRef}>
                   {sharedTranscripts.length === 0 ? (
                     <div className="transcript-empty">
+                      <div className="empty-icon">🎙️</div>
                       <p>Transcription will appear here once the meeting starts</p>
                     </div>
                   ) : (
                     sharedTranscripts.map((transcript) => (
                       <div key={transcript.entryId} className="transcript-message">
                         <div className={`speaker-badge ${getSpeakerColor(transcript.speaker)}`}>
-                          {transcript.speaker}
+                          🎤 {transcript.speaker}
                         </div>
                         <p className="transcript-text">{transcript.text}</p>
                       </div>
@@ -730,7 +762,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 className={`sub-tab-button ${privateSubView === 'notes' ? 'sub-tab-button--active' : ''}`}
                 onClick={() => setPrivateSubView('notes')}
               >
-                Notes
+                📋 Notes
                 {notes.trim() && (
                   <span className="notification-dot"></span>
                 )}
@@ -739,7 +771,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 className={`sub-tab-button ${privateSubView === 'ohm' ? 'sub-tab-button--active' : ''}`}
                 onClick={() => setPrivateSubView('ohm')}
               >
-                Ohm AI
+                🤖 Ohm AI
                 {aiChatHistory.length > 0 && (
                   <span className="chat-badge">{aiChatHistory.length}</span>
                 )}
@@ -750,24 +782,24 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
               <div className="notes-tab">
                 <div className="notes-header">
                   <div className="notes-actions">
-                    <button onClick={exportNotes} className="action-button" disabled={!notes.trim()}>
-                      Export
+                    <button onClick={exportNotes} className="action-button" disabled={!notes.trim()} title="Export notes">
+                      📥 Export
                     </button>
-                    <button onClick={clearNotes} className="action-button action-button--danger" disabled={!notes.trim()}>
-                      Clear
+                    <button onClick={clearNotes} className="action-button action-button--danger" disabled={!notes.trim()} title="Clear all notes">
+                      🗑️ Clear
                     </button>
                   </div>
                   <div className="save-status">
                     <span className={`save-indicator save-indicator--${saveStatus}`}>
-                      {saveStatus === 'saved' && '✓ Saved'}
+                      {saveStatus === 'saved' && '✅ Saved'}
                       {saveStatus === 'saving' && '⏳ Saving...'}
-                      {saveStatus === 'unsaved' && '● Unsaved'}
+                      {saveStatus === 'unsaved' && '⚠️ Unsaved'}
                     </span>
                   </div>
                 </div>
                 <textarea
                   className="notes-textarea"
-                  placeholder="Take notes during the meeting..."
+                  placeholder="📝 Take notes during the meeting..."
                   value={notes}
                   onChange={(e) => {
                     setNotes(e.target.value);
@@ -775,7 +807,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                   }}
                 />
                 <div className="notes-footer">
-                  <span className="character-count">{notes.length} characters</span>
+                  <span className="character-count">📊 {notes.length} characters</span>
                 </div>
               </div>
             )}
@@ -785,10 +817,11 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 <div className="chat-messages" ref={chatMessagesRef}>
                   {aiChatHistory.length === 0 ? (
                     <div className="chat-empty">
+                      <div className="empty-icon">🤖</div>
                       <p>Ask Ohm about the meeting, participants, or search the web!</p>
                       
                       <div className="ai-suggestions" style={{ marginTop: '0.75rem' }}>
-                        <p className="suggestions-title">Try asking Ohm:</p>
+                        <p className="suggestions-title">💡 Try asking Ohm:</p>
                         <div className="suggestion-buttons">
                           {questionSuggestions.map((suggestion, index) => (
                             <button
@@ -803,7 +836,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                               }}
                               disabled={isAiProcessing}
                             >
-                              {suggestion}
+                              {index === 0 && '📊'} {index === 1 && '🔄'} {index === 2 && '✅'} {index === 3 && '🎯'} {suggestion}
                             </button>
                           ))}
                         </div>
@@ -828,7 +861,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                               }}
                               disabled={isAiProcessing}
                             >
-                              {suggestion}
+                              {index === 0 && '📊'} {index === 1 && '🔄'} {index === 2 && '✅'} {suggestion}
                             </button>
                           ))}
                         </div>
@@ -841,7 +874,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                             <span className="chat-sender">
                               {aiMsg.type === 'ai' ? (
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                  🤖 Ohm AI
+                                  Ohm AI
                                   {aiMsg.usedWebSearch && (
                                     <span style={{ 
                                       fontSize: '0.625rem', 
@@ -861,12 +894,12 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                                       padding: '0.125rem 0.25rem',
                                       borderRadius: '4px'
                                     }}>
-                                      {aiMsg.relevantTranscripts ? `${aiMsg.relevantTranscripts} refs` : 'context'}
+                                      📄 {aiMsg.relevantTranscripts ? `${aiMsg.relevantTranscripts} refs` : 'context'}
                                     </span>
                                   )}
                                 </span>
                               ) : (
-                                `${aiMsg.userName} → 🤖 AI`
+                                `👤 ${aiMsg.userName} → AI`
                               )}
                             </span>
                             <span className="chat-timestamp">
@@ -879,7 +912,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                             </div>
                             {aiMsg.citations && aiMsg.citations.length > 0 && (
                               <div className="message-citations">
-                                <div className="citations-label">Sources:</div>
+                                <div className="citations-label">🔗 Sources:</div>
                                 <div className="citations-list">
                                   {aiMsg.citations.map((url, index) => (
                                     <a 
@@ -889,7 +922,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                                       rel="noopener noreferrer"
                                       className="citation-link"
                                     >
-                                      🔗 {new URL(url).hostname}
+                                      🌐 {new URL(url).hostname}
                                     </a>
                                   ))}
                                 </div>
@@ -903,8 +936,8 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                       {isAiProcessing && (
                         <div className="chat-message-group ai-message">
                           <div className="chat-message-header">
-                            <span className="chat-sender">🤖 Ohm AI</span>
-                            <span className="chat-timestamp">Processing...</span>
+                            <span className="chat-sender">Ohm AI</span>
+                            <span className="chat-timestamp">⏳ Processing...</span>
                           </div>
                           <div className="chat-message-text">
                             <div className="chat-message ai-processing">
@@ -913,7 +946,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                                 <span></span>
                                 <span></span>
                               </span>
-                              Thinking...
+                              🧠 Thinking...
                             </div>
                           </div>
                         </div>
@@ -923,10 +956,10 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                 </div>
                 
                 <form className="chat-input-form" onSubmit={handleAiChatSubmit}>
-                  <div className="ai-command-buttons">
+                  <div className="ai-command-buttons compact">
                     <button
                       type="button"
-                      className={`command-button ${aiChatInput.toLowerCase().startsWith('@web ') ? 'active' : ''}`}
+                      className={`command-button compact ${aiChatInput.toLowerCase().startsWith('@web ') ? 'active' : ''}`}
                       onClick={() => {
                         if (aiChatInput.toLowerCase().startsWith('@web ')) {
                           // Remove @web prefix
@@ -939,14 +972,14 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                       disabled={isAiProcessing}
                       title="Web Search"
                     >
-                      Web
+                      🌐
                     </button>
                   </div>
                   <div className="chat-input-row">
                     <input
                       type="text"
                       className="chat-input"
-                      placeholder={aiChatInput.toLowerCase().startsWith('@web ') ? "Search the web..." : "Ask Ohm about the meeting..."}
+                      placeholder={aiChatInput.toLowerCase().startsWith('@web ') ? "🔍 Search the web..." : "🤖 Ask Ohm about the meeting..."}
                       value={aiChatInput}
                       onChange={(e) => setAiChatInput(e.target.value)}
                       disabled={isAiProcessing}
@@ -955,8 +988,9 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
                       type="submit" 
                       className="chat-send-button"
                       disabled={isAiProcessing || !aiChatInput.trim()}
+                      title="Send to AI"
                     >
-                      Send
+                      {isAiProcessing ? '⏳' : '🚀'}
                     </button>
                   </div>
                 </form>

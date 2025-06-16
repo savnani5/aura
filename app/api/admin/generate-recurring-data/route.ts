@@ -22,10 +22,38 @@ export async function POST() {
         endDate: new Date('2025-12-01') // Ends in December 2025
       },
       participants: [
-        { name: 'Alice Johnson', role: 'host', joinedAt: new Date() },
-        { name: 'Bob Smith', role: 'member', joinedAt: new Date() },
-        { name: 'Carol Davis', role: 'member', joinedAt: new Date() },
-        { name: 'David Wilson', role: 'member', joinedAt: new Date() }
+        { 
+          name: 'Alice Johnson', 
+          email: 'alice.johnson@company.com',
+          role: 'host', 
+          joinedAt: new Date(),
+          invitedAt: new Date(),
+          linkedAt: new Date()
+        },
+        { 
+          name: 'Bob Smith', 
+          email: 'bob.smith@company.com',
+          role: 'member', 
+          joinedAt: new Date(),
+          invitedAt: new Date(),
+          linkedAt: new Date()
+        },
+        { 
+          name: 'Carol Davis', 
+          email: 'carol.davis@company.com',
+          role: 'member', 
+          joinedAt: new Date(),
+          invitedAt: new Date(),
+          linkedAt: new Date()
+        },
+        { 
+          name: 'David Wilson', 
+          email: 'david.wilson@company.com',
+          role: 'member', 
+          joinedAt: new Date(),
+          invitedAt: new Date(),
+          linkedAt: new Date()
+        }
       ],
       createdBy: undefined,
       isActive: false,
@@ -56,11 +84,46 @@ export async function POST() {
         endDate: new Date('2025-12-01')
       },
       participants: [
-        { name: 'Emma Thompson', role: 'host', joinedAt: new Date() },
-        { name: 'Frank Miller', role: 'member', joinedAt: new Date() },
-        { name: 'Grace Lee', role: 'member', joinedAt: new Date() },
-        { name: 'Henry Brown', role: 'member', joinedAt: new Date() },
-        { name: 'Ivy Chen', role: 'member', joinedAt: new Date() }
+        { 
+          name: 'Emma Thompson', 
+          email: 'emma.thompson@company.com',
+          role: 'host', 
+          joinedAt: new Date(),
+          invitedAt: new Date(),
+          linkedAt: new Date()
+        },
+        { 
+          name: 'Frank Miller', 
+          email: 'frank.miller@company.com',
+          role: 'member', 
+          joinedAt: new Date(),
+          invitedAt: new Date(),
+          linkedAt: new Date()
+        },
+        { 
+          name: 'Grace Lee', 
+          email: 'grace.lee@company.com',
+          role: 'member', 
+          joinedAt: new Date(),
+          invitedAt: new Date(),
+          linkedAt: new Date()
+        },
+        { 
+          name: 'Henry Brown', 
+          email: 'henry.brown@company.com',
+          role: 'member', 
+          joinedAt: new Date(),
+          invitedAt: new Date(),
+          linkedAt: new Date()
+        },
+        { 
+          name: 'Ivy Chen', 
+          email: 'ivy.chen@company.com',
+          role: 'member', 
+          joinedAt: new Date(),
+          invitedAt: new Date(),
+          linkedAt: new Date()
+        }
       ],
       createdBy: undefined,
       isActive: false,

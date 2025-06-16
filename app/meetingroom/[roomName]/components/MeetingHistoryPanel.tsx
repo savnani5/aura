@@ -55,6 +55,15 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
     fetchMeetings();
   }, [roomName]);
 
+  // Check for meeting modal to open after ending a meeting
+  useEffect(() => {
+    const meetingToOpen = localStorage.getItem('open-meeting-modal');
+    if (meetingToOpen) {
+      setSelectedMeetingId(meetingToOpen);
+      localStorage.removeItem('open-meeting-modal');
+    }
+  }, []);
+
   const fetchMeetings = async () => {
     try {
       setLoading(true);

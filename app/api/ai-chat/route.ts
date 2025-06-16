@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { AIChatbot } from '@/lib/ai-chatbot';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check authentication
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
     const { message, roomName, userName, currentTranscripts, isLiveMeeting } = await request.json();
 
     // Validate required fields

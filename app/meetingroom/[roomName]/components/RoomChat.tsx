@@ -3,127 +3,62 @@
 import { useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import styles from '@/styles/RoomChat.module.css';
-
-interface AiChatMessage {
-  id: string;
-  type: 'user' | 'ai';
-  message: string;
-  timestamp: number;
-  userName?: string;
-  usedContext?: boolean;
-  relevantTranscripts?: number;
-  usedWebSearch?: boolean;
-  citations?: string[];
-}
+import { AiContextManager, AiChatMessage } from '@/lib/ai-context-manager';
 
 interface RoomChatProps {
   roomName: string;
   currentUser: string;
+  currentTranscripts?: string;
+  isLiveMeeting?: boolean;
 }
 
-export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
+export default function RoomChat({ 
+  roomName, 
+  currentUser, 
+  currentTranscripts, 
+  isLiveMeeting = false 
+}: RoomChatProps) {
   const [aiChatHistory, setAiChatHistory] = useState<AiChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const aiContextManager = AiContextManager.getInstance();
 
-  // Question suggestions for AI
-  const questionSuggestions = [
-    "Summarize our room's previous discussions",
-    "What are the recurring topics in our meetings?", 
-    "Create a summary of action items",
-    "What decisions were made recently?"
-  ];
+  // Question suggestions for AI - context-aware based on live vs offline
+  const questionSuggestions = aiContextManager.getQuestionSuggestions(isLiveMeeting);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || isAiProcessing) return;
 
     const messageText = newMessage.trim();
-    
-    // Process web search or send directly to AI
-    let aiMessage = messageText;
-    if (messageText.toLowerCase().startsWith('@web ')) {
-      // Keep @web prefix for backend processing
-      aiMessage = messageText;
-    } else {
-      // Send directly to AI without @ohm prefix
-      aiMessage = messageText;
-    }
-    
-    await handleAiChat(aiMessage);
+    await handleAiChat(messageText);
     setNewMessage('');
   };
 
   const handleAiChat = async (message: string) => {
     if (!message.trim() || isAiProcessing) return;
 
-    // Add user message to AI chat history
-    const userChatId = `ai-user-${Date.now()}`;
-    const userAiMessage: AiChatMessage = {
-      id: userChatId,
-      type: 'user',
-      message: message,
-      timestamp: Date.now(),
-      userName: currentUser,
-    };
-
-    setAiChatHistory(prev => [...prev, userAiMessage]);
+    // Create user message
+    const userMessage = aiContextManager.createUserMessage(message, currentUser);
+    setAiChatHistory(prev => [...prev, userMessage]);
     setIsAiProcessing(true);
 
     try {
-      // Get current transcripts (mock for now)
-      const currentTranscripts = 'Mock transcript data for room context';
-
-      // Send AI chat request
-      const response = await fetch('/api/ai-chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message,
-          roomName,
-          userName: currentUser,
-          currentTranscripts,
-        }),
+      // Send message using AiContextManager
+      const aiResponse = await aiContextManager.sendAiMessage(message, {
+        roomName,
+        userName: currentUser,
+        currentTranscripts,
+        isLiveMeeting,
       });
 
-      const data = await response.json();
-
-      if (data.success) {
-        // Add AI response to chat history
-        const aiChatId = `ai-response-${Date.now()}`;
-        const aiMessage: AiChatMessage = {
-          id: aiChatId,
-          type: 'ai',
-          message: data.response,
-          timestamp: Date.now(),
-          usedContext: data.usedContext,
-          relevantTranscripts: data.relevantTranscripts,
-          usedWebSearch: data.usedWebSearch,
-          citations: data.citations,
-        };
-
-        setAiChatHistory(prev => [...prev, aiMessage]);
-      } else {
-        // Handle error
-        const errorMessage: AiChatMessage = {
-          id: `ai-error-${Date.now()}`,
-          type: 'ai',
-          message: `Error: ${data.error || 'Failed to get AI response'}`,
-          timestamp: Date.now(),
-        };
-        setAiChatHistory(prev => [...prev, errorMessage]);
-      }
+      setAiChatHistory(prev => [...prev, aiResponse]);
     } catch (error) {
       console.error('Error sending AI message:', error);
-      const errorMessage: AiChatMessage = {
-        id: `ai-error-${Date.now()}`,
-        type: 'ai',
-        message: 'Sorry, I encountered an error. Please try again.',
-        timestamp: Date.now(),
-      };
+      const errorMessage = aiContextManager.createErrorMessage(
+        error instanceof Error ? error.message : 'Failed to send message'
+      );
       setAiChatHistory(prev => [...prev, errorMessage]);
     } finally {
       setIsAiProcessing(false);
@@ -138,27 +73,21 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
   };
 
   const formatTimestamp = (timestamp: number) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
-    
-    if (diffInMinutes < 1) return 'Just now';
-    if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
-    
-    const diffInHours = Math.floor(diffInMinutes / 60);
-    if (diffInHours < 24) return `${diffInHours}h ago`;
-    
-    const diffInDays = Math.floor(diffInHours / 24);
-    if (diffInDays < 7) return `${diffInDays}d ago`;
-    
-    return date.toLocaleDateString();
+    return aiContextManager.formatTimestamp(timestamp);
   };
 
   return (
     <div className={styles.roomChat}>
       {/* Header */}
       <div className={styles.header}>
-        <h3 className={styles.title}>Ask Ohm</h3>
+        <h3 className={styles.title}>
+          Ask Ohm
+          {isLiveMeeting && (
+            <span className={styles.liveBadge}>
+              🔴 Live
+            </span>
+          )}
+        </h3>
         <div className={styles.aiIndicator}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
             <path d="M12 2L2 7v10c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7l-10-5z" stroke="currentColor" strokeWidth="2"/>
@@ -174,7 +103,12 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
         <div className={styles.messagesList}>
           {aiChatHistory.length === 0 ? (
             <div className={styles.emptyState}>
-              <p>Get insights about meetings, participants, and decisions.</p>
+              <p>
+                {isLiveMeeting 
+                  ? "Get real-time insights about this meeting and past discussions."
+                  : "Get insights about meetings, participants, and decisions."
+                }
+              </p>
               
               <div className={styles.aiSuggestions} style={{ marginTop: '0.75rem' }}>
                 <p className={styles.suggestionsTitle}>Popular questions:</p>
@@ -252,7 +186,7 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
                         <p>Sources:</p>
                         {aiMsg.citations.map((citation, index) => (
                           <a key={index} href={citation} target="_blank" rel="noopener noreferrer" className={styles.citation}>
-                            {citation}
+                            🔗 {new URL(citation).hostname}
                           </a>
                         ))}
                       </div>
@@ -292,13 +226,7 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
             type="button"
             className={`${styles.commandButton} ${newMessage.toLowerCase().startsWith('@web ') ? styles.active : ''}`}
             onClick={() => {
-              if (newMessage.toLowerCase().startsWith('@web ')) {
-                // Remove @web prefix
-                setNewMessage(newMessage.slice(5));
-              } else {
-                // Add @web prefix
-                setNewMessage(`@web ${newMessage}`);
-              }
+              setNewMessage(aiContextManager.toggleAiPrefix(newMessage, '@web'));
             }}
             disabled={isAiProcessing}
             title="Web Search"
@@ -312,11 +240,7 @@ export default function RoomChat({ roomName, currentUser }: RoomChatProps) {
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={
-              newMessage.toLowerCase().startsWith('@web ') 
-                ? "Search the web..." 
-                : "Ask Ohm anything about the room..."
-            }
+            placeholder={aiContextManager.getPlaceholderText(newMessage, isLiveMeeting)}
             className={styles.messageInput}
             rows={1}
             disabled={isAiProcessing}

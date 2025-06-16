@@ -144,9 +144,9 @@ export class AiContextManager {
    */
   getQuestionSuggestions(isLiveMeeting: boolean = false): string[] {
     const baseSuggestions = [
-      "Summarize our room's previous discussions",
+      "Summarize our room's previous discussions!",
       "What are the recurring topics in our meetings?",
-      "Create a summary of action items",
+      "Create a summary of action items!",
       "What decisions were made recently?"
     ];
 
@@ -157,14 +157,14 @@ export class AiContextManager {
       "Who has been most active in the discussion?"
     ];
 
-    const webSuggestions = [
-      "@web Latest industry trends and news"
-    ];
+    // const webSuggestions = [
+    //   "@web Who are our top 5 competitors in the market?"
+    // ];
 
     if (isLiveMeeting) {
-      return [...liveSuggestions, ...webSuggestions];
+      return [...liveSuggestions];
     } else {
-      return [...baseSuggestions, ...webSuggestions];
+      return [...baseSuggestions];
     }
   }
 

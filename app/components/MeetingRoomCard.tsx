@@ -46,6 +46,11 @@ export function MeetingRoomCard({ room }: MeetingRoomCardProps) {
       if (response.ok) {
         const data = await response.json();
         console.log('Quick joined meeting:', data);
+        
+        // Store meetingId in localStorage for later use during meeting end
+        if (data.success && data.data?.meetingId) {
+          localStorage.setItem(`meeting-id-${room.id}`, data.data.meetingId);
+        }
       } else {
         console.warn('Failed to create meeting record, proceeding anyway');
       }

@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import styles from '@/styles/UnifiedMeetingSummary.module.css';
 
 interface Transcript {
-  id: string;
   speaker: string;
   text: string;
   timestamp: Date;
@@ -66,6 +65,7 @@ export function UnifiedMeetingSummary({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'summary' | 'transcript'>('summary');
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
   useEffect(() => {
     if ((isModal && isOpen && meetingId) || (!isModal && meetingId)) {
@@ -90,6 +90,39 @@ export function UnifiedMeetingSummary({
       if (data.success) {
         const meetingData = data.data;
         
+        // Check if meeting just ended and summary is being generated
+        const hasTranscripts = meetingData.transcripts && meetingData.transcripts.length > 0;
+        const hasSummary = !!meetingData.summary;
+        const justEnded = meetingData.endedAt && !hasSummary && hasTranscripts;
+        
+        if (justEnded) {
+          setIsGeneratingSummary(true);
+          // Poll for summary completion every 3 seconds
+          const pollInterval = setInterval(async () => {
+            try {
+              const pollResponse = await fetch(`/api/meeting-details/${meetingId}`);
+              const pollData = await pollResponse.json();
+              if (pollData.success && pollData.data.summary) {
+                setIsGeneratingSummary(false);
+                clearInterval(pollInterval);
+                // Refresh the meeting data
+                fetchMeetingDetails();
+              }
+            } catch (error) {
+              console.error('Error polling for summary:', error);
+              // Stop polling after error, but don't fail
+              setIsGeneratingSummary(false);
+              clearInterval(pollInterval);
+            }
+          }, 3000);
+          
+          // Stop polling after 2 minutes if summary not generated
+          setTimeout(() => {
+            setIsGeneratingSummary(false);
+            clearInterval(pollInterval);
+          }, 120000);
+        }
+        
         // Transform the data to match our interface
         const transformedMeeting: Meeting = {
           id: meetingData._id,
@@ -109,7 +142,6 @@ export function UnifiedMeetingSummary({
             isHost: p.isHost
           })),
           transcripts: meetingData.transcripts ? meetingData.transcripts.map((t: any) => ({
-            id: `${t.speaker}-${t.timestamp}`,
             speaker: t.speaker,
             text: t.text,
             timestamp: new Date(t.timestamp)
@@ -302,7 +334,7 @@ export function UnifiedMeetingSummary({
           {/* Content */}
           <main className={styles.main}>
             {activeTab === 'summary' && (
-              <SummaryTab meeting={meeting} />
+              <SummaryTab meeting={meeting} isGeneratingSummary={isGeneratingSummary} />
             )}
             
             {activeTab === 'transcript' && (
@@ -339,9 +371,10 @@ export function UnifiedMeetingSummary({
 // Summary Tab Component
 interface SummaryTabProps {
   meeting: Meeting;
+  isGeneratingSummary?: boolean;
 }
 
-function SummaryTab({ meeting }: SummaryTabProps) {
+function SummaryTab({ meeting, isGeneratingSummary = false }: SummaryTabProps) {
   const summary = meeting.summaries?.[0]; // Latest summary
 
   return (
@@ -392,6 +425,33 @@ function SummaryTab({ meeting }: SummaryTabProps) {
             )}
           </div>
         </div>
+      ) : isGeneratingSummary ? (
+        <div className={styles.section}>
+          <h3 className={styles.sectionTitle}>AI Summary</h3>
+          <div className={styles.generatingSummary}>
+            <div className={styles.loadingSpinner}></div>
+            <h4>🤖 Generating AI Summary...</h4>
+            <p>Our AI is analyzing the meeting transcript and creating a comprehensive summary. This usually takes 30-60 seconds.</p>
+            <div className={styles.processingSteps}>
+              <div className={styles.processingStep}>
+                <span className={styles.stepIcon}>📝</span>
+                <span>Analyzing transcript</span>
+              </div>
+              <div className={styles.processingStep}>
+                <span className={styles.stepIcon}>🔍</span>
+                <span>Extracting key points</span>
+              </div>
+              <div className={styles.processingStep}>
+                <span className={styles.stepIcon}>✅</span>
+                <span>Identifying action items</span>
+              </div>
+              <div className={styles.processingStep}>
+                <span className={styles.stepIcon}>🎯</span>
+                <span>Summarizing decisions</span>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div className={styles.section}>
           <h3 className={styles.sectionTitle}>AI Summary</h3>
@@ -434,8 +494,8 @@ function TranscriptTab({ transcripts, formatTimestamp, getInitials }: Transcript
   return (
     <div className={styles.transcriptTab}>
       <div className={styles.transcriptList}>
-        {transcripts.map((transcript) => (
-          <div key={transcript.id} className={styles.transcriptItem}>
+        {transcripts.map((transcript, index) => (
+          <div key={`${transcript.speaker}-${transcript.timestamp}-${index}`} className={styles.transcriptItem}>
             <div className={styles.transcriptHeader}>
               <div className={styles.speakerInfo}>
                 <div className={styles.speakerAvatar}>
