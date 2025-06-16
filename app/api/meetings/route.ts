@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { DatabaseService, fromCreateMeetingForm, toMeetingRoomCard, toOneOffMeeting } from '@/lib/mongodb';
+import { FastDB, IUser } from '@/lib/mongodb-lite';
 
 // GET /api/meetings - Get meeting rooms or one-off meetings based on query params
 export async function GET(request: NextRequest) {
@@ -19,14 +19,12 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type'); // 'instant' for one-off meetings
-    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : undefined;
+    const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 10;
     
     console.log('📋 Query params:', { type, limit });
     
-    const db = DatabaseService.getInstance();
-    
     // Get user from database to get the MongoDB ObjectId
-    let user = await db.getUserByClerkId(userId);
+    let user: IUser | null = await FastDB.getUserByClerkId(userId);
     console.log('👤 User lookup result:', user ? { id: user._id, name: user.name, email: user.email } : 'null');
     
     if (!user) {
@@ -45,17 +43,10 @@ export async function GET(request: NextRequest) {
           name: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || 'Anonymous User',
           email: clerkUser.emailAddresses[0]?.emailAddress || '',
           avatar: clerkUser.imageUrl || '',
-          joinedAt: new Date(),
-          lastActive: new Date(),
         };
         
-        user = await db.createUser(userData);
+        user = await FastDB.createUser(userData);
         console.log(`✅ User created successfully:`, { id: user._id, name: user.name, email: user.email });
-        
-        // Link user to any rooms they were invited to before signing up
-        if (user.email) {
-          await db.linkUserToInvitedRooms(user._id, user.email);
-        }
       } catch (createError) {
         console.error('❌ Failed to create user:', createError);
         return NextResponse.json({ 
@@ -63,45 +54,27 @@ export async function GET(request: NextRequest) {
           error: 'Failed to create user account' 
         }, { status: 500 });
       }
-    } else {
-      // For existing users, try to link them to any new invitations
-      if (user.email) {
-        await db.linkUserToInvitedRooms(user._id, user.email);
-      }
     }
     
     if (type === 'instant') {
-      console.log('⚡ Fetching instant meetings for user:', user._id);
-      // Fetch user's one-off meetings
-      const oneOffMeetings = await db.getOneOffMeetingsByUser(user._id, limit);
-      console.log('⚡ Raw instant meetings from DB:', oneOffMeetings.length, 'meetings');
-      
-      const formattedMeetings = oneOffMeetings.map(meeting => toOneOffMeeting(meeting));
-      console.log('⚡ Formatted instant meetings:', formattedMeetings);
+      console.log('⚡ Fetching instant meetings');
+      // Fetch one-off meetings
+      const oneOffMeetings = await FastDB.getOneOffMeetings(limit);
+      console.log('⚡ Found', oneOffMeetings.length, 'instant meetings');
       
       return NextResponse.json({ 
         success: true, 
-        data: formattedMeetings 
+        data: oneOffMeetings 
       });
     } else {
-      console.log('🏠 Fetching meeting rooms for user:', user._id);
-      // Default: fetch user's meeting rooms
-      const meetingRooms = await db.getMeetingRoomsByUser(user._id, user.email, limit);
-      console.log('🏠 Raw meeting rooms from DB:', meetingRooms.length, 'rooms');
-      console.log('🏠 Meeting rooms details:', meetingRooms.map(room => ({
-        id: room._id,
-        roomName: room.roomName,
-        title: room.title,
-        createdBy: room.createdBy,
-        participants: room.participants.map(p => ({ name: p.name, role: p.role, userId: p.userId, email: p.email }))
-      })));
-      
-      const formattedRooms = meetingRooms.map(room => toMeetingRoomCard(room));
-      console.log('🏠 Formatted meeting rooms:', formattedRooms);
+      console.log('🏠 Fetching meeting rooms');
+      // Default: fetch meeting rooms
+      const meetingRooms = await FastDB.getAllRooms();
+      console.log('🏠 Found', meetingRooms.length, 'meeting rooms');
       
       return NextResponse.json({ 
         success: true, 
-        data: formattedRooms 
+        data: meetingRooms 
       });
     }
   } catch (error) {
@@ -132,11 +105,6 @@ export async function POST(request: NextRequest) {
       type, 
       isRecurring, 
       participants, 
-      startDate, 
-      endDate, 
-      frequency, 
-      recurringDay, 
-      recurringTime,
       participantName // For instant meetings
     } = body;
 
@@ -147,11 +115,9 @@ export async function POST(request: NextRequest) {
         error: 'Missing required fields: roomName, title, type' 
       }, { status: 400 });
     }
-
-    const db = DatabaseService.getInstance();
     
     // Get user from database
-    let user = await db.getUserByClerkId(userId);
+    let user: IUser | null = await FastDB.getUserByClerkId(userId);
     if (!user) {
       // Fallback: Create user if they don't exist (webhook might have failed)
       console.log(`User not found in database for clerkId: ${userId}, creating user...`);
@@ -168,11 +134,9 @@ export async function POST(request: NextRequest) {
           name: `${clerkUser.firstName || ''} ${clerkUser.lastName || ''}`.trim() || 'Anonymous User',
           email: clerkUser.emailAddresses[0]?.emailAddress || '',
           avatar: clerkUser.imageUrl || '',
-          joinedAt: new Date(),
-          lastActive: new Date(),
         };
         
-        user = await db.createUser(userData);
+        user = await FastDB.createUser(userData);
         console.log(`User created successfully: ${user.name}`);
       } catch (createError) {
         console.error('Failed to create user:', createError);
@@ -185,56 +149,51 @@ export async function POST(request: NextRequest) {
     
     if (isRecurring === false) {
       // Create one-off meeting with user as participant
-      const oneOffMeeting = await db.createOneOffMeeting({
+      const oneOffMeeting = await FastDB.createOneOffMeeting({
         roomName,
         title,
         type,
-        participantName: user.name,
-        userId: user._id
+        startedAt: new Date(),
+        participants: [{
+          userId: user._id,
+          name: user.name,
+          isHost: true
+        }]
       });
       
       return NextResponse.json({ 
         success: true, 
-        data: toOneOffMeeting(oneOffMeeting) 
+        data: oneOffMeeting 
       }, { status: 201 });
     } else {
-      // Create meeting room (existing logic)
-      
-      // Check if room already exists
-      const existingRoom = await db.getMeetingRoomByName(roomName);
-      if (existingRoom) {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Meeting room with this name already exists' 
-        }, { status: 409 });
-      }
-
       // Create meeting room with user as creator and host
-      const roomData = fromCreateMeetingForm({
+      const roomData = {
         roomName,
         title,
         type,
-        isRecurring: isRecurring || false,
-        participants: participants || [],
-        startDate,
-        endDate,
-        frequency,
-        recurringDay,
-        recurringTime
-      }, user._id);
+        isRecurring: true,
+        participants: [{
+          userId: user._id,
+          email: user.email || '',
+          name: user.name,
+          role: 'host' as const
+        }],
+        createdBy: user._id,
+        isActive: false
+      };
 
-      const createdRoom = await db.createMeetingRoom(roomData);
+      const createdRoom = await FastDB.createRoom(roomData);
       
       return NextResponse.json({ 
         success: true, 
-        data: toMeetingRoomCard(createdRoom) 
+        data: createdRoom 
       }, { status: 201 });
     }
   } catch (error) {
-    console.error('Error creating meeting:', error);
+    console.error('Error creating meeting/room:', error);
     return NextResponse.json({ 
       success: false, 
-      error: 'Failed to create meeting' 
+      error: 'Failed to create meeting or room' 
     }, { status: 500 });
   }
 } 
