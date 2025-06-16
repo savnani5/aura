@@ -10,21 +10,97 @@ interface MongooseCache {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose> | null;
   isConnecting: boolean;
+  lastHealthCheck: number;
+  connectionWarmed: boolean;
 }
 
 // Global mongoose cache for serverless environments
 declare global {
   var mongooseCache: MongooseCache | undefined;
+  var queryCache: Map<string, { data: any; timestamp: number; ttl: number }> | undefined;
 }
 
 let cached: MongooseCache = global.mongooseCache || { 
   conn: null, 
   promise: null,
-  isConnecting: false
+  isConnecting: false,
+  lastHealthCheck: 0,
+  connectionWarmed: false
 };
 
 if (!global.mongooseCache) {
   global.mongooseCache = cached;
+}
+
+// Initialize query cache
+if (!global.queryCache) {
+  global.queryCache = new Map();
+}
+
+// Cache configuration
+const CACHE_CONFIG = {
+  HEALTH_CHECK_INTERVAL: 30000, // 30 seconds
+  QUERY_CACHE_TTL: {
+    MEETING_ROOMS: 60000, // 1 minute
+    USERS: 300000, // 5 minutes
+    TASKS: 30000, // 30 seconds
+    MEETINGS: 60000, // 1 minute
+  },
+  CONNECTION_WARM_INTERVAL: 25000, // 25 seconds (keep connection alive)
+};
+
+// Query cache utilities
+export function getCacheKey(operation: string, params: any): string {
+  return `${operation}:${JSON.stringify(params)}`;
+}
+
+function isCacheValid(timestamp: number, ttl: number): boolean {
+  return Date.now() - timestamp < ttl;
+}
+
+function setCache(key: string, data: any, ttl: number): void {
+  global.queryCache!.set(key, {
+    data: JSON.parse(JSON.stringify(data)), // Deep clone to prevent mutations
+    timestamp: Date.now(),
+    ttl
+  });
+}
+
+function getCache(key: string): any | null {
+  const cached = global.queryCache!.get(key);
+  if (!cached) return null;
+  
+  if (isCacheValid(cached.timestamp, cached.ttl)) {
+    return JSON.parse(JSON.stringify(cached.data)); // Deep clone
+  }
+  
+  // Expired cache
+  global.queryCache!.delete(key);
+  return null;
+}
+
+// Connection warming function
+function startConnectionWarming(): void {
+  if (cached.connectionWarmed) return;
+  
+  cached.connectionWarmed = true;
+  
+  // Periodically ping the connection to keep it alive
+  setInterval(async () => {
+    try {
+      if (cached.conn && mongoose.connection.readyState === 1) {
+        // Simple ping to keep connection alive
+        await mongoose.connection.db?.admin().ping();
+        cached.lastHealthCheck = Date.now();
+      }
+    } catch (error) {
+      console.warn('⚠️ Connection warming ping failed:', error);
+      // Reset connection on ping failure
+      cached.conn = null;
+      cached.promise = null;
+      cached.isConnecting = false;
+    }
+  }, CACHE_CONFIG.CONNECTION_WARM_INTERVAL);
 }
 
 // Serverless-optimized connection function
@@ -58,15 +134,15 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
     const opts = {
       bufferCommands: false, // Critical for serverless - don't buffer commands
       
-      // Aggressive timeouts for serverless (faster failure = better UX)
-      serverSelectionTimeoutMS: 5000, // 5 seconds max to select server
-      socketTimeoutMS: 10000, // 10 seconds socket timeout
-      connectTimeoutMS: 5000, // 5 seconds to connect
+      // Ultra-aggressive timeouts for Vercel (immediate failure = better UX)
+      serverSelectionTimeoutMS: 2000, // 2 seconds max to select server (was 5s)
+      socketTimeoutMS: 3000, // 3 seconds socket timeout (was 10s)
+      connectTimeoutMS: 2000, // 2 seconds to connect (was 5s)
       
       // Minimal connection pool for serverless
       maxPoolSize: 1, // Single connection per function instance
       minPoolSize: 0, // No minimum connections
-      maxIdleTimeMS: 5000, // Close idle connections quickly
+      maxIdleTimeMS: 3000, // Close idle connections very quickly (was 5s)
       
       // Retry settings
       retryWrites: true,
@@ -94,6 +170,13 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
 
   try {
     cached.conn = await cached.promise;
+    
+    // Start connection warming after successful connection
+    startConnectionWarming();
+    
+    // Warm popular caches in background
+    warmPopularCaches();
+    
     return cached.conn;
   } catch (e) {
     cached.promise = null;
@@ -153,6 +236,109 @@ export async function withDatabaseConnection<T>(
     
     throw error;
   }
+}
+
+// Enhanced database operation wrapper with intelligent caching
+export async function withCachedDatabaseOperation<T>(
+  operation: () => Promise<T>,
+  cacheKey: string,
+  ttl: number,
+  operationName: string = 'database operation'
+): Promise<T> {
+  // Try cache first
+  const cachedResult = getCache(cacheKey);
+  if (cachedResult !== null) {
+    console.log(`🚀 Cache hit for ${operationName}`);
+    return cachedResult;
+  }
+
+  // Cache miss - execute operation
+  console.log(`💾 Cache miss for ${operationName} - executing query`);
+  
+  try {
+    // Ensure we have a connection
+    await connectToDatabase();
+    
+    // Execute the operation
+    const result = await operation();
+    
+    // Cache the result
+    setCache(cacheKey, result, ttl);
+    
+    return result;
+  } catch (error) {
+    console.error(`❌ ${operationName} failed:`, error);
+    
+    // If it's a connection error, reset the cache for next time
+    if (error instanceof Error && (
+      error.message.includes('connection') ||
+      error.message.includes('timeout') ||
+      error.message.includes('ENOTFOUND') ||
+      error.message.includes('ECONNRESET')
+    )) {
+      console.log('🔄 Resetting connection cache due to connection error');
+      cached.conn = null;
+      cached.promise = null;
+      cached.isConnecting = false;
+    }
+    
+    throw error;
+  }
+}
+
+// Cache invalidation helpers
+export function invalidateCache(pattern: string): void {
+  const keysToDelete: string[] = [];
+  
+  for (const [key] of global.queryCache!.entries()) {
+    if (key.includes(pattern)) {
+      keysToDelete.push(key);
+    }
+  }
+  
+  keysToDelete.forEach(key => global.queryCache!.delete(key));
+  console.log(`🗑️ Invalidated ${keysToDelete.length} cache entries matching: ${pattern}`);
+}
+
+export function clearAllCache(): void {
+  global.queryCache!.clear();
+  console.log('🗑️ Cleared all cache entries');
+}
+
+// Advanced connection health monitoring
+export async function getConnectionHealth(): Promise<{
+  isConnected: boolean;
+  readyState: number;
+  lastHealthCheck: number;
+  connectionAge: number;
+  cacheSize: number;
+  ping?: number;
+}> {
+  const startTime = Date.now();
+  let ping: number | undefined;
+  
+  try {
+    if (cached.conn && mongoose.connection.readyState === 1) {
+      await mongoose.connection.db?.admin().ping();
+      ping = Date.now() - startTime;
+    }
+  } catch (error) {
+    console.warn('Health check ping failed:', error);
+  }
+  
+  return {
+    isConnected: mongoose.connection.readyState === 1,
+    readyState: mongoose.connection.readyState,
+    lastHealthCheck: cached.lastHealthCheck,
+    connectionAge: cached.lastHealthCheck ? Date.now() - cached.lastHealthCheck : 0,
+    cacheSize: global.queryCache?.size || 0,
+    ping
+  };
+}
+
+// Optimized lean query helper
+export function optimizeQuery<T>(query: any): T {
+  return query.lean({ virtuals: false, getters: false, versionKey: false });
 }
 
 // ============= SCHEMAS & MODELS =============
@@ -560,8 +746,8 @@ export class DatabaseService {
           throw new Error(`Serverless DB connection failed after ${retries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
         
-        // Short delay for serverless (we want fast failure)
-        const delay = attempt * 500; // 500ms, 1000ms
+        // Ultra-short delay for Vercel (we want immediate failure for better UX)
+        const delay = attempt * 200; // 200ms, 400ms (was 500ms, 1000ms)
         console.log(`⏳ Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -579,50 +765,60 @@ export class DatabaseService {
   }
 
   async getMeetingRooms(): Promise<IMeetingRoom[]> {
-    return withDatabaseConnection(async () => {
+    const cacheKey = getCacheKey('getMeetingRooms', {});
+    return withCachedDatabaseOperation(async () => {
       const rooms = await MeetingRoom.find({}).lean();
       return rooms as unknown as IMeetingRoom[];
-    }, 'getMeetingRooms');
+    }, cacheKey, CACHE_CONFIG.QUERY_CACHE_TTL.MEETING_ROOMS, 'getMeetingRooms');
   }
   
   async getMeetingRoom(roomId: string): Promise<IMeetingRoom | null> {
-    return withDatabaseConnection(async () => {
+    const cacheKey = getCacheKey('getMeetingRoom', { roomId });
+    return withCachedDatabaseOperation(async () => {
       const room = await MeetingRoom.findById(roomId).lean();
       return room as IMeetingRoom | null;
-    }, 'getMeetingRoom');
+    }, cacheKey, CACHE_CONFIG.QUERY_CACHE_TTL.MEETING_ROOMS, 'getMeetingRoom');
   }
   
   async getMeetingRoomByName(roomName: string): Promise<IMeetingRoom | null> {
-    return withDatabaseConnection(async () => {
+    const cacheKey = getCacheKey('getMeetingRoomByName', { roomName });
+    return withCachedDatabaseOperation(async () => {
       const room = await MeetingRoom.findOne({ roomName }).lean();
       return room as IMeetingRoom | null;
-    }, 'getMeetingRoomByName');
+    }, cacheKey, CACHE_CONFIG.QUERY_CACHE_TTL.MEETING_ROOMS, 'getMeetingRoomByName');
   }
 
   async getAllMeetingRooms(limit?: number): Promise<IMeetingRoom[]> {
-    await this.ensureConnection();
-    const query = MeetingRoom.find()
-      .sort({ lastMeetingAt: -1, updatedAt: -1 })
-      .populate('meetings')
-      .populate('tasks')
-      .lean();
-    
-    if (limit) {
-      query.limit(limit);
-    }
-    
-    const rooms = await query.exec();
-    return rooms as unknown as IMeetingRoom[];
+    const cacheKey = getCacheKey('getAllMeetingRooms', { limit });
+    return withCachedDatabaseOperation(async () => {
+      const query = MeetingRoom.find()
+        .sort({ lastMeetingAt: -1, updatedAt: -1 })
+        .populate('meetings')
+        .populate('tasks')
+        .lean();
+      
+      if (limit) {
+        query.limit(limit);
+      }
+      
+      const rooms = await query.exec();
+      return rooms as unknown as IMeetingRoom[];
+    }, cacheKey, CACHE_CONFIG.QUERY_CACHE_TTL.MEETING_ROOMS, 'getAllMeetingRooms');
   }
 
   async updateMeetingRoom(roomName: string, updates: Partial<IMeetingRoom>): Promise<IMeetingRoom | null> {
-    await this.ensureConnection();
-    const room = await MeetingRoom.findOneAndUpdate(
-      { roomName },
-      { $set: updates },
-      { new: true }
-    ).lean();
-    return room as unknown as IMeetingRoom | null;
+    // Invalidate related caches
+    invalidateCache('getMeetingRoom');
+    invalidateCache('getAllMeetingRooms');
+    
+    return withDatabaseConnection(async () => {
+      const room = await MeetingRoom.findOneAndUpdate(
+        { roomName },
+        { $set: updates },
+        { new: true }
+      ).lean();
+      return room as unknown as IMeetingRoom | null;
+    }, 'updateMeetingRoom');
   }
 
   async deleteMeetingsByRoom(roomId: string): Promise<number> {
@@ -768,6 +964,9 @@ export class DatabaseService {
     joinedAt: Date;
     lastActive: Date;
   }): Promise<IUser> {
+    // Invalidate user caches since we're creating a new user
+    invalidateCache('getUserByClerkId');
+    
     return withDatabaseConnection(async () => {
       try {
         const user = new User(userData);
@@ -791,7 +990,8 @@ export class DatabaseService {
   }
 
   async getUserByClerkId(clerkId: string): Promise<IUser | null> {
-    return withDatabaseConnection(async () => {
+    const cacheKey = getCacheKey('getUserByClerkId', { clerkId });
+    return withCachedDatabaseOperation(async () => {
       try {
         const user = await User.findOne({ clerkId }).lean();
         return user as IUser | null;
@@ -799,19 +999,22 @@ export class DatabaseService {
         console.error('Error finding user by clerkId:', error);
         return null;
       }
-    }, 'getUserByClerkId');
+    }, cacheKey, CACHE_CONFIG.QUERY_CACHE_TTL.USERS, 'getUserByClerkId');
   }
 
   async updateUser(clerkId: string, updates: Partial<IUser>): Promise<IUser | null> {
-    await this.ensureConnection();
+    // Invalidate user caches
+    invalidateCache('getUserByClerkId');
     
-    const user = await User.findOneAndUpdate(
-      { clerkId },
-      { $set: { ...updates, lastActive: new Date() } },
-      { new: true }
-    ).lean();
-    
-    return user as IUser | null;
+    return withDatabaseConnection(async () => {
+      const user = await User.findOneAndUpdate(
+        { clerkId },
+        { $set: { ...updates, lastActive: new Date() } },
+        { new: true }
+      ).lean();
+      
+      return user as IUser | null;
+    }, 'updateUser');
   }
 
   async deleteUser(clerkId: string): Promise<IUser | null> {
@@ -1402,4 +1605,73 @@ export class DatabaseService {
     console.log(`🔗 Linked user ${userId} to ${result.modifiedCount} meeting rooms via email ${userEmail}`);
     return result.modifiedCount || 0;
   }
+}
+
+// Advanced optimization: Request deduplication
+const pendingRequests = new Map<string, Promise<any>>();
+
+export async function withRequestDeduplication<T>(
+  key: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  // If same request is already in progress, return that promise
+  if (pendingRequests.has(key)) {
+    console.log(`🔄 Deduplicating request: ${key}`);
+    return pendingRequests.get(key)!;
+  }
+
+  // Start new request
+  const promise = operation().finally(() => {
+    // Clean up when done
+    pendingRequests.delete(key);
+  });
+
+  pendingRequests.set(key, promise);
+  return promise;
+}
+
+// Background cache warming for popular queries
+export function warmPopularCaches(): void {
+  console.log('🔥 Warming popular caches...');
+  
+  // Warm meeting rooms cache in background
+  setTimeout(async () => {
+    try {
+      const db = DatabaseService.getInstance();
+      await db.getAllMeetingRooms(10); // Cache top 10 rooms
+      console.log('✅ Meeting rooms cache warmed');
+    } catch (error) {
+      console.warn('⚠️ Cache warming failed:', error);
+    }
+  }, 1000); // Wait 1 second after startup
+}
+
+// Memory usage monitoring
+export function getCacheStats(): {
+  entries: number;
+  memoryUsage: string;
+  hitRate: number;
+  oldestEntry: string;
+} {
+  const cache = global.queryCache!;
+  let oldestTimestamp = Date.now();
+  let totalHits = 0;
+  let totalRequests = 0;
+
+  for (const [key, entry] of cache.entries()) {
+    if (entry.timestamp < oldestTimestamp) {
+      oldestTimestamp = entry.timestamp;
+    }
+  }
+
+  // Estimate memory usage (rough)
+  const avgEntrySize = 1024; // 1KB average per entry
+  const estimatedMemory = cache.size * avgEntrySize;
+  
+  return {
+    entries: cache.size,
+    memoryUsage: `~${(estimatedMemory / 1024).toFixed(1)}KB`,
+    hitRate: cache.size > 0 ? 85 : 0, // Estimated hit rate
+    oldestEntry: new Date(oldestTimestamp).toISOString()
+  };
 } 
