@@ -371,6 +371,11 @@ export interface IMeeting {
     text: string;
     timestamp: Date;
     embedding?: number[];
+    // Enhanced fields for speaker diarization
+    speakerConfidence?: number;
+    deepgramSpeaker?: number;
+    participantId?: string;
+    isLocal?: boolean;
   }>;
   summary?: {
     content: string;

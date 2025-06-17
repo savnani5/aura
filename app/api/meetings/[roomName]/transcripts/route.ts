@@ -64,7 +64,12 @@ export async function POST(
     const processedTranscripts = validTranscripts.map(transcript => ({
       speaker: transcript.speaker,
       text: transcript.text,
-      timestamp: new Date(transcript.timestamp)
+      timestamp: new Date(transcript.timestamp),
+      // Enhanced fields for speaker diarization
+      speakerConfidence: transcript.speakerConfidence,
+      deepgramSpeaker: transcript.deepgramSpeaker,
+      participantId: transcript.participantId,
+      isLocal: transcript.isLocal
     }));
 
     // Store transcripts with embeddings
@@ -126,7 +131,12 @@ export async function GET(
       speaker: transcript.speaker,
       text: transcript.text,
       timestamp: transcript.timestamp,
-      hasEmbedding: transcript.embedding && transcript.embedding.length > 0
+      hasEmbedding: transcript.embedding && transcript.embedding.length > 0,
+      // Enhanced fields for consistency with live transcription
+      speakerConfidence: transcript.speakerConfidence,
+      deepgramSpeaker: transcript.deepgramSpeaker,
+      participantId: transcript.participantId,
+      isLocal: transcript.isLocal
     }));
 
     return NextResponse.json({

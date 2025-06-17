@@ -8,6 +8,11 @@ interface Transcript {
   speaker: string;
   text: string;
   timestamp: Date;
+  // Enhanced fields for consistency with live transcription
+  speakerConfidence?: number;
+  deepgramSpeaker?: number;
+  participantId?: string;
+  isLocal?: boolean;
 }
 
 interface Participant {
@@ -144,7 +149,11 @@ export function UnifiedMeetingSummary({
           transcripts: meetingData.transcripts ? meetingData.transcripts.map((t: any) => ({
             speaker: t.speaker,
             text: t.text,
-            timestamp: new Date(t.timestamp)
+            timestamp: new Date(t.timestamp),
+            speakerConfidence: t.speakerConfidence,
+            deepgramSpeaker: t.deepgramSpeaker,
+            participantId: t.participantId,
+            isLocal: t.isLocal
           })) : [],
           summaries: meetingData.summary ? [{
             id: '1',
@@ -479,6 +488,85 @@ interface TranscriptTabProps {
 }
 
 function TranscriptTab({ transcripts, formatTimestamp, getInitials }: TranscriptTabProps) {
+  // Generate speaker colors for consistency (same logic as MeetingAssistant)
+  const getSpeakerColor = (speaker: string) => {
+    const colors = [
+      'bg-blue-100 text-blue-800 border-blue-200',
+      'bg-green-100 text-green-800 border-green-200', 
+      'bg-purple-100 text-purple-800 border-purple-200',
+      'bg-orange-100 text-orange-800 border-orange-200',
+      'bg-pink-100 text-pink-800 border-pink-200',
+      'bg-indigo-100 text-indigo-800 border-indigo-200'
+    ];
+    const hash = speaker.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  // Group consecutive transcripts from the same speaker (same logic as MeetingAssistant)
+  const groupedTranscripts = React.useMemo(() => {
+    const groups: Array<{
+      speaker: string;
+      participantId?: string;
+      startTime: Date;
+      endTime: Date;
+      messages: Transcript[];
+      speakerColor: string;
+      speakerConfidence?: number;
+      deepgramSpeaker?: number;
+    }> = [];
+
+    transcripts.forEach((transcript) => {
+      const lastGroup = groups[groups.length - 1];
+      
+      // Check if this transcript should be grouped with the previous one
+      // 30 seconds window for better conversation flow (same as MeetingAssistant)
+      const shouldGroup = lastGroup && 
+        lastGroup.speaker === transcript.speaker &&
+        lastGroup.participantId === transcript.participantId &&
+        (transcript.timestamp.getTime() - lastGroup.endTime.getTime()) < 30000; // 30 seconds
+      
+      if (shouldGroup) {
+        // Add to existing group
+        lastGroup.messages.push(transcript);
+        lastGroup.endTime = transcript.timestamp;
+        // Update confidence to latest if available
+        if (transcript.speakerConfidence !== undefined) {
+          lastGroup.speakerConfidence = transcript.speakerConfidence;
+        }
+        if (transcript.deepgramSpeaker !== undefined) {
+          lastGroup.deepgramSpeaker = transcript.deepgramSpeaker;
+        }
+      } else {
+        // Create new group
+        groups.push({
+          speaker: transcript.speaker,
+          participantId: transcript.participantId,
+          startTime: transcript.timestamp,
+          endTime: transcript.timestamp,
+          messages: [transcript],
+          speakerColor: getSpeakerColor(transcript.speaker),
+          speakerConfidence: transcript.speakerConfidence,
+          deepgramSpeaker: transcript.deepgramSpeaker,
+        });
+      }
+    });
+
+    return groups;
+  }, [transcripts]);
+
+  // Format time range for transcript groups
+  const formatTimeRange = (startTime: Date, endTime: Date) => {
+    const start = formatTimestamp(startTime);
+    if (startTime.getTime() === endTime.getTime()) {
+      return start;
+    }
+    const end = formatTimestamp(endTime);
+    return `${start} - ${end}`;
+  };
+
   if (transcripts.length === 0) {
     return (
       <div className={styles.emptyTranscript}>
@@ -494,21 +582,43 @@ function TranscriptTab({ transcripts, formatTimestamp, getInitials }: Transcript
   return (
     <div className={styles.transcriptTab}>
       <div className={styles.transcriptList}>
-        {transcripts.map((transcript, index) => (
-          <div key={`${transcript.speaker}-${transcript.timestamp}-${index}`} className={styles.transcriptItem}>
-            <div className={styles.transcriptHeader}>
+        {groupedTranscripts.map((group, groupIndex) => (
+          <div key={`${group.participantId || group.speaker}-${group.startTime.getTime()}-${groupIndex}`} className={`${styles.transcriptGroup} ${group.speakerColor}`}>
+            <div className={styles.transcriptGroupHeader}>
               <div className={styles.speakerInfo}>
                 <div className={styles.speakerAvatar}>
-                  {getInitials(transcript.speaker)}
+                  {getInitials(group.speaker)}
                 </div>
-                <span className={styles.speakerName}>{transcript.speaker}</span>
+                <span className={styles.speakerName}>
+                  🎤 {group.speaker}
+                  {group.speakerConfidence !== undefined && (
+                    <span 
+                      className={styles.speakerConfidence}
+                      style={{
+                        fontSize: '0.625rem',
+                        marginLeft: '0.25rem',
+                        padding: '0.125rem 0.25rem',
+                        borderRadius: '4px',
+                        background: group.speakerConfidence > 0.8 ? '#22c55e' : 
+                                  group.speakerConfidence > 0.5 ? '#f59e0b' : '#ef4444',
+                        color: 'white'
+                      }}
+                      title={`Speaker confidence: ${Math.round((group.speakerConfidence || 0) * 100)}%${group.deepgramSpeaker ? ` (Deepgram ID: ${group.deepgramSpeaker})` : ''}`}
+                    >
+                      {Math.round((group.speakerConfidence || 0) * 100)}%
+                    </span>
+                  )}
+                </span>
               </div>
               <span className={styles.timestamp}>
-                {formatTimestamp(transcript.timestamp)}
+                {formatTimeRange(group.startTime, group.endTime)}
               </span>
             </div>
-            <div className={styles.transcriptText}>
-              {transcript.text}
+            <div className={styles.transcriptGroupContent}>
+              {/* Concatenate all messages from the same speaker into continuous text */}
+              <div className={styles.transcriptText}>
+                {group.messages.map(message => message.text).join(' ')}
+              </div>
             </div>
           </div>
         ))}

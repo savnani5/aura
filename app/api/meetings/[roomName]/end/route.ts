@@ -16,10 +16,19 @@ function deduplicateTranscripts(transcripts: Array<{
   speaker: string;
   text: string;
   timestamp: Date;
+  // Enhanced fields for speaker diarization
+  speakerConfidence?: number;
+  deepgramSpeaker?: number;
+  participantId?: string;
+  isLocal?: boolean;
 }>): Array<{
   speaker: string;
   text: string;
   timestamp: Date;
+  speakerConfidence?: number;
+  deepgramSpeaker?: number;
+  participantId?: string;
+  isLocal?: boolean;
 }> {
   return transcripts
     .filter(t => t.text && t.text.trim().length > 0) // Remove empty transcripts
@@ -191,7 +200,12 @@ export async function POST(
         const rawTranscripts = validTranscripts.map((transcript: any) => ({
           speaker: transcript.speaker,
           text: transcript.text,
-          timestamp: new Date(transcript.timestamp)
+          timestamp: new Date(transcript.timestamp),
+          // Enhanced fields for speaker diarization
+          speakerConfidence: transcript.speakerConfidence,
+          deepgramSpeaker: transcript.deepgramSpeaker,
+          participantId: transcript.participantId,
+          isLocal: transcript.isLocal
         }));
         
         // Apply deduplication logic before storing
@@ -280,6 +294,11 @@ async function generateMeetingSummary(
     speaker: string;
     text: string;
     timestamp: Date;
+    // Enhanced fields for speaker diarization
+    speakerConfidence?: number;
+    deepgramSpeaker?: number;
+    participantId?: string;
+    isLocal?: boolean;
   }>,
   participants: Array<{ name: string; isHost?: boolean }>
 ): Promise<{
