@@ -3398,3 +3398,144 @@ h2 a {
 .transcript-messages::-webkit-scrollbar-thumb:hover {
   background: var(--lk-fg3);
 }
+
+/* Updated Transcript Group Styles for Chat-like Interface */
+.transcript-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1.5rem;
+  animation: slideInUp 0.3s ease-out;
+}
+
+.transcript-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding: 0 0.25rem;
+}
+
+.transcript-group-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-left: 0.5rem;
+  border-left: 3px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Updated transcript message styles for grouping */
+.transcript-message {
+  position: relative;
+  padding: 0.75rem 1rem;
+  background: var(--lk-bg2);
+  border: 1px solid var(--lk-border-color);
+  border-radius: 0.75rem;
+  margin-bottom: 0.25rem;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.transcript-message:hover {
+  background: var(--lk-bg3);
+  border-color: var(--lk-accent-bg);
+  transform: translateY(-1px);
+}
+
+.transcript-message--continuation {
+  margin-top: 0.25rem;
+  border-top-left-radius: 0.375rem;
+  border-top-right-radius: 0.375rem;
+  opacity: 0.95;
+  background: rgba(15, 15, 15, 0.4);
+}
+
+.transcript-message-time {
+  position: absolute;
+  top: 0.375rem;
+  right: 0.75rem;
+  font-size: 0.625rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 1;
+}
+
+.transcript-message:hover .transcript-message-time {
+  opacity: 1;
+}
+
+.transcript-timestamp {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.75rem;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-weight: 500;
+}
+
+/* Updated speaker badge for better visual hierarchy */
+.speaker-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.875rem;
+  border-radius: 1rem;
+  border: 1px solid;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  gap: 0.375rem;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+}
+
+.speaker-confidence {
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+}
+
+/* Updated transcript text for better readability */
+.transcript-text {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--lk-fg2);
+  font-size: 0.9375rem;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* Animation for new transcript groups */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Enhanced transcript empty state */
+.transcript-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 3rem 2rem;
+}
+
+.transcript-empty .empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.7;
+}
+
+.transcript-empty p {
+  font-size: 0.875rem;
+  margin: 0;
+  opacity: 0.8;
+}

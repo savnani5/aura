@@ -17,6 +17,9 @@ interface DisplayTranscript {
   participantId: string;
   timestamp: number;
   entryId: string;
+  isLocal?: boolean;
+  speakerConfidence?: number;
+  deepgramSpeaker?: number;
 }
 
 interface SharedTranscript {
@@ -27,6 +30,9 @@ interface SharedTranscript {
   timestamp: number;
   entryId: string;
   type: 'transcript' | 'transcript_update';
+  isLocal?: boolean;
+  speakerConfidence?: number;
+  deepgramSpeaker?: number;
 }
 
 interface ChatMessage {
@@ -128,6 +134,27 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
     }
   };
 
+  // Generate speaker colors for consistency
+  const getSpeakerColor = (speaker: string) => {
+    const colors = [
+      'bg-blue-100 text-blue-800 border-blue-200',
+      'bg-green-100 text-green-800 border-green-200', 
+      'bg-purple-100 text-purple-800 border-purple-200',
+      'bg-orange-100 text-orange-800 border-orange-200',
+      'bg-pink-100 text-pink-800 border-pink-200',
+      'bg-indigo-100 text-indigo-800 border-indigo-200'
+    ];
+    const hash = speaker.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const formatTimestamp = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
   // Group chat messages by consecutive sender
   React.useEffect(() => {
     const grouped: GroupedChatMessage[] = [];
@@ -173,11 +200,78 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
   }, [groupedChatMessages, aiChatHistory, isAiProcessing]);
 
   // Auto-scroll transcript messages when new transcripts arrive
-  React.useEffect(() => {
-    if (transcriptMessagesRef.current) {
-      transcriptMessagesRef.current.scrollTop = transcriptMessagesRef.current.scrollHeight;
+  useEffect(() => {
+    if (transcriptMessagesRef.current && sharedTranscripts.length > 0) {
+      // Smooth scroll to bottom when new transcript arrives
+      setTimeout(() => {
+        if (transcriptMessagesRef.current) {
+          transcriptMessagesRef.current.scrollTop = transcriptMessagesRef.current.scrollHeight;
+        }
+      }, 100); // Small delay to ensure DOM has updated
     }
-  }, [sharedTranscripts]);
+  }, [sharedTranscripts.length]); // Trigger on transcript count change
+
+  // Group consecutive transcripts from the same speaker
+  const groupedTranscripts = React.useMemo(() => {
+    const groups: Array<{
+      speaker: string;
+      participantId: string;
+      startTime: number;
+      endTime: number;
+      messages: DisplayTranscript[];
+      speakerColor: string;
+      speakerConfidence?: number;
+      deepgramSpeaker?: number;
+    }> = [];
+
+    sharedTranscripts.forEach((transcript) => {
+      const lastGroup = groups[groups.length - 1];
+      
+      // Check if this transcript should be grouped with the previous one
+      // More generous time window for better conversation flow
+      const shouldGroup = lastGroup && 
+        lastGroup.speaker === transcript.speaker &&
+        lastGroup.participantId === transcript.participantId &&
+        (transcript.timestamp - lastGroup.endTime) < 30000; // Increased to 30 seconds for better grouping
+      
+      if (shouldGroup) {
+        // Add to existing group
+        lastGroup.messages.push(transcript);
+        lastGroup.endTime = transcript.timestamp;
+        // Update confidence to latest if available
+        if (transcript.speakerConfidence !== undefined) {
+          lastGroup.speakerConfidence = transcript.speakerConfidence;
+        }
+        if (transcript.deepgramSpeaker !== undefined) {
+          lastGroup.deepgramSpeaker = transcript.deepgramSpeaker;
+        }
+      } else {
+        // Create new group
+        groups.push({
+          speaker: transcript.speaker,
+          participantId: transcript.participantId,
+          startTime: transcript.timestamp,
+          endTime: transcript.timestamp,
+          messages: [transcript],
+          speakerColor: getSpeakerColor(transcript.speaker),
+          speakerConfidence: transcript.speakerConfidence,
+          deepgramSpeaker: transcript.deepgramSpeaker,
+        });
+      }
+    });
+
+    return groups;
+  }, [sharedTranscripts, getSpeakerColor]);
+
+  // Format time range for transcript groups
+  const formatTimeRange = (startTime: number, endTime: number) => {
+    const start = formatTimestamp(startTime);
+    if (startTime === endTime) {
+      return start;
+    }
+    const end = formatTimestamp(endTime);
+    return `${start} - ${end}`;
+  };
 
   // Regular chat submit (LiveKit)
   const handleChatSubmit = async (e: React.FormEvent) => {
@@ -295,65 +389,69 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
 
   const transcriptionService = React.useMemo(() => new TranscriptionService(room), [room]);
 
-  // Send transcript updates to other participants
+  // Share transcript with other participants via data channel
   const shareTranscript = useCallback((transcript: Transcript) => {
     if (!room?.localParticipant || !sendData) return;
 
-    const participantId = room.localParticipant.identity;
+    const participantId = transcript.participantId || room.localParticipant.identity;
     const speaker = transcript.speaker || room.localParticipant.name || participantId;
     
-    setSharedTranscripts(prev => {
-      // Find the most recent entry (last in chronological order)
-      const lastEntry = prev[prev.length - 1];
-      
-      // If the last entry is from the same participant, append to it
-      // Otherwise, create a new entry
-      if (lastEntry && lastEntry.participantId === participantId) {
-        // Update the last entry by appending new text
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          ...lastEntry,
-          text: lastEntry.text + ' ' + transcript.text,
-          timestamp: Math.max(lastEntry.timestamp, transcript.timestamp)
-        };
-        return updated;
-      } else {
-        // Create new transcript entry for this participant
-        const newTranscript = {
-          speaker: speaker,
-          text: transcript.text,
-          participantId: participantId,
-          timestamp: transcript.timestamp,
-          entryId: `${participantId}-${Date.now()}-${Math.random()}`
-        };
-        return [...prev, newTranscript];
-      }
+    console.log('🔍 TRANSCRIPT SHARE DEBUG: Sharing transcript:', {
+      speaker,
+      text: transcript.text.substring(0, 50) + '...',
+      participantId,
+      timestamp: new Date(transcript.timestamp).toLocaleTimeString()
     });
     
-    // Get the updated transcript state to send
+    // Create new transcript entry - no concatenation to avoid duplication
+    const newTranscript: DisplayTranscript = {
+      speaker: speaker,
+      text: transcript.text,
+      participantId: participantId,
+      timestamp: transcript.timestamp,
+      entryId: `${participantId}-${Date.now()}-${Math.random()}`,
+      isLocal: true,
+      speakerConfidence: transcript.speakerConfidence,
+      deepgramSpeaker: transcript.deepgramSpeaker
+    };
+    
+    console.log('🔍 TRANSCRIPT NEW ENTRY: Created new entry:', {
+      speaker,
+      text: transcript.text.substring(0, 50) + '...',
+      participantId,
+      entryId: newTranscript.entryId
+    });
+    
+    // Add to shared transcripts
+    setSharedTranscripts(prev => [...prev, newTranscript]);
+    
+    // Send the transcript to other participants
     setTimeout(() => {
-      const currentTranscripts = sharedTranscriptsRef.current;
-      const lastEntry = currentTranscripts[currentTranscripts.length - 1];
-      
-      if (lastEntry && lastEntry.participantId === participantId) {
-        const sharedData: SharedTranscript = {
-          id: `${participantId}-${Date.now()}`,
-          speaker: speaker,
-          text: lastEntry.text,
-          participantId: participantId,
-          timestamp: lastEntry.timestamp,
-          entryId: lastEntry.entryId,
-          type: 'transcript_update'
-        };
+      const sharedData: SharedTranscript = {
+        id: `${participantId}-${Date.now()}`,
+        speaker: speaker,
+        text: newTranscript.text,
+        participantId: participantId,
+        timestamp: newTranscript.timestamp,
+        entryId: newTranscript.entryId,
+        type: 'transcript',
+        isLocal: false,
+        speakerConfidence: newTranscript.speakerConfidence,
+        deepgramSpeaker: newTranscript.deepgramSpeaker
+      };
 
-        const encoder = new TextEncoder();
-        const data = encoder.encode(JSON.stringify(sharedData));
-        
-        try {
-          sendData(data, { reliable: true });
-        } catch (error) {
-          console.error('Error sending transcript data:', error);
-        }
+      const encoder = new TextEncoder();
+      const data = encoder.encode(JSON.stringify(sharedData));
+      
+      try {
+        sendData(data, { reliable: true });
+        console.log('🔍 TRANSCRIPT SENT: Shared via data channel:', {
+          speaker,
+          text: sharedData.text.substring(0, 50) + '...',
+          entryId: sharedData.entryId
+        });
+      } catch (error) {
+        console.error('Error sending transcript data:', error);
       }
     }, 0);
   }, [room, sendData]);
@@ -374,47 +472,58 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
           return;
         }
         
+        console.log('🔍 TRANSCRIPT RECEIVED: From remote participant:', {
+          speaker: data.speaker,
+          text: data.text.substring(0, 50) + '...',
+          participantId: data.participantId,
+          entryId: data.entryId,
+          timestamp: new Date(data.timestamp).toLocaleTimeString()
+        });
+        
         if (data.type === 'transcript' || data.type === 'transcript_update') {
           setSharedTranscripts(prev => {
-            // Check if this is an update to an existing entry
+            // Check if this exact transcript already exists (avoid duplicates)
             const existingIndex = prev.findIndex(t => t.entryId === data.entryId);
             
             if (existingIndex >= 0) {
               // Update existing entry
+              console.log('🔍 TRANSCRIPT UPDATE: Updating existing remote transcript');
               const updated = [...prev];
               updated[existingIndex] = {
                 speaker: data.speaker,
                 text: data.text,
                 participantId: data.participantId,
                 timestamp: data.timestamp,
-                entryId: data.entryId
+                entryId: data.entryId,
+                isLocal: false,
+                speakerConfidence: data.speakerConfidence,
+                deepgramSpeaker: data.deepgramSpeaker
               };
               return updated;
             } else {
-              // Check if we should append to the last entry from this participant
-              const lastEntry = prev[prev.length - 1];
+              // Add new transcript entry in chronological order
+              console.log('🔍 TRANSCRIPT NEW: Adding new remote transcript');
+              const newTranscript: DisplayTranscript = {
+                speaker: data.speaker,
+                text: data.text,
+                participantId: data.participantId,
+                timestamp: data.timestamp,
+                entryId: data.entryId,
+                isLocal: false,
+                speakerConfidence: data.speakerConfidence,
+                deepgramSpeaker: data.deepgramSpeaker
+              };
               
-              if (lastEntry && lastEntry.participantId === data.participantId && 
-                  Math.abs(data.timestamp - lastEntry.timestamp) < 5000) { // Within 5 seconds
-                // Update the last entry
-                const updated = [...prev];
-                updated[updated.length - 1] = {
-                  ...lastEntry,
-                  text: data.text,
-                  entryId: data.entryId,
-                  timestamp: Math.max(lastEntry.timestamp, data.timestamp)
-                };
-                return updated;
-              } else {
-                // Add new transcript entry in chronological order
-                const newTranscript = {
-                  speaker: data.speaker,
-                  text: data.text,
-                  participantId: data.participantId,
-                  timestamp: data.timestamp,
-                  entryId: data.entryId
-                };
+              // Insert in chronological order
+              const insertIndex = prev.findIndex(t => t.timestamp > data.timestamp);
+              if (insertIndex === -1) {
+                // Add to end
                 return [...prev, newTranscript];
+              } else {
+                // Insert at correct position
+                const updated = [...prev];
+                updated.splice(insertIndex, 0, newTranscript);
+                return updated;
               }
             }
           });
@@ -560,27 +669,6 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
         localStorage.removeItem(storageKey);
       }
     }
-  };
-
-  // Generate speaker colors for consistency
-  const getSpeakerColor = (speaker: string) => {
-    const colors = [
-      'bg-blue-100 text-blue-800 border-blue-200',
-      'bg-green-100 text-green-800 border-green-200', 
-      'bg-purple-100 text-purple-800 border-purple-200',
-      'bg-orange-100 text-orange-800 border-orange-200',
-      'bg-pink-100 text-pink-800 border-pink-200',
-      'bg-indigo-100 text-indigo-800 border-indigo-200'
-    ];
-    const hash = speaker.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0);
-      return a & a;
-    }, 0);
-    return colors[Math.abs(hash) % colors.length];
-  };
-
-  const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
@@ -730,6 +818,30 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                       <span className="recording-text">🔴 Recording</span>
                     </div>
                   )}
+                  {process.env.NODE_ENV === 'development' && (
+                    <button
+                      onClick={() => {
+                        if (transcriptionService) {
+                          transcriptionService.resetSpeakerMappings();
+                          console.log('🔄 Speaker mappings reset via debug button');
+                        }
+                      }}
+                      className="debug-button"
+                      title="Reset speaker mappings (dev only)"
+                      style={{
+                        marginLeft: '0.5rem',
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.75rem',
+                        background: '#f59e0b',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔄 Reset Speakers
+                    </button>
+                  )}
                 </div>
                 
                 <div className="transcript-messages" ref={transcriptMessagesRef}>
@@ -739,12 +851,41 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                       <p>Transcription will appear here once the meeting starts</p>
                     </div>
                   ) : (
-                    sharedTranscripts.map((transcript) => (
-                      <div key={transcript.entryId} className="transcript-message">
-                        <div className={`speaker-badge ${getSpeakerColor(transcript.speaker)}`}>
-                          🎤 {transcript.speaker}
+                    groupedTranscripts.map((group, groupIndex) => (
+                      <div key={`${group.participantId}-${group.startTime}-${groupIndex}`} className="transcript-group">
+                        <div className="transcript-group-header">
+                          <div className={`speaker-badge ${group.speakerColor}`}>
+                            🎤 {group.speaker}
+                            {group.speakerConfidence !== undefined && (
+                              <span 
+                                className="speaker-confidence"
+                                style={{
+                                  fontSize: '0.625rem',
+                                  marginLeft: '0.25rem',
+                                  padding: '0.125rem 0.25rem',
+                                  borderRadius: '4px',
+                                  background: group.speakerConfidence > 0.8 ? '#22c55e' : 
+                                            group.speakerConfidence > 0.5 ? '#f59e0b' : '#ef4444',
+                                  color: 'white'
+                                }}
+                                title={`Speaker confidence: ${Math.round((group.speakerConfidence || 0) * 100)}%${group.deepgramSpeaker ? ` (Deepgram ID: ${group.deepgramSpeaker})` : ''}`}
+                              >
+                                {Math.round((group.speakerConfidence || 0) * 100)}%
+                              </span>
+                            )}
+                          </div>
+                          <span className="transcript-timestamp">
+                            {formatTimeRange(group.startTime, group.endTime)}
+                          </span>
                         </div>
-                        <p className="transcript-text">{transcript.text}</p>
+                        <div className="transcript-group-content">
+                          {/* Concatenate all messages from the same speaker into continuous text */}
+                          <div className="transcript-message">
+                            <p className="transcript-text">
+                              {group.messages.map(message => message.text).join(' ')}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     ))
                   )}
