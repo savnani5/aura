@@ -21,23 +21,56 @@ const nextConfig = {
       },
     ];
   },
-  webpack: (config, { buildId, dev, isServer, defaultLoaders, nextRuntime, webpack }) => {
-    // Important: return the modified config
-    config.module.rules.push({
-      test: /\.mjs$/,
-      enforce: 'pre',
-      use: ['source-map-loader'],
-      exclude: /@mediapipe/,
-    });
-
-    // Ignore source map warnings for MediaPipe
+  webpack: (config, { dev, isServer }) => {
+    // Suppress source map warnings
     config.ignoreWarnings = [
-      { module: /@mediapipe/ },
       { message: /Failed to parse source map/ },
     ];
 
+    if (dev) {
+      // Faster source maps in development
+      config.devtool = 'eval-cheap-module-source-map';
+      
+      // Reduce the number of chunks for faster compilation
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          chunks: 'all',
+          cacheGroups: {
+            default: false,
+            vendors: false,
+            // Bundle all node_modules into a single chunk
+            vendor: {
+              name: 'vendor',
+              chunks: 'all',
+              test: /node_modules/,
+              priority: 20
+            },
+            // Bundle common modules
+            common: {
+              name: 'common',
+              minChunks: 2,
+              chunks: 'all',
+              priority: 10,
+              reuseExistingChunk: true,
+              enforce: true
+            }
+          }
+        }
+      };
+    }
+
     return config;
   },
+  swcMinify: true,
+  onDemandEntries: {
+    maxInactiveAge: 25 * 1000,
+    pagesBufferLength: 2,
+  },
+  experimental: {
+    optimizePackageImports: ['@clerk/nextjs', 'mongoose', 'react-hot-toast'],
+    bundlePagesRouterDependencies: true,
+  }
 };
 
 module.exports = nextConfig;

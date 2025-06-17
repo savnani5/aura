@@ -36,3 +36,8 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+/lib/generated/prisma
+
+# clerk configuration (can include secrets)
+/.clerk/

@@ -5,9 +5,10 @@ import { useTracks, useRoomContext, useChat, useDataChannel } from '@livekit/com
 import { Track } from 'livekit-client';
 import { Transcript, TranscriptionService } from '@/lib/transcription-service';
 import ReactMarkdown from 'react-markdown';
+import { useUser } from '@clerk/nextjs';
 
 interface TranscriptTabProps {
-  onMeetingEnd?: (transcripts: Transcript[]) => void;
+  onTranscriptsChange?: (transcripts: Transcript[]) => void;
 }
 
 interface DisplayTranscript {
@@ -16,6 +17,9 @@ interface DisplayTranscript {
   participantId: string;
   timestamp: number;
   entryId: string;
+  isLocal?: boolean;
+  speakerConfidence?: number;
+  deepgramSpeaker?: number;
 }
 
 interface SharedTranscript {
@@ -26,6 +30,9 @@ interface SharedTranscript {
   timestamp: number;
   entryId: string;
   type: 'transcript' | 'transcript_update';
+  isLocal?: boolean;
+  speakerConfidence?: number;
+  deepgramSpeaker?: number;
 }
 
 interface ChatMessage {
@@ -42,13 +49,18 @@ interface GroupedChatMessage {
   groupId: string;
 }
 
-type TabView = 'notes' | 'transcript' | 'chat';
+type MainView = 'public' | 'private';
+type PublicSubView = 'chat' | 'transcript';
+type PrivateSubView = 'notes' | 'ohm';
 
-export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
+export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
+  const { user } = useUser();
   const [transcripts, setTranscripts] = useState<Transcript[]>([]);
   const [sharedTranscripts, setSharedTranscripts] = useState<DisplayTranscript[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabView>('notes');
+  const [activeView, setActiveView] = useState<MainView>('private');
+  const [publicSubView, setPublicSubView] = useState<PublicSubView>('chat');
+  const [privateSubView, setPrivateSubView] = useState<PrivateSubView>('notes');
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -63,13 +75,13 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     sharedTranscriptsRef.current = sharedTranscripts;
   }, [sharedTranscripts]);
 
-  // Chat functionality
+  // Regular Chat functionality (LiveKit)
   const { chatMessages, send: sendMessage, isSending } = useChat();
   const [chatInput, setChatInput] = useState('');
   const [groupedChatMessages, setGroupedChatMessages] = useState<GroupedChatMessage[]>([]);
   const chatMessagesRef = React.useRef<HTMLDivElement>(null);
 
-  // AI Chat functionality
+  // AI Chat functionality (separate from regular chat)
   const [aiChatHistory, setAiChatHistory] = useState<Array<{
     id: string;
     type: 'user' | 'ai';
@@ -81,15 +93,15 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     usedWebSearch?: boolean;
     citations?: string[];
   }>>([]);
+  const [aiChatInput, setAiChatInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
 
   // Question suggestions for AI chat
   const questionSuggestions = [
-    "Summarize what's been decided so far?",
-    "What are the action items from last meeting?",
-    "What are the key topics covered in this meeting?",
-    "What questions were raised but not answered?",
-    "@web Latest industry trends and news"
+    "Summarize our room's previous discussions",
+    "What are the recurring topics in our meetings?", 
+    "Create a summary of action items",
+    "What decisions were made recently"
   ];
 
   // Add transcript messages ref for auto-scrolling
@@ -120,6 +132,27 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     if (isMobile) {
       setIsExpanded(!isExpanded);
     }
+  };
+
+  // Generate speaker colors for consistency
+  const getSpeakerColor = (speaker: string) => {
+    const colors = [
+      'bg-blue-100 text-blue-800 border-blue-200',
+      'bg-green-100 text-green-800 border-green-200', 
+      'bg-purple-100 text-purple-800 border-purple-200',
+      'bg-orange-100 text-orange-800 border-orange-200',
+      'bg-pink-100 text-pink-800 border-pink-200',
+      'bg-indigo-100 text-indigo-800 border-indigo-200'
+    ];
+    const hash = speaker.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const formatTimestamp = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   // Group chat messages by consecutive sender
@@ -167,34 +200,107 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   }, [groupedChatMessages, aiChatHistory, isAiProcessing]);
 
   // Auto-scroll transcript messages when new transcripts arrive
-  React.useEffect(() => {
-    if (transcriptMessagesRef.current) {
-      transcriptMessagesRef.current.scrollTop = transcriptMessagesRef.current.scrollHeight;
+  useEffect(() => {
+    if (transcriptMessagesRef.current && sharedTranscripts.length > 0) {
+      // Smooth scroll to bottom when new transcript arrives
+      setTimeout(() => {
+        if (transcriptMessagesRef.current) {
+          transcriptMessagesRef.current.scrollTop = transcriptMessagesRef.current.scrollHeight;
+        }
+      }, 100); // Small delay to ensure DOM has updated
     }
-  }, [sharedTranscripts]);
+  }, [sharedTranscripts.length]); // Trigger on transcript count change
 
+  // Group consecutive transcripts from the same speaker
+  const groupedTranscripts = React.useMemo(() => {
+    const groups: Array<{
+      speaker: string;
+      participantId: string;
+      startTime: number;
+      endTime: number;
+      messages: DisplayTranscript[];
+      speakerColor: string;
+      speakerConfidence?: number;
+      deepgramSpeaker?: number;
+    }> = [];
+
+    sharedTranscripts.forEach((transcript) => {
+      const lastGroup = groups[groups.length - 1];
+      
+      // Check if this transcript should be grouped with the previous one
+      // More generous time window for better conversation flow
+      const shouldGroup = lastGroup && 
+        lastGroup.speaker === transcript.speaker &&
+        lastGroup.participantId === transcript.participantId &&
+        (transcript.timestamp - lastGroup.endTime) < 30000; // Increased to 30 seconds for better grouping
+      
+      if (shouldGroup) {
+        // Add to existing group
+        lastGroup.messages.push(transcript);
+        lastGroup.endTime = transcript.timestamp;
+        // Update confidence to latest if available
+        if (transcript.speakerConfidence !== undefined) {
+          lastGroup.speakerConfidence = transcript.speakerConfidence;
+        }
+        if (transcript.deepgramSpeaker !== undefined) {
+          lastGroup.deepgramSpeaker = transcript.deepgramSpeaker;
+        }
+      } else {
+        // Create new group
+        groups.push({
+          speaker: transcript.speaker,
+          participantId: transcript.participantId,
+          startTime: transcript.timestamp,
+          endTime: transcript.timestamp,
+          messages: [transcript],
+          speakerColor: getSpeakerColor(transcript.speaker),
+          speakerConfidence: transcript.speakerConfidence,
+          deepgramSpeaker: transcript.deepgramSpeaker,
+        });
+      }
+    });
+
+    return groups;
+  }, [sharedTranscripts, getSpeakerColor]);
+
+  // Format time range for transcript groups
+  const formatTimeRange = (startTime: number, endTime: number) => {
+    const start = formatTimestamp(startTime);
+    if (startTime === endTime) {
+      return start;
+    }
+    const end = formatTimestamp(endTime);
+    return `${start} - ${end}`;
+  };
+
+  // Regular chat submit (LiveKit)
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim() || isSending) return;
 
-    const message = chatInput.trim();
-    const isAiCommand = message.toLowerCase().startsWith('@ohm ') || message.toLowerCase().startsWith('@web ');
+    await sendMessage(chatInput);
+    setChatInput('');
+  };
 
-    if (isAiCommand) {
-      // Handle AI command - remove the @ohm or @web prefix (case-insensitive)
-      let aiMessage = message;
-      if (message.toLowerCase().startsWith('@ohm ')) {
-        aiMessage = message.slice(message.toLowerCase().indexOf('@ohm ') + 5);
-      } else if (message.toLowerCase().startsWith('@web ')) {
-        aiMessage = message; // Keep @web prefix for backend processing
-      }
-      await handleAiChat(aiMessage);
+  // AI chat submit (separate)
+  const handleAiChatSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiChatInput.trim() || isAiProcessing) return;
+
+    const messageText = aiChatInput.trim();
+    
+    // Process web search or send directly to AI
+    let aiMessage = messageText;
+    if (messageText.toLowerCase().startsWith('@web ')) {
+      // Keep @web prefix for backend processing
+      aiMessage = messageText;
     } else {
-      // Handle regular chat
-      await sendMessage(chatInput);
+      // Send directly to AI without @ohm prefix
+      aiMessage = messageText;
     }
     
-    setChatInput('');
+    await handleAiChat(aiMessage);
+    setAiChatInput('');
   };
 
   const handleAiChat = async (message: string) => {
@@ -217,10 +323,13 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     setIsAiProcessing(true);
 
     try {
-      // Get current transcripts for context
+      // Get current transcripts for context (from live meeting)
       const currentTranscripts = sharedTranscripts
         .map(t => `${t.speaker}: ${t.text}`)
         .join('\n');
+
+      console.log('🎙️ Sending current transcripts to AI:', currentTranscripts.length > 0 ? 'Yes' : 'No');
+      console.log('📝 Current transcript sample:', currentTranscripts.substring(0, 200) + '...');
 
       // Send AI chat request
       const response = await fetch('/api/ai-chat', {
@@ -233,6 +342,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
           roomName,
           userName: currentUser,
           currentTranscripts,
+          isLiveMeeting: true, // Important: Set this to true for live meetings
         }),
       });
 
@@ -277,101 +387,71 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     }
   };
 
-  // Store transcripts for AI context periodically
-  React.useEffect(() => {
-    if (sharedTranscripts.length === 0) return;
-
-    const storeTranscripts = async () => {
-      const transcriptText = sharedTranscripts
-        .map(t => `${t.speaker}: ${t.text}`)
-        .join('\n');
-
-      const participants = Array.from(new Set(sharedTranscripts.map(t => t.speaker)));
-      const roomName = room?.name || 'unknown';
-
-      try {
-        await fetch('/api/ai-chat', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            roomName,
-            transcriptText,
-            participants,
-          }),
-        });
-      } catch (error) {
-        console.error('Error storing transcript for AI:', error);
-      }
-    };
-
-    // Store transcripts every 30 seconds if there are new ones
-    const interval = setInterval(storeTranscripts, 30000);
-    return () => clearInterval(interval);
-  }, [sharedTranscripts, room?.name]);
-
   const transcriptionService = React.useMemo(() => new TranscriptionService(room), [room]);
 
-  // Send transcript updates to other participants
+  // Share transcript with other participants via data channel
   const shareTranscript = useCallback((transcript: Transcript) => {
     if (!room?.localParticipant || !sendData) return;
 
-    const participantId = room.localParticipant.identity;
+    const participantId = transcript.participantId || room.localParticipant.identity;
     const speaker = transcript.speaker || room.localParticipant.name || participantId;
     
-    setSharedTranscripts(prev => {
-      // Find the most recent entry (last in chronological order)
-      const lastEntry = prev[prev.length - 1];
-      
-      // If the last entry is from the same participant, append to it
-      // Otherwise, create a new entry
-      if (lastEntry && lastEntry.participantId === participantId) {
-        // Update the last entry by appending new text
-        const updated = [...prev];
-        updated[updated.length - 1] = {
-          ...lastEntry,
-          text: lastEntry.text + ' ' + transcript.text,
-          timestamp: Math.max(lastEntry.timestamp, transcript.timestamp)
-        };
-        return updated;
-      } else {
-        // Create new transcript entry for this participant
-        const newTranscript = {
-          speaker: speaker,
-          text: transcript.text,
-          participantId: participantId,
-          timestamp: transcript.timestamp,
-          entryId: `${participantId}-${Date.now()}-${Math.random()}`
-        };
-        return [...prev, newTranscript];
-      }
+    console.log('🔍 TRANSCRIPT SHARE DEBUG: Sharing transcript:', {
+      speaker,
+      text: transcript.text.substring(0, 50) + '...',
+      participantId,
+      timestamp: new Date(transcript.timestamp).toLocaleTimeString()
     });
     
-    // Get the updated transcript state to send
+    // Create new transcript entry - no concatenation to avoid duplication
+    const newTranscript: DisplayTranscript = {
+      speaker: speaker,
+      text: transcript.text,
+      participantId: participantId,
+      timestamp: transcript.timestamp,
+      entryId: `${participantId}-${Date.now()}-${Math.random()}`,
+      isLocal: true,
+      speakerConfidence: transcript.speakerConfidence,
+      deepgramSpeaker: transcript.deepgramSpeaker
+    };
+    
+    console.log('🔍 TRANSCRIPT NEW ENTRY: Created new entry:', {
+      speaker,
+      text: transcript.text.substring(0, 50) + '...',
+      participantId,
+      entryId: newTranscript.entryId
+    });
+    
+    // Add to shared transcripts
+    setSharedTranscripts(prev => [...prev, newTranscript]);
+    
+    // Send the transcript to other participants
     setTimeout(() => {
-      const currentTranscripts = sharedTranscriptsRef.current;
-      const lastEntry = currentTranscripts[currentTranscripts.length - 1];
-      
-      if (lastEntry && lastEntry.participantId === participantId) {
-        const sharedData: SharedTranscript = {
-          id: `${participantId}-${Date.now()}`,
-          speaker: speaker,
-          text: lastEntry.text,
-          participantId: participantId,
-          timestamp: lastEntry.timestamp,
-          entryId: lastEntry.entryId,
-          type: 'transcript_update'
-        };
+      const sharedData: SharedTranscript = {
+        id: `${participantId}-${Date.now()}`,
+        speaker: speaker,
+        text: newTranscript.text,
+        participantId: participantId,
+        timestamp: newTranscript.timestamp,
+        entryId: newTranscript.entryId,
+        type: 'transcript',
+        isLocal: false,
+        speakerConfidence: newTranscript.speakerConfidence,
+        deepgramSpeaker: newTranscript.deepgramSpeaker
+      };
 
-        const encoder = new TextEncoder();
-        const data = encoder.encode(JSON.stringify(sharedData));
-        
-        try {
-          sendData(data, { reliable: true });
-        } catch (error) {
-          console.error('Error sending transcript data:', error);
-        }
+      const encoder = new TextEncoder();
+      const data = encoder.encode(JSON.stringify(sharedData));
+      
+      try {
+        sendData(data, { reliable: true });
+        console.log('🔍 TRANSCRIPT SENT: Shared via data channel:', {
+          speaker,
+          text: sharedData.text.substring(0, 50) + '...',
+          entryId: sharedData.entryId
+        });
+      } catch (error) {
+        console.error('Error sending transcript data:', error);
       }
     }, 0);
   }, [room, sendData]);
@@ -385,47 +465,65 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
         const decoder = new TextDecoder();
         const data = JSON.parse(decoder.decode(payload)) as SharedTranscript;
         
+        // Skip if this transcript is from the current user (prevents duplication)
+        const currentUserId = room.localParticipant?.identity || room.localParticipant?.name || user?.id;
+        if (data.participantId === currentUserId) {
+          console.log('🔍 TRANSCRIPT DEBUG: Skipping own transcript from data channel to prevent duplication');
+          return;
+        }
+        
+        console.log('🔍 TRANSCRIPT RECEIVED: From remote participant:', {
+          speaker: data.speaker,
+          text: data.text.substring(0, 50) + '...',
+          participantId: data.participantId,
+          entryId: data.entryId,
+          timestamp: new Date(data.timestamp).toLocaleTimeString()
+        });
+        
         if (data.type === 'transcript' || data.type === 'transcript_update') {
           setSharedTranscripts(prev => {
-            // Check if this is an update to an existing entry
+            // Check if this exact transcript already exists (avoid duplicates)
             const existingIndex = prev.findIndex(t => t.entryId === data.entryId);
             
             if (existingIndex >= 0) {
               // Update existing entry
+              console.log('🔍 TRANSCRIPT UPDATE: Updating existing remote transcript');
               const updated = [...prev];
               updated[existingIndex] = {
                 speaker: data.speaker,
                 text: data.text,
                 participantId: data.participantId,
                 timestamp: data.timestamp,
-                entryId: data.entryId
+                entryId: data.entryId,
+                isLocal: false,
+                speakerConfidence: data.speakerConfidence,
+                deepgramSpeaker: data.deepgramSpeaker
               };
               return updated;
             } else {
-              // Check if we should append to the last entry from this participant
-              const lastEntry = prev[prev.length - 1];
+              // Add new transcript entry in chronological order
+              console.log('🔍 TRANSCRIPT NEW: Adding new remote transcript');
+              const newTranscript: DisplayTranscript = {
+                speaker: data.speaker,
+                text: data.text,
+                participantId: data.participantId,
+                timestamp: data.timestamp,
+                entryId: data.entryId,
+                isLocal: false,
+                speakerConfidence: data.speakerConfidence,
+                deepgramSpeaker: data.deepgramSpeaker
+              };
               
-              if (lastEntry && lastEntry.participantId === data.participantId && 
-                  Math.abs(data.timestamp - lastEntry.timestamp) < 5000) { // Within 5 seconds
-                // Update the last entry
-                const updated = [...prev];
-                updated[updated.length - 1] = {
-                  ...lastEntry,
-                  text: data.text,
-                  entryId: data.entryId,
-                  timestamp: Math.max(lastEntry.timestamp, data.timestamp)
-                };
-                return updated;
-              } else {
-                // Add new transcript entry in chronological order
-                const newTranscript = {
-                  speaker: data.speaker,
-                  text: data.text,
-                  participantId: data.participantId,
-                  timestamp: data.timestamp,
-                  entryId: data.entryId
-                };
+              // Insert in chronological order
+              const insertIndex = prev.findIndex(t => t.timestamp > data.timestamp);
+              if (insertIndex === -1) {
+                // Add to end
                 return [...prev, newTranscript];
+              } else {
+                // Insert at correct position
+                const updated = [...prev];
+                updated.splice(insertIndex, 0, newTranscript);
+                return updated;
               }
             }
           });
@@ -439,7 +537,7 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     return () => {
       room.off('dataReceived', handleDataReceived);
     };
-  }, [room]);
+  }, [room, user?.id]);
 
   // Auto-start transcription when audio tracks are available
   const startTranscription = useCallback(async () => {
@@ -456,11 +554,25 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
         return;
       }
 
+      console.log('🔍 TRANSCRIPTION DEBUG: Starting transcription service...');
       const audioTrack = track.mediaStreamTrack;
       await transcriptionService.startTranscription(audioTrack, (transcript: Transcript) => {
-        setTranscripts(prev => [...prev, transcript]);
+        console.log('🔍 TRANSCRIPTION DEBUG: Received transcript from service:', {
+          speaker: transcript.speaker,
+          text: transcript.text,
+          timestamp: new Date(transcript.timestamp).toLocaleTimeString(),
+          timestampRaw: transcript.timestamp
+        });
+        
+        setTranscripts(prev => {
+          const updated = [...prev, transcript];
+          console.log('🔍 TRANSCRIPTION DEBUG: Updated local transcripts count:', updated.length);
+          return updated;
+        });
+        
         shareTranscript(transcript); // Share with other participants
       });
+      console.log('🔍 TRANSCRIPTION DEBUG: Transcription service started successfully');
     } catch (error) {
       console.error('Failed to start transcription:', error);
       setIsRecording(false);
@@ -475,42 +587,75 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
     }
   }, [tracks, startTranscription, isRecording]);
 
-  // Notes persistence
-  const roomName = room?.name || 'unknown';
-  const participantId = room?.localParticipant?.identity || 'unknown';
-
   // Load notes on mount
   useEffect(() => {
-    const storageKey = `meeting-notes-${roomName}-${participantId}`;
+    if (!user || !room?.name) return;
+    
+    // Use consistent storage key format: meeting-notes-${roomName}-${userId}
+    const storageKey = `meeting-notes-${room.name}-${user.id}`;
     const savedNotes = localStorage.getItem(storageKey);
     if (savedNotes) {
       setNotes(savedNotes);
     }
-  }, [roomName, participantId]);
+  }, [user, room?.name]);
+
+  // Notify parent component when transcripts change
+  useEffect(() => {
+    if (onTranscriptsChange) {
+      // Combine local transcripts and shared transcripts
+      const allTranscripts: Transcript[] = [
+        ...transcripts,
+        ...sharedTranscripts.map(st => ({
+          speaker: st.speaker,
+          text: st.text,
+          timestamp: st.timestamp
+        }))
+      ];
+      
+      // Sort by timestamp
+      allTranscripts.sort((a, b) => a.timestamp - b.timestamp);
+      
+      console.log('🔍 CALLBACK DEBUG: Sending combined transcripts to parent:', {
+        localCount: transcripts.length,
+        sharedCount: sharedTranscripts.length,
+        totalCount: allTranscripts.length,
+        transcripts: allTranscripts.map((t, i) => ({
+          index: i,
+          speaker: t.speaker,
+          text: t.text.substring(0, 50) + (t.text.length > 50 ? '...' : ''),
+          timestamp: new Date(t.timestamp).toLocaleTimeString(),
+          source: i < transcripts.length ? 'local' : 'shared'
+        }))
+      });
+      
+      onTranscriptsChange(allTranscripts);
+    }
+  }, [transcripts, sharedTranscripts, onTranscriptsChange]);
 
   // Auto-save notes
   useEffect(() => {
-    if (!notes) return;
+    if (!notes || !user || !room?.name) return;
 
     setSaveStatus('saving');
     const timeoutId = setTimeout(() => {
-      const storageKey = `meeting-notes-${roomName}-${participantId}`;
+      // Use consistent storage key format: meeting-notes-${roomName}-${userId}
+      const storageKey = `meeting-notes-${room.name}-${user.id}`;
       localStorage.setItem(storageKey, notes);
       setSaveStatus('saved');
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [notes, roomName, participantId]);
+  }, [notes, user, room?.name]);
 
   const exportNotes = () => {
     const timestamp = new Date().toISOString().split('T')[0];
-    const content = `Ohm Meeting Notes - ${roomName}\nDate: ${timestamp}\n\n${notes}`;
+    const content = `Ohm Meeting Notes - ${room?.name}\nDate: ${timestamp}\n\n${notes}`;
     
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `ohm-notes-${roomName}-${timestamp}.txt`;
+    link.download = `ohm-notes-${room?.name}-${timestamp}.txt`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -518,399 +663,480 @@ export function TranscriptTab({ onMeetingEnd }: TranscriptTabProps) {
   const clearNotes = () => {
     if (confirm('Are you sure you want to clear all notes?')) {
       setNotes('');
-      const storageKey = `meeting-notes-${roomName}-${participantId}`;
-      localStorage.removeItem(storageKey);
+      if (user && room?.name) {
+        // Use consistent storage key format: meeting-notes-${roomName}-${userId}
+        const storageKey = `meeting-notes-${room.name}-${user.id}`;
+        localStorage.removeItem(storageKey);
+      }
     }
-  };
-
-  // Generate speaker colors for consistency
-  const getSpeakerColor = (speaker: string) => {
-    const colors = [
-      'bg-blue-100 text-blue-800 border-blue-200',
-      'bg-green-100 text-green-800 border-green-200', 
-      'bg-purple-100 text-purple-800 border-purple-200',
-      'bg-orange-100 text-orange-800 border-orange-200',
-      'bg-pink-100 text-pink-800 border-pink-200',
-      'bg-indigo-100 text-indigo-800 border-indigo-200'
-    ];
-    const hash = speaker.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0);
-      return a & a;
-    }, 0);
-    return colors[Math.abs(hash) % colors.length];
-  };
-
-  const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   return (
     <div className={`meeting-assistant ${isMobile && isExpanded ? 'expanded' : ''}`}>
       <div className="meeting-assistant-header" onClick={handleMobileHeaderClick}>
         <h3 className="meeting-assistant-title">
-          Meeting Assistant
+          🤖 Meeting Assistant
           {isMobile && (
             <span className="expand-indicator">
               {isExpanded ? '▼' : '▲'}
             </span>
           )}
         </h3>
-        <div className="tab-container">
+        
+        {/* Main View Toggle - More compact design */}
+        <div className="main-view-toggle compact">
           <button 
-            className={`tab-button ${activeTab === 'notes' ? 'tab-button--active' : ''}`}
+            className={`view-toggle-button compact ${activeView === 'private' ? 'view-toggle-button--active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (isMobile) {
-                // If clicking the active tab and expanded, collapse it
-                if (activeTab === 'notes' && isExpanded) {
+                if (activeView === 'private' && isExpanded) {
                   setIsExpanded(false);
                 } else {
-                  setActiveTab('notes');
+                  setActiveView('private');
                   setIsExpanded(true);
                 }
               } else {
-                setActiveTab('notes');
+                setActiveView('private');
               }
             }}
           >
-            Notes
+            🔒 Private
+            {(aiChatHistory.length > 0 || notes.trim()) && (
+              <span className="notification-dot"></span>
+            )}
           </button>
           <button 
-            className={`tab-button ${activeTab === 'transcript' ? 'tab-button--active' : ''}`}
+            className={`view-toggle-button compact ${activeView === 'public' ? 'view-toggle-button--active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (isMobile) {
-                // If clicking the active tab and expanded, collapse it
-                if (activeTab === 'transcript' && isExpanded) {
+                if (activeView === 'public' && isExpanded) {
                   setIsExpanded(false);
                 } else {
-                  setActiveTab('transcript');
+                  setActiveView('public');
                   setIsExpanded(true);
                 }
               } else {
-                setActiveTab('transcript');
+                setActiveView('public');
               }
             }}
           >
-            Transcript
-          </button>
-          <button 
-            className={`tab-button ${activeTab === 'chat' ? 'tab-button--active' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isMobile) {
-                // If clicking the active tab and expanded, collapse it
-                if (activeTab === 'chat' && isExpanded) {
-                  setIsExpanded(false);
-                } else {
-                  setActiveTab('chat');
-                  setIsExpanded(true);
-                }
-              } else {
-                setActiveTab('chat');
-              }
-            }}
-          >
-            Chat
-            {chatMessages.length > 0 && (
-              <span className="chat-badge">{chatMessages.length}</span>
+            👥 Public
+            {(chatMessages.length > 0 || sharedTranscripts.length > 0) && (
+              <span className="notification-dot"></span>
             )}
           </button>
         </div>
       </div>
 
       <div className="meeting-assistant-content">
-        {activeTab === 'notes' && (
-          <div className="notes-tab">
-            <div className="notes-header">
-              <div className="notes-actions">
-                <button onClick={exportNotes} className="action-button" disabled={!notes.trim()}>
-                  Export
-                </button>
-                <button onClick={clearNotes} className="action-button action-button--danger" disabled={!notes.trim()}>
-                  Clear
-                </button>
-              </div>
-              <div className="save-status">
-                <span className={`save-indicator save-indicator--${saveStatus}`}>
-                  {saveStatus === 'saved' && '✓ Saved'}
-                  {saveStatus === 'saving' && '⏳ Saving...'}
-                  {saveStatus === 'unsaved' && '● Unsaved'}
-                </span>
-              </div>
+        {activeView === 'public' && (
+          <div className="public-view">
+            {/* Sub-tabs for public content */}
+            <div className="sub-tab-container">
+              <button 
+                className={`sub-tab-button ${publicSubView === 'chat' ? 'sub-tab-button--active' : ''}`}
+                onClick={() => setPublicSubView('chat')}
+              >
+                💬 Chat
+                {chatMessages.length > 0 && (
+                  <span className="chat-badge">{chatMessages.length}</span>
+                )}
+              </button>
+              <button 
+                className={`sub-tab-button ${publicSubView === 'transcript' ? 'sub-tab-button--active' : ''}`}
+                onClick={() => setPublicSubView('transcript')}
+              >
+                📝 Transcript
+                {isRecording && (
+                  <span className="recording-dot"></span>
+                )}
+              </button>
             </div>
-            <textarea
-              className="notes-textarea"
-              placeholder="Take notes during the meeting..."
-              value={notes}
-              onChange={(e) => {
-                setNotes(e.target.value);
-                setSaveStatus('unsaved');
-              }}
-            />
-            <div className="notes-footer">
-              <span className="character-count">{notes.length} characters</span>
-            </div>
-          </div>
-        )}
 
-        {activeTab === 'transcript' && (
-          <div className="transcript-tab">
-            <div className="transcript-controls">
-              {isRecording && (
-                <div className="recording-indicator">
-                  <div className="recording-pulse"></div>
-                  <span className="recording-text">Recording</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="transcript-messages" ref={transcriptMessagesRef}>
-              {sharedTranscripts.length === 0 ? (
-                <div className="transcript-empty">
-                  <p>Transcription will appear here once the meeting starts</p>
-                </div>
-              ) : (
-                sharedTranscripts.map((transcript) => (
-                  <div key={transcript.entryId} className="transcript-message">
-                    <div className={`speaker-badge ${getSpeakerColor(transcript.speaker)}`}>
-                      {transcript.speaker}
+            {publicSubView === 'chat' && (
+              <div className="public-chat-tab">
+                <div className="chat-messages" ref={chatMessagesRef}>
+                  {groupedChatMessages.length === 0 ? (
+                    <div className="chat-empty">
+                      <div className="empty-icon">💬</div>
+                      <p>No messages yet. Start a conversation with other participants!</p>
                     </div>
-                    <p className="transcript-text">{transcript.text}</p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'chat' && (
-          <div className="chat-tab">
-            <div className="chat-messages" ref={chatMessagesRef}>
-              {groupedChatMessages.length === 0 && aiChatHistory.length === 0 ? (
-                <div className="chat-empty">
-                  <p>No messages yet. Start a conversation!</p>
-                  <p className="chat-tip">
-                    💡 Tip: Use <strong>@ohm</strong> for AI assistant, <strong>@web</strong> for web search
-                  </p>
-                  
-                  <div className="ai-suggestions">
-                    <p className="suggestions-title">Try asking Ohm:</p>
-                    <div className="suggestion-buttons">
-                      {questionSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          className="suggestion-button"
-                          onClick={async () => {
-                            if (suggestion.startsWith('@web')) {
-                              await handleAiChat(suggestion);
-                            } else {
-                              await handleAiChat(`@ohm ${suggestion}`);
-                            }
-                          }}
-                          disabled={isSending || isAiProcessing}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Show suggestions at the top for any chat activity */}
-                  <div className="ai-suggestions-compact">
-                    <p className="suggestions-title-compact">💡 Ask Ohm AI:</p>
-                    <div className="suggestion-buttons-compact">
-                      {questionSuggestions.map((suggestion, index) => (
-                        <button
-                          key={index}
-                          className="suggestion-button-compact"
-                          onClick={async () => {
-                            if (suggestion.startsWith('@web')) {
-                              await handleAiChat(suggestion);
-                            } else {
-                              await handleAiChat(`@ohm ${suggestion}`);
-                            }
-                          }}
-                          disabled={isSending || isAiProcessing}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Regular Chat Messages */}
-                  {groupedChatMessages.map((group) => (
-                    <div key={group.groupId} className="chat-message-group">
-                      <div className="chat-message-header">
-                        <span className="chat-sender">
-                          {group.senderName}
-                        </span>
-                        <span className="chat-timestamp">
-                          {formatTimestamp(group.latestTimestamp)}
-                        </span>
-                      </div>
-                      <div className="chat-message-text">
-                        {group.messages.map((msg) => (
-                          <div key={msg.id} className="chat-message">
-                            {msg.text}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* AI Chat Messages */}
-                  {aiChatHistory.map((aiMsg) => (
-                    <div key={aiMsg.id} className={`chat-message-group ${aiMsg.type === 'ai' ? 'ai-message' : 'user-ai-message'}`}>
-                      <div className="chat-message-header">
-                        <span className="chat-sender">
-                          {aiMsg.type === 'ai' ? (
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                              🤖 Ohm AI
-                              {aiMsg.usedWebSearch && (
-                                <span style={{ 
-                                  fontSize: '0.625rem', 
-                                  background: '#4ade80', 
-                                  color: 'white',
-                                  padding: '0.125rem 0.25rem',
-                                  borderRadius: '4px'
-                                }}>
-                                  🌐 web
-                                </span>
-                              )}
-                              {aiMsg.usedContext && (
-                                <span style={{ 
-                                  fontSize: '0.625rem', 
-                                  background: 'var(--lk-accent-bg)', 
-                                  color: 'var(--lk-accent-fg)',
-                                  padding: '0.125rem 0.25rem',
-                                  borderRadius: '4px'
-                                }}>
-                                  {aiMsg.relevantTranscripts ? `${aiMsg.relevantTranscripts} refs` : 'context'}
-                                </span>
-                              )}
-                            </span>
-                          ) : (
-                            `${aiMsg.userName} → 🤖 AI`
-                          )}
-                        </span>
-                        <span className="chat-timestamp">
-                          {formatTimestamp(aiMsg.timestamp)}
-                        </span>
-                      </div>
-                      <div className="chat-message-text">
-                        <div className="chat-message">
-                          <ReactMarkdown>{aiMsg.message}</ReactMarkdown>
-                        </div>
-                        {aiMsg.citations && aiMsg.citations.length > 0 && (
-                          <div className="message-citations">
-                            <div className="citations-label">Sources:</div>
-                            <div className="citations-list">
-                              {aiMsg.citations.map((url, index) => (
-                                <a 
-                                  key={index}
-                                  href={url} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer"
-                                  className="citation-link"
-                                >
-                                  🔗 {new URL(url).hostname}
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* AI Processing Indicator */}
-                  {isAiProcessing && (
-                    <div className="chat-message-group ai-message">
-                      <div className="chat-message-header">
-                        <span className="chat-sender">🤖 Ohm AI</span>
-                        <span className="chat-timestamp">Processing...</span>
-                      </div>
-                      <div className="chat-message-text">
-                        <div className="chat-message ai-processing">
-                          <span className="ai-typing-indicator">
-                            <span></span>
-                            <span></span>
-                            <span></span>
+                  ) : (
+                    groupedChatMessages.map((group) => (
+                      <div key={group.groupId} className="chat-message-group">
+                        <div className="chat-message-header">
+                          <span className="chat-sender">
+                            👤 {group.senderName}
                           </span>
-                          Thinking...
+                          <span className="chat-timestamp">
+                            {formatTimestamp(group.latestTimestamp)}
+                          </span>
+                        </div>
+                        <div className="chat-message-text">
+                          {group.messages.map((msg) => (
+                            <div key={msg.id} className="chat-message">
+                              {msg.text}
+                            </div>
+                          ))}
                         </div>
                       </div>
+                    ))
+                  )}
+                </div>
+                
+                <form className="chat-input-form" onSubmit={handleChatSubmit}>
+                  <div className="chat-input-row">
+                    <input
+                      type="text"
+                      className="chat-input"
+                      placeholder="💬 Message to participants..."
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      disabled={isSending}
+                    />
+                    <button 
+                      type="submit" 
+                      className="chat-send-button"
+                      disabled={isSending || !chatInput.trim()}
+                      title="Send message"
+                    >
+                      {isSending ? '⏳' : '📤'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {publicSubView === 'transcript' && (
+              <div className="transcript-tab">
+                <div className="transcript-controls">
+                  {isRecording && (
+                    <div className="recording-indicator">
+                      <div className="recording-pulse"></div>
+                      <span className="recording-text">🔴 Recording</span>
                     </div>
                   )}
-                </>
-              )}
+                  {process.env.NODE_ENV === 'development' && (
+                    <button
+                      onClick={() => {
+                        if (transcriptionService) {
+                          transcriptionService.resetSpeakerMappings();
+                          console.log('🔄 Speaker mappings reset via debug button');
+                        }
+                      }}
+                      className="debug-button"
+                      title="Reset speaker mappings (dev only)"
+                      style={{
+                        marginLeft: '0.5rem',
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.75rem',
+                        background: '#f59e0b',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🔄 Reset Speakers
+                    </button>
+                  )}
+                </div>
+                
+                <div className="transcript-messages" ref={transcriptMessagesRef}>
+                  {sharedTranscripts.length === 0 ? (
+                    <div className="transcript-empty">
+                      <div className="empty-icon">🎙️</div>
+                      <p>Transcription will appear here once the meeting starts</p>
+                    </div>
+                  ) : (
+                    groupedTranscripts.map((group, groupIndex) => (
+                      <div key={`${group.participantId}-${group.startTime}-${groupIndex}`} className="transcript-group">
+                        <div className="transcript-group-header">
+                          <div className={`speaker-badge ${group.speakerColor}`}>
+                            🎤 {group.speaker}
+                            {group.speakerConfidence !== undefined && (
+                              <span 
+                                className="speaker-confidence"
+                                style={{
+                                  fontSize: '0.625rem',
+                                  marginLeft: '0.25rem',
+                                  padding: '0.125rem 0.25rem',
+                                  borderRadius: '4px',
+                                  background: group.speakerConfidence > 0.8 ? '#22c55e' : 
+                                            group.speakerConfidence > 0.5 ? '#f59e0b' : '#ef4444',
+                                  color: 'white'
+                                }}
+                                title={`Speaker confidence: ${Math.round((group.speakerConfidence || 0) * 100)}%${group.deepgramSpeaker ? ` (Deepgram ID: ${group.deepgramSpeaker})` : ''}`}
+                              >
+                                {Math.round((group.speakerConfidence || 0) * 100)}%
+                              </span>
+                            )}
+                          </div>
+                          <span className="transcript-timestamp">
+                            {formatTimeRange(group.startTime, group.endTime)}
+                          </span>
+                        </div>
+                        <div className="transcript-group-content">
+                          {/* Concatenate all messages from the same speaker into continuous text */}
+                          <div className="transcript-message">
+                            <p className="transcript-text">
+                              {group.messages.map(message => message.text).join(' ')}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeView === 'private' && (
+          <div className="private-view">
+            {/* Sub-tabs for private content */}
+            <div className="sub-tab-container">
+              <button 
+                className={`sub-tab-button ${privateSubView === 'notes' ? 'sub-tab-button--active' : ''}`}
+                onClick={() => setPrivateSubView('notes')}
+              >
+                📋 Notes
+                {notes.trim() && (
+                  <span className="notification-dot"></span>
+                )}
+              </button>
+              <button 
+                className={`sub-tab-button ${privateSubView === 'ohm' ? 'sub-tab-button--active' : ''}`}
+                onClick={() => setPrivateSubView('ohm')}
+              >
+                🤖 Ohm AI
+                {aiChatHistory.length > 0 && (
+                  <span className="chat-badge">{aiChatHistory.length}</span>
+                )}
+              </button>
             </div>
-            
-            <form className="chat-input-form" onSubmit={handleChatSubmit}>
-              <div className="chat-command-buttons">
-                <button
-                  type="button"
-                  className={`command-button ${chatInput.toLowerCase().startsWith('@ohm ') ? 'active' : ''}`}
-                  onClick={() => {
-                    if (chatInput.toLowerCase().startsWith('@ohm ')) {
-                      // Remove @ohm prefix if already present
-                      setChatInput(chatInput.slice(5));
-                    } else if (chatInput.toLowerCase().startsWith('@web ')) {
-                      // Replace @web with @ohm
-                      setChatInput(`@ohm ${chatInput.slice(5)}`);
-                    } else {
-                      // Add @ohm prefix
-                      setChatInput(`@ohm ${chatInput}`);
-                    }
+
+            {privateSubView === 'notes' && (
+              <div className="notes-tab">
+                <div className="notes-header">
+                  <div className="notes-actions">
+                    <button onClick={exportNotes} className="action-button" disabled={!notes.trim()} title="Export notes">
+                      📥 Export
+                    </button>
+                    <button onClick={clearNotes} className="action-button action-button--danger" disabled={!notes.trim()} title="Clear all notes">
+                      🗑️ Clear
+                    </button>
+                  </div>
+                  <div className="save-status">
+                    <span className={`save-indicator save-indicator--${saveStatus}`}>
+                      {saveStatus === 'saved' && '✅ Saved'}
+                      {saveStatus === 'saving' && '⏳ Saving...'}
+                      {saveStatus === 'unsaved' && '⚠️ Unsaved'}
+                    </span>
+                  </div>
+                </div>
+                <textarea
+                  className="notes-textarea"
+                  placeholder="📝 Take notes during the meeting..."
+                  value={notes}
+                  onChange={(e) => {
+                    setNotes(e.target.value);
+                    setSaveStatus('unsaved');
                   }}
-                  disabled={isSending || isAiProcessing}
-                  title="AI Assistant"
-                >
-                  🤖 AI
-                </button>
-                <button
-                  type="button"
-                  className={`command-button ${chatInput.toLowerCase().startsWith('@web ') ? 'active' : ''}`}
-                  onClick={() => {
-                    if (chatInput.toLowerCase().startsWith('@web ')) {
-                      // Remove @web prefix if already present
-                      setChatInput(chatInput.slice(5));
-                    } else if (chatInput.toLowerCase().startsWith('@ohm ')) {
-                      // Replace @ohm with @web
-                      setChatInput(`@web ${chatInput.slice(5)}`);
-                    } else {
-                      // Add @web prefix
-                      setChatInput(`@web ${chatInput}`);
-                    }
-                  }}
-                  disabled={isSending || isAiProcessing}
-                  title="Web Search"
-                >
-                  🌐 Web
-                </button>
-              </div>
-              <div className="chat-input-row">
-                <input
-                  type="text"
-                  className="chat-input"
-                  placeholder={chatInput.toLowerCase().startsWith('@ohm ') || chatInput.toLowerCase().startsWith('@web ') ? "Ask AI about the meeting or search the web..." : "Type a message ..."}
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  disabled={isSending || isAiProcessing}
                 />
-                <button 
-                  type="submit" 
-                  className="chat-send-button"
-                  disabled={isSending || isAiProcessing || !chatInput.trim()}
-                >
-                  {chatInput.toLowerCase().startsWith('@ohm ') || chatInput.toLowerCase().startsWith('@web ') ? '🤖' : 'Send'}
-                </button>
+                <div className="notes-footer">
+                  <span className="character-count">📊 {notes.length} characters</span>
+                </div>
               </div>
-            </form>
+            )}
+
+            {privateSubView === 'ohm' && (
+              <div className="ai-chat-tab">
+                <div className="chat-messages" ref={chatMessagesRef}>
+                  {aiChatHistory.length === 0 ? (
+                    <div className="chat-empty">
+                      <div className="empty-icon">🤖</div>
+                      <p>Ask Ohm about the meeting, participants, or search the web!</p>
+                      
+                      <div className="ai-suggestions" style={{ marginTop: '0.75rem' }}>
+                        <p className="suggestions-title">💡 Try asking Ohm:</p>
+                        <div className="suggestion-buttons">
+                          {questionSuggestions.map((suggestion, index) => (
+                            <button
+                              key={index}
+                              className="suggestion-button"
+                              onClick={async () => {
+                                if (suggestion.startsWith('@web')) {
+                                  await handleAiChat(suggestion);
+                                } else {
+                                  await handleAiChat(suggestion);
+                                }
+                              }}
+                              disabled={isAiProcessing}
+                            >
+                              {index === 0 && '📊'} {index === 1 && '🔄'} {index === 2 && '✅'} {index === 3 && '🎯'} {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Show suggestions at the top for any chat activity */}
+                      <div className="ai-suggestions-compact">
+                        <p className="suggestions-title-compact">💡 Ask Ohm AI:</p>
+                        <div className="suggestion-buttons-compact">
+                          {questionSuggestions.slice(0, 3).map((suggestion, index) => (
+                            <button
+                              key={index}
+                              className="suggestion-button-compact"
+                              onClick={async () => {
+                                if (suggestion.startsWith('@web')) {
+                                  await handleAiChat(suggestion);
+                                } else {
+                                  await handleAiChat(suggestion);
+                                }
+                              }}
+                              disabled={isAiProcessing}
+                            >
+                              {index === 0 && '📊'} {index === 1 && '🔄'} {index === 2 && '✅'} {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* AI Chat Messages */}
+                      {aiChatHistory.map((aiMsg) => (
+                        <div key={aiMsg.id} className={`chat-message-group ${aiMsg.type === 'ai' ? 'ai-message' : 'user-ai-message'}`}>
+                          <div className="chat-message-header">
+                            <span className="chat-sender">
+                              {aiMsg.type === 'ai' ? (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  Ohm AI
+                                  {aiMsg.usedWebSearch && (
+                                    <span style={{ 
+                                      fontSize: '0.625rem', 
+                                      background: '#4ade80', 
+                                      color: 'white',
+                                      padding: '0.125rem 0.25rem',
+                                      borderRadius: '4px'
+                                    }}>
+                                      🌐 web
+                                    </span>
+                                  )}
+                                  {aiMsg.usedContext && (
+                                    <span style={{ 
+                                      fontSize: '0.625rem', 
+                                      background: 'var(--lk-accent-bg)', 
+                                      color: 'var(--lk-accent-fg)',
+                                      padding: '0.125rem 0.25rem',
+                                      borderRadius: '4px'
+                                    }}>
+                                      📄 {aiMsg.relevantTranscripts ? `${aiMsg.relevantTranscripts} refs` : 'context'}
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                `👤 ${aiMsg.userName} → AI`
+                              )}
+                            </span>
+                            <span className="chat-timestamp">
+                              {formatTimestamp(aiMsg.timestamp)}
+                            </span>
+                          </div>
+                          <div className="chat-message-text">
+                            <div className="chat-message">
+                              <ReactMarkdown>{aiMsg.message}</ReactMarkdown>
+                            </div>
+                            {aiMsg.citations && aiMsg.citations.length > 0 && (
+                              <div className="message-citations">
+                                <div className="citations-label">🔗 Sources:</div>
+                                <div className="citations-list">
+                                  {aiMsg.citations.map((url, index) => (
+                                    <a 
+                                      key={index}
+                                      href={url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="citation-link"
+                                    >
+                                      🌐 {new URL(url).hostname}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* AI Processing Indicator */}
+                      {isAiProcessing && (
+                        <div className="chat-message-group ai-message">
+                          <div className="chat-message-header">
+                            <span className="chat-sender">Ohm AI</span>
+                            <span className="chat-timestamp">⏳ Processing...</span>
+                          </div>
+                          <div className="chat-message-text">
+                            <div className="chat-message ai-processing">
+                              <span className="ai-typing-indicator">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                              </span>
+                              🧠 Thinking...
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+                
+                <form className="chat-input-form" onSubmit={handleAiChatSubmit}>
+                  <div className="ai-command-buttons compact">
+                    <button
+                      type="button"
+                      className={`command-button compact ${aiChatInput.toLowerCase().startsWith('@web ') ? 'active' : ''}`}
+                      onClick={() => {
+                        if (aiChatInput.toLowerCase().startsWith('@web ')) {
+                          // Remove @web prefix
+                          setAiChatInput(aiChatInput.slice(5));
+                        } else {
+                          // Add @web prefix
+                          setAiChatInput(`@web ${aiChatInput}`);
+                        }
+                      }}
+                      disabled={isAiProcessing}
+                      title="Web Search"
+                    >
+                      🌐
+                    </button>
+                  </div>
+                  <div className="chat-input-row">
+                    <input
+                      type="text"
+                      className="chat-input"
+                      placeholder={aiChatInput.toLowerCase().startsWith('@web ') ? "🔍 Search the web..." : "🤖 Ask Ohm about the meeting..."}
+                      value={aiChatInput}
+                      onChange={(e) => setAiChatInput(e.target.value)}
+                      disabled={isAiProcessing}
+                    />
+                    <button 
+                      type="submit" 
+                      className="chat-send-button"
+                      disabled={isAiProcessing || !aiChatInput.trim()}
+                      title="Send to AI"
+                    >
+                      {isAiProcessing ? '⏳' : '🚀'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         )}
       </div>

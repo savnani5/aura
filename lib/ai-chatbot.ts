@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { VectorService, ChatContext, MeetingTranscript } from './vector-service';
+import { DatabaseService } from './mongodb';
+import { RAGService } from './rag-service';
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -13,19 +14,21 @@ export interface ChatMessage {
 
 export interface AIChatResponse {
   message: string;
-  usedContext: boolean;
-  relevantTranscripts: number;
   usedWebSearch?: boolean;
+  usedContext?: boolean;
+  relevantTranscripts?: number;
   citations?: string[];
 }
 
 export class AIChatbot {
   private static instance: AIChatbot;
-  private vectorService: VectorService;
+  private dbService: DatabaseService;
+  private ragService: RAGService;
   private conversationHistory: Map<string, ChatMessage[]> = new Map();
 
   constructor() {
-    this.vectorService = VectorService.getInstance();
+    this.dbService = DatabaseService.getInstance();
+    this.ragService = RAGService.getInstance();
   }
 
   static getInstance(): AIChatbot {
@@ -42,34 +45,15 @@ export class AIChatbot {
 Help with:
 - Meeting summaries and decisions
 - Action items and follow-ups  
-- Transcript insights
+- Task management and suggestions
 - Rephrasing and clarity
+- General meeting support
 
-Be brief, direct, and helpful. Reference specific transcript content when relevant. If you lack context, ask short clarifying questions.`;
-  }
+Be brief, direct, and helpful. When users ask about tasks or action items, you can suggest creating tasks with priorities and assignments.
 
-  // Format context for the AI
-  private formatContext(context: ChatContext): string {
-    let formattedContext = '';
+Note: Meeting types are flexible - users can define any custom meeting type name (like "Daily Standup", "Client Review", "Sprint Planning", etc.).
 
-    // Add current meeting transcripts
-    if (context.currentTranscripts.trim()) {
-      formattedContext += `CURRENT MEETING TRANSCRIPT:\n${context.currentTranscripts}\n\n`;
-    }
-
-    // Add relevant historical context
-    if (context.relevantHistory.length > 0) {
-      formattedContext += `RELEVANT PREVIOUS MEETINGS:\n`;
-      context.relevantHistory.forEach((transcript, index) => {
-        const date = new Date(transcript.timestamp).toLocaleDateString();
-        formattedContext += `\n--- Meeting ${index + 1} (${date}) ---\n`;
-        formattedContext += `Room: ${transcript.roomName}\n`;
-        formattedContext += `Participants: ${transcript.participants.join(', ')}\n`;
-        formattedContext += `Content: ${transcript.content}\n`;
-      });
-    }
-
-    return formattedContext;
+When provided with meeting context (current transcripts or historical context), use it to give more relevant and specific answers. Reference specific participants, decisions, or topics mentioned in the context.`;
   }
 
   // Check if message is a web search request
@@ -97,7 +81,8 @@ Be brief, direct, and helpful. Reference specific transcript content when releva
     message: string,
     roomName: string,
     userName: string,
-    currentTranscripts: string
+    currentTranscripts?: string,
+    isLiveMeeting: boolean = false
   ): Promise<AIChatResponse> {
     try {
       // Get conversation history for this room
@@ -120,20 +105,39 @@ Be brief, direct, and helpful. Reference specific transcript content when releva
         searchQuery = this.extractWebSearchQuery(message);
       }
 
-      // Get relevant context from vector database
-      const context = await this.vectorService.getChatContext(
-        message,
+      // Get RAG context (current + historical)
+      const ragContext = await this.ragService.getContextForQuery(
         roomName,
-        currentTranscripts
+        message,
+        currentTranscripts,
+        isLiveMeeting
       );
+
+      // Get room stats for additional context
+      const roomStats = await this.ragService.getRoomStats(roomName);
 
       // Prepare system prompt with context
       let systemPrompt = this.getSystemPrompt();
       
-      // Add context if available
-      const formattedContext = this.formatContext(context);
-      if (formattedContext.trim()) {
-        systemPrompt += `\n\nCONTEXT INFORMATION:\n${formattedContext}`;
+      // Add room context
+      if (roomStats.totalMeetings > 0) {
+        systemPrompt += `\n\nROOM CONTEXT:`;
+        systemPrompt += `\nRoom: ${roomName}`;
+        systemPrompt += `\nTotal meetings: ${roomStats.totalMeetings}`;
+        systemPrompt += `\nTotal transcripts: ${roomStats.totalTranscripts}`;
+        if (roomStats.recentMeetingTypes.length > 0) {
+          systemPrompt += `\nMeeting types: ${roomStats.recentMeetingTypes.join(', ')}`;
+        }
+        if (roomStats.frequentParticipants.length > 0) {
+          systemPrompt += `\nFrequent participants: ${roomStats.frequentParticipants.join(', ')}`;
+        }
+      }
+
+      // Add meeting context if available
+      const contextPrompt = this.ragService.formatContextForPrompt(ragContext);
+      if (contextPrompt.trim()) {
+        systemPrompt += `\n\n${contextPrompt}`;
+        systemPrompt += `Use this context to provide more specific and relevant answers. Reference specific participants, decisions, or topics when relevant.`;
       }
 
       // If web search is needed, modify the system prompt
@@ -192,14 +196,7 @@ Be brief, direct, and helpful. Reference specific transcript content when releva
               }
             }
           }
-        } else if (content.type === 'web_search_tool_result') {
-          // Web search was used
-          usedWebSearch = true;
         }
-      }
-
-      if (!aiResponse) {
-        aiResponse = 'I apologize, but I could not generate a response.';
       }
 
       // Add AI response to history
@@ -210,7 +207,7 @@ Be brief, direct, and helpful. Reference specific transcript content when releva
       };
       history.push(assistantMessage);
 
-      // Keep only last 20 messages in history
+      // Update conversation history (keep last 20 messages)
       if (history.length > 20) {
         history = history.slice(-20);
       }
@@ -218,40 +215,16 @@ Be brief, direct, and helpful. Reference specific transcript content when releva
 
       return {
         message: aiResponse,
-        usedContext: context.relevantHistory.length > 0 || context.currentTranscripts.trim().length > 0,
-        relevantTranscripts: context.relevantHistory.length,
         usedWebSearch,
+        usedContext: ragContext.usedContext,
+        relevantTranscripts: ragContext.totalRelevantTranscripts,
         citations: citations.length > 0 ? citations : undefined,
       };
 
     } catch (error) {
-      console.error('Error processing AI chat:', error);
-      return {
-        message: 'I apologize, but I encountered an error. Please try again.',
-        usedContext: false,
-        relevantTranscripts: 0,
-        usedWebSearch: false,
-      };
+      console.error('Error processing chat:', error);
+      throw new Error('Failed to process chat request');
     }
-  }
-
-  // Store meeting transcript for future context
-  async storeMeetingTranscript(
-    roomName: string,
-    transcriptText: string,
-    participants: string[]
-  ): Promise<void> {
-    if (!transcriptText.trim()) return;
-
-    const transcript: Omit<MeetingTranscript, 'embedding'> = {
-      id: `${roomName}-${Date.now()}`,
-      roomName,
-      content: transcriptText,
-      timestamp: Date.now(),
-      participants,
-    };
-
-    await this.vectorService.storeMeetingTranscript(transcript);
   }
 
   // Clear conversation history for a room

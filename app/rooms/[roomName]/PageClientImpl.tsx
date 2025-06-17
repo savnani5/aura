@@ -96,6 +96,7 @@ export function PageClientImpl(props: {
           connectionDetails={connectionDetails}
           userChoices={preJoinChoices}
           options={{ codec: props.codec, hq: props.hq }}
+          roomName={props.roomName}
         />
       )}
     </main>
@@ -109,6 +110,7 @@ function VideoConferenceComponent(props: {
     hq: boolean;
     codec: VideoCodec;
   };
+  roomName: string;
 }) {
   const keyProvider = new ExternalE2EEKeyProvider();
   const { worker, e2eePassphrase } = useSetupE2EE();
@@ -121,6 +123,7 @@ function VideoConferenceComponent(props: {
   const [isMobile, setIsMobile] = React.useState(false);
   const [sidebarWidth, setSidebarWidth] = React.useState(400);
   const [isResizing, setIsResizing] = React.useState(false);
+  const [isConnected, setIsConnected] = React.useState(false);
 
   // Mobile detection
   React.useEffect(() => {
@@ -234,15 +237,48 @@ function VideoConferenceComponent(props: {
     
     // Show share modal when host connects
     const handleConnected = () => {
-      // Generate the meeting URL
-      const url = window.location.href;
-      setMeetingUrl(url);
-      setShowShareModal(true);
+      console.log('✅ Connected to room:', room.name);
+      setIsConnected(true);
       
-      // Auto-hide after 10 seconds
-      setTimeout(() => {
-        setShowShareModal(false);
-      }, 10000);
+      // Start a meeting record when successfully connected
+      const startMeeting = async () => {
+        try {
+          console.log('🚀 Starting meeting record...');
+          
+          const userName = localStorage.getItem('meetingSettings')?.includes('participantName') 
+            ? JSON.parse(localStorage.getItem('meetingSettings') || '{}').participantName 
+            : 'Guest';
+          
+          const response = await fetch('/api/meetings/start', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              roomName: props.roomName,
+              roomId: props.roomName, // Use roomName as roomId for now
+              participantName: userName,
+              title: `Meeting in ${props.roomName}`,
+              type: 'Meeting'
+            }),
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            const meetingId = data.data.meetingId;
+            console.log('✅ Meeting started with ID:', meetingId);
+            
+            // Store meeting ID for later use
+            localStorage.setItem(`meeting-id-${props.roomName}`, meetingId);
+          } else {
+            console.error('❌ Failed to start meeting record:', await response.text());
+          }
+        } catch (error) {
+          console.error('Error starting meeting:', error);
+        }
+      };
+      
+      startMeeting();
     };
     
     room.on(RoomEvent.Connected, handleConnected);
@@ -277,7 +313,177 @@ function VideoConferenceComponent(props: {
   }, [e2eeSetupComplete, room, props.connectionDetails, props.userChoices]);
 
   const router = useRouter();
-  const handleOnLeave = React.useCallback(() => router.push('/'), [router]);
+  const handleMeetingEnd = async (transcripts: Transcript[]) => {
+    try {
+      console.log('🔍 MEETING END DEBUG: Starting handleMeetingEnd with transcripts:', {
+        transcriptCount: transcripts.length,
+        transcripts: transcripts.map((t, i) => ({
+          index: i,
+          speaker: t.speaker,
+          text: t.text.substring(0, 100) + (t.text.length > 100 ? '...' : ''),
+          timestamp: new Date(t.timestamp).toLocaleString(),
+          timestampRaw: t.timestamp
+        }))
+      });
+
+      // Get the meetingId from localStorage
+      const meetingId = localStorage.getItem(`meeting-id-${props.roomName}`);
+      
+      if (!meetingId) {
+        console.warn('No meetingId found for room:', props.roomName);
+        // If we have transcripts, try to generate local summary as fallback
+        if (transcripts.length > 0) {
+          const summary = await transcriptionService.summarizeTranscripts(transcripts);
+          console.log('Meeting Summary (local):', summary);
+        }
+        // Still redirect to home
+        router.push('/');
+        return;
+      }
+
+      console.log('🔚 Ending meeting with transcripts...', { meetingId, transcriptCount: transcripts.length });
+
+      const formattedTranscripts = transcripts.map(t => ({
+        speaker: t.speaker,
+        text: t.text,
+        timestamp: t.timestamp
+      }));
+
+      console.log('🔍 MEETING END DEBUG: Formatted transcripts for API:', formattedTranscripts);
+
+      // Call the meeting end API
+      const response = await fetch(`/api/meetings/${props.roomName}/end`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          meetingId,
+          transcripts: formattedTranscripts,
+          participants: Array.from(room.remoteParticipants.values()).map(p => ({
+            name: p.name || p.identity,
+            joinedAt: new Date().toISOString(), // Approximate
+            leftAt: new Date().toISOString(),
+            isHost: false
+          })).concat([{
+            name: 'Host', // Current user
+            joinedAt: new Date().toISOString(),
+            leftAt: new Date().toISOString(),
+            isHost: true
+          }]),
+          endedAt: new Date().toISOString()
+        }),
+      });
+
+      console.log('🔍 MEETING END DEBUG: API response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Meeting ended successfully:', data);
+        
+        // Clean up localStorage
+        localStorage.removeItem(`meeting-id-${props.roomName}`);
+        
+        // Disconnect from the room before redirecting
+        if (room.state === 'connected') {
+          await room.disconnect();
+        }
+        
+        // Store the meeting ID for the modal to open
+        localStorage.setItem('open-meeting-modal', meetingId);
+        
+        // Check if this is a one-off meeting or room meeting
+        if (data.data?.redirectUrl) {
+          router.push(data.data.redirectUrl);
+        } else {
+          // For room meetings, redirect to meeting room dashboard
+          // The dashboard will detect the stored meeting ID and open the modal
+          router.push(`/meetingroom/${props.roomName}`);
+        }
+      } else {
+        const errorData = await response.json();
+        console.error('❌ Error ending meeting:', errorData);
+        // Disconnect and fallback redirect
+        if (room.state === 'connected') {
+          await room.disconnect();
+        }
+        router.push('/');
+      }
+    } catch (error) {
+      console.error('Error ending meeting:', error);
+      // Disconnect and fallback redirect
+      try {
+        if (room.state === 'connected') {
+          await room.disconnect();
+        }
+      } catch (disconnectError) {
+        console.error('Error disconnecting from room:', disconnectError);
+      }
+      router.push('/');
+    }
+  };
+
+  // Store shared transcripts globally for meeting end
+  const [sharedTranscripts, setSharedTranscripts] = React.useState<Transcript[]>([]);
+  
+  // Use ref to preserve transcripts during room cleanup
+  const transcriptsRef = React.useRef<Transcript[]>([]);
+  
+  // Update ref whenever transcripts change
+  React.useEffect(() => {
+    transcriptsRef.current = sharedTranscripts;
+  }, [sharedTranscripts]);
+
+  // Add debugging for transcript changes
+  React.useEffect(() => {
+    console.log('🔍 TRANSCRIPT DEBUG: sharedTranscripts updated', {
+      count: sharedTranscripts.length,
+      transcripts: sharedTranscripts.map((t, i) => ({
+        index: i,
+        speaker: t.speaker,
+        text: t.text.substring(0, 50) + (t.text.length > 50 ? '...' : ''),
+        timestamp: new Date(t.timestamp).toLocaleTimeString()
+      }))
+    });
+  }, [sharedTranscripts]);
+
+  const handleOnLeave = React.useCallback(async () => {
+    console.log('🚪 User leaving room, checking if meeting should end...');
+    
+    // Use ref to get transcripts (preserves during cleanup)
+    const finalTranscripts = transcriptsRef.current;
+    console.log('🔍 TRANSCRIPT DEBUG: Final transcript count before meeting end:', finalTranscripts.length);
+    
+    // Log each transcript for debugging
+    finalTranscripts.forEach((t, i) => {
+      console.log(`🔍 TRANSCRIPT ${i + 1}:`, {
+        speaker: t.speaker,
+        text: t.text,
+        timestamp: new Date(t.timestamp).toLocaleTimeString(),
+        timestampRaw: t.timestamp
+      });
+    });
+    
+    // Check if there are any other participants still in the room
+    const otherParticipants = room.remoteParticipants.size;
+    console.log('Other participants in room:', otherParticipants);
+    
+    // If this is the last person leaving, trigger meeting end with actual transcripts
+    if (otherParticipants === 0) {
+      console.log('🔚 Last participant leaving, triggering meeting end...');
+      await handleMeetingEnd(finalTranscripts);
+    } else {
+      // Just leave without ending the meeting - redirect to meeting status page
+      console.log('🚶 Other participants still in room, just leaving...');
+      const meetingId = localStorage.getItem(`meeting-id-${props.roomName}`);
+      if (meetingId) {
+        router.push(`/meeting-status/${meetingId}?roomName=${props.roomName}`);
+      } else {
+        router.push('/');
+      }
+    }
+  }, [router, room]);
+
   const handleError = React.useCallback((error: Error) => {
     console.error(error);
     alert(`Encountered an unexpected error, check the console logs for details: ${error.message}`);
@@ -313,16 +519,6 @@ function VideoConferenceComponent(props: {
   const closeShareModal = () => {
     setShowShareModal(false);
     setCopied(false);
-  };
-
-  const handleMeetingEnd = async (transcripts: Transcript[]) => {
-    try {
-      const summary = await transcriptionService.summarizeTranscripts(transcripts);
-      // You can store the summary or display it to the user
-      console.log('Meeting Summary:', summary);
-    } catch (error) {
-      console.error('Error generating summary:', error);
-    }
   };
 
   return (
@@ -375,11 +571,11 @@ function VideoConferenceComponent(props: {
                   }
                 }}
               />
-              <TranscriptTab onMeetingEnd={handleMeetingEnd} />
+              <TranscriptTab onTranscriptsChange={setSharedTranscripts} />
             </div>
           )}
           {isMobile && (
-            <TranscriptTab onMeetingEnd={handleMeetingEnd} />
+            <TranscriptTab onTranscriptsChange={setSharedTranscripts} />
           )}
         </div>
         
