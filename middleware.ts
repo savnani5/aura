@@ -2,7 +2,6 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 const isProtectedRoute = createRouteMatcher([
   '/meetingroom/(.*)',
-  '/rooms/(.*)',
   '/meeting/(.*)'
 ]);
 
@@ -10,7 +9,8 @@ const isPublicRoute = createRouteMatcher([
   '/',
   '/sign-in(.*)',
   '/sign-up(.*)',
-  '/api/(.*)'  // Make all API routes public for simplicity
+  '/api/(.*)',  // Make all API routes public for simplicity
+  '/rooms/(.*)'  // Allow guest access to instant meetings
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
