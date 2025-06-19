@@ -116,11 +116,6 @@ export function LandingPage() {
               <h3>Persistent Meeting Rooms</h3>
               <p>Create dedicated spaces for your teams with shared context and task management.</p>
             </div>
-            <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>⚡</div>
-              <h3>Instant Meetings</h3>
-              <p>Start meetings instantly with no setup required. Perfect for quick calls and discussions.</p>
-            </div>
           </div>
         </div>
       </section>

@@ -392,11 +392,10 @@ function VideoConferenceComponent(props: {
         // Store the meeting ID for the modal to open
         localStorage.setItem('open-meeting-modal', meetingId);
         
-        // Check if this is a one-off meeting or room meeting
+        // Redirect to meeting room dashboard for room meetings
         if (data.data?.redirectUrl) {
           router.push(data.data.redirectUrl);
         } else {
-          // For room meetings, redirect to meeting room dashboard
           // The dashboard will detect the stored meeting ID and open the modal
           router.push(`/meetingroom/${props.roomName}`);
         }
@@ -448,41 +447,114 @@ function VideoConferenceComponent(props: {
   }, [sharedTranscripts]);
 
   const handleOnLeave = React.useCallback(async () => {
-    console.log('🚪 User leaving room, checking if meeting should end...');
+    console.log('🚪 User leaving room - implementing immediate exit...');
     
-    // Use ref to get transcripts (preserves during cleanup)
+    // Get transcripts immediately before any disconnection
     const finalTranscripts = transcriptsRef.current;
-    console.log('🔍 TRANSCRIPT DEBUG: Final transcript count before meeting end:', finalTranscripts.length);
+    console.log('🔍 TRANSCRIPT DEBUG: Final transcript count:', finalTranscripts.length);
     
-    // Log each transcript for debugging
-    finalTranscripts.forEach((t, i) => {
-      console.log(`🔍 TRANSCRIPT ${i + 1}:`, {
-        speaker: t.speaker,
-        text: t.text,
-        timestamp: new Date(t.timestamp).toLocaleTimeString(),
-        timestampRaw: t.timestamp
-      });
-    });
+    // Get meeting ID for background processing
+    const meetingId = localStorage.getItem(`meeting-id-${props.roomName}`);
     
-    // Check if there are any other participants still in the room
-    const otherParticipants = room.remoteParticipants.size;
-    console.log('Other participants in room:', otherParticipants);
-    
-    // If this is the last person leaving, trigger meeting end with actual transcripts
-    if (otherParticipants === 0) {
-      console.log('🔚 Last participant leaving, triggering meeting end...');
-      await handleMeetingEnd(finalTranscripts);
-    } else {
-      // Just leave without ending the meeting - redirect to meeting status page
-      console.log('🚶 Other participants still in room, just leaving...');
-      const meetingId = localStorage.getItem(`meeting-id-${props.roomName}`);
-      if (meetingId) {
-        router.push(`/meeting-status/${meetingId}?roomName=${props.roomName}`);
-      } else {
-        router.push('/');
+    // Immediately disconnect and redirect - don't wait for transcript processing
+    try {
+      // Stop transcription service immediately to prevent new data
+      if (transcriptionService && room.state === 'connected') {
+        console.log('🛑 Stopping transcription service immediately...');
+        transcriptionService.stopTranscription();
       }
+      
+      if (room.state === 'connected') {
+        console.log('🔌 Disconnecting from room immediately...');
+        await room.disconnect();
+      }
+    } catch (error) {
+      console.error('Error during immediate disconnect:', error);
     }
-  }, [router, room]);
+
+    // Redirect immediately to dashboard - don't wait for transcript processing
+    console.log('🏃 Redirecting immediately to dashboard...');
+    router.push(`/meetingroom/${props.roomName}`);
+
+    // Process transcripts in background asynchronously (fire and forget)
+    if (finalTranscripts.length > 0 && meetingId) {
+      console.log('🔄 Starting background transcript processing...');
+      
+      // Process meeting end in background without blocking the UI
+      processTranscriptsInBackground(finalTranscripts, meetingId, props.roomName)
+        .then(() => {
+          console.log('✅ Background transcript processing completed');
+          // Signal that processing is complete via localStorage for meeting modal
+          localStorage.setItem('transcript-processing-complete', meetingId);
+          // Dispatch a custom event to notify any listening components
+          window.dispatchEvent(new CustomEvent('transcripts-processed', { 
+            detail: { meetingId, roomName: props.roomName } 
+          }));
+        })
+        .catch((error) => {
+          console.error('❌ Background transcript processing failed:', error);
+          // Still signal completion even if failed, so UI doesn't wait forever
+          localStorage.setItem('transcript-processing-failed', meetingId);
+          window.dispatchEvent(new CustomEvent('transcripts-processing-failed', { 
+            detail: { meetingId, roomName: props.roomName, error: error.message } 
+          }));
+        });
+    } else {
+      console.log('🔍 No transcripts or meeting ID to process in background');
+    }
+  }, [router, room, props.roomName]);
+
+  // Background transcript processing function
+  const processTranscriptsInBackground = async (transcripts: Transcript[], meetingId: string, roomName: string) => {
+    console.log('🔄 Processing transcripts in background...', { meetingId, transcriptCount: transcripts.length });
+    
+    const formattedTranscripts = transcripts.map(t => ({
+      speaker: t.speaker,
+      text: t.text,
+      timestamp: t.timestamp
+    }));
+
+    // Call the meeting end API
+    const response = await fetch(`/api/meetings/${roomName}/end`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        meetingId,
+        transcripts: formattedTranscripts,
+        participants: Array.from(room.remoteParticipants.values()).map(p => ({
+          name: p.name || p.identity,
+          joinedAt: new Date().toISOString(),
+          leftAt: new Date().toISOString(),
+          isHost: false
+        })).concat([{
+          name: 'Host',
+          joinedAt: new Date().toISOString(),
+          leftAt: new Date().toISOString(),
+          isHost: true
+        }]),
+        endedAt: new Date().toISOString()
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ Background processing: Meeting ended successfully:', data);
+      
+      // Clean up localStorage
+      localStorage.removeItem(`meeting-id-${roomName}`);
+      
+      // Store the meeting ID for the modal
+      localStorage.setItem('open-meeting-modal', meetingId);
+      
+      return data;
+    } else {
+      const errorData = await response.json();
+      console.error('❌ Background processing: Error ending meeting:', errorData);
+      throw new Error(errorData.message || 'Failed to process meeting end');
+    }
+  };
 
   const handleError = React.useCallback((error: Error) => {
     console.error(error);

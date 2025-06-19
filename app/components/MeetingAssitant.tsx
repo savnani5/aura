@@ -391,7 +391,16 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
 
   // Share transcript with other participants via data channel
   const shareTranscript = useCallback((transcript: Transcript) => {
-    if (!room?.localParticipant || !sendData) return;
+    // Check if room and connection are still active before sharing
+    if (!room?.localParticipant || !sendData || room.state !== 'connected') {
+      console.log('🔍 TRANSCRIPT SHARE: Skipping share - room not connected or missing dependencies:', {
+        hasRoom: !!room,
+        hasLocalParticipant: !!room?.localParticipant,
+        hasSendData: !!sendData,
+        roomState: room?.state
+      });
+      return;
+    }
 
     const participantId = transcript.participantId || room.localParticipant.identity;
     const speaker = transcript.speaker || room.localParticipant.name || participantId;
@@ -425,8 +434,14 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
     // Add to shared transcripts
     setSharedTranscripts(prev => [...prev, newTranscript]);
     
-    // Send the transcript to other participants
+    // Send the transcript to other participants with additional safety checks
     setTimeout(() => {
+      // Double-check connection state before sending
+      if (!room || room.state !== 'connected' || !sendData) {
+        console.log('🔍 TRANSCRIPT SHARE: Connection closed before sending, skipping');
+        return;
+      }
+
       const sharedData: SharedTranscript = {
         id: `${participantId}-${Date.now()}`,
         speaker: speaker,
@@ -444,14 +459,19 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
       const data = encoder.encode(JSON.stringify(sharedData));
       
       try {
-        sendData(data, { reliable: true });
-        console.log('🔍 TRANSCRIPT SENT: Shared via data channel:', {
-          speaker,
-          text: sharedData.text.substring(0, 50) + '...',
-          entryId: sharedData.entryId
-        });
+        // Final check before sending
+        if (room.state === 'connected') {
+          sendData(data, { reliable: true });
+          console.log('🔍 TRANSCRIPT SENT: Shared via data channel:', {
+            speaker,
+            text: sharedData.text.substring(0, 50) + '...',
+            entryId: sharedData.entryId
+          });
+        } else {
+          console.log('🔍 TRANSCRIPT SHARE: Room disconnected, skipping send');
+        }
       } catch (error) {
-        console.error('Error sending transcript data:', error);
+        console.error('Error sending transcript data (connection may be closed):', error);
       }
     }, 0);
   }, [room, sendData]);
@@ -646,6 +666,43 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
 
     return () => clearTimeout(timeoutId);
   }, [notes, user, room?.name]);
+
+  // Cleanup transcription service on unmount or room disconnect
+  useEffect(() => {
+    return () => {
+      console.log('🔄 Cleaning up transcription service...');
+      if (transcriptionService) {
+        try {
+          transcriptionService.stopTranscription();
+        } catch (error) {
+          console.error('Error stopping transcription service:', error);
+        }
+      }
+    };
+  }, [transcriptionService]);
+
+  // Stop transcription when room disconnects
+  useEffect(() => {
+    if (!room) return;
+
+    const handleDisconnected = () => {
+      console.log('🔌 Room disconnected, stopping transcription...');
+      if (transcriptionService && isRecording) {
+        try {
+          transcriptionService.stopTranscription();
+          setIsRecording(false);
+        } catch (error) {
+          console.error('Error stopping transcription on disconnect:', error);
+        }
+      }
+    };
+
+    room.on('disconnected', handleDisconnected);
+    
+    return () => {
+      room.off('disconnected', handleDisconnected);
+    };
+  }, [room, transcriptionService, isRecording]);
 
   const exportNotes = () => {
     const timestamp = new Date().toISOString().split('T')[0];

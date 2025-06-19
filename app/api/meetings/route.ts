@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { DatabaseService, fromCreateMeetingForm, toMeetingRoomCard, toOneOffMeeting } from '@/lib/mongodb';
+import { DatabaseService, fromCreateMeetingForm, toMeetingRoomCard } from '@/lib/mongodb';
 
-// GET /api/meetings - Get meeting rooms or one-off meetings based on query params
+// GET /api/meetings - Get meeting rooms for the authenticated user
 export async function GET(request: NextRequest) {
   try {
     // Get authenticated user
@@ -18,10 +18,9 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type'); // 'instant' for one-off meetings
     const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : undefined;
     
-    console.log('📋 Query params:', { type, limit });
+    console.log('📋 Query params:', { limit });
     
     const db = DatabaseService.getInstance();
     
@@ -70,40 +69,25 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    if (type === 'instant') {
-      console.log('⚡ Fetching instant meetings for user:', user._id);
-      // Fetch user's one-off meetings
-      const oneOffMeetings = await db.getOneOffMeetingsByUser(user._id, limit);
-      console.log('⚡ Raw instant meetings from DB:', oneOffMeetings.length, 'meetings');
-      
-      const formattedMeetings = oneOffMeetings.map(meeting => toOneOffMeeting(meeting));
-      console.log('⚡ Formatted instant meetings:', formattedMeetings);
-      
-      return NextResponse.json({ 
-        success: true, 
-        data: formattedMeetings 
-      });
-    } else {
-      console.log('🏠 Fetching meeting rooms for user:', user._id);
-      // Default: fetch user's meeting rooms
-      const meetingRooms = await db.getMeetingRoomsByUser(user._id, user.email, limit);
-      console.log('🏠 Raw meeting rooms from DB:', meetingRooms.length, 'rooms');
-      console.log('🏠 Meeting rooms details:', meetingRooms.map(room => ({
-        id: room._id,
-        roomName: room.roomName,
-        title: room.title,
-        createdBy: room.createdBy,
-        participants: room.participants.map(p => ({ name: p.name, role: p.role, userId: p.userId, email: p.email }))
-      })));
-      
-      const formattedRooms = meetingRooms.map(room => toMeetingRoomCard(room));
-      console.log('🏠 Formatted meeting rooms:', formattedRooms);
-      
-      return NextResponse.json({ 
-        success: true, 
-        data: formattedRooms 
-      });
-    }
+    console.log('🏠 Fetching meeting rooms for user:', user._id);
+    // Fetch user's meeting rooms
+    const meetingRooms = await db.getMeetingRoomsByUser(user._id, user.email, limit);
+    console.log('🏠 Raw meeting rooms from DB:', meetingRooms.length, 'rooms');
+    console.log('🏠 Meeting rooms details:', meetingRooms.map(room => ({
+      id: room._id,
+      roomName: room.roomName,
+      title: room.title,
+      createdBy: room.createdBy,
+      participants: room.participants.map(p => ({ name: p.name, role: p.role, userId: p.userId, email: p.email }))
+    })));
+    
+    const formattedRooms = meetingRooms.map(room => toMeetingRoomCard(room));
+    console.log('🏠 Formatted meeting rooms:', formattedRooms);
+    
+    return NextResponse.json({ 
+      success: true, 
+      data: formattedRooms 
+    });
   } catch (error) {
     console.error('❌ Error fetching meetings:', error);
     return NextResponse.json({ 
@@ -113,7 +97,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/meetings - Create a new meeting room OR one-off meeting
+// POST /api/meetings - Create a new meeting room
 export async function POST(request: NextRequest) {
   try {
     // Get authenticated user
@@ -136,8 +120,7 @@ export async function POST(request: NextRequest) {
       endDate, 
       frequency, 
       recurringDay, 
-      recurringTime,
-      participantName // For instant meetings
+      recurringTime
     } = body;
 
     // Validate required fields
@@ -183,53 +166,35 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    if (isRecurring === false) {
-      // Create one-off meeting with user as participant
-      const oneOffMeeting = await db.createOneOffMeeting({
-        roomName,
-        title,
-        type,
-        participantName: user.name,
-        userId: user._id
-      });
-      
+    // Check if room already exists
+    const existingRoom = await db.getMeetingRoomByName(roomName);
+    if (existingRoom) {
       return NextResponse.json({ 
-        success: true, 
-        data: toOneOffMeeting(oneOffMeeting) 
-      }, { status: 201 });
-    } else {
-      // Create meeting room (existing logic)
-      
-      // Check if room already exists
-      const existingRoom = await db.getMeetingRoomByName(roomName);
-      if (existingRoom) {
-        return NextResponse.json({ 
-          success: false, 
-          error: 'Meeting room with this name already exists' 
-        }, { status: 409 });
-      }
-
-      // Create meeting room with user as creator and host
-      const roomData = fromCreateMeetingForm({
-        roomName,
-        title,
-        type,
-        isRecurring: isRecurring || false,
-        participants: participants || [],
-        startDate,
-        endDate,
-        frequency,
-        recurringDay,
-        recurringTime
-      }, user._id);
-
-      const createdRoom = await db.createMeetingRoom(roomData);
-      
-      return NextResponse.json({ 
-        success: true, 
-        data: toMeetingRoomCard(createdRoom) 
-      }, { status: 201 });
+        success: false, 
+        error: 'Meeting room with this name already exists' 
+      }, { status: 409 });
     }
+
+    // Create meeting room with user as creator and host
+    const roomData = fromCreateMeetingForm({
+      roomName,
+      title,
+      type,
+      isRecurring: isRecurring || false,
+      participants: participants || [],
+      startDate,
+      endDate,
+      frequency,
+      recurringDay,
+      recurringTime
+    }, user._id);
+
+    const createdRoom = await db.createMeetingRoom(roomData);
+    
+    return NextResponse.json({ 
+      success: true, 
+      data: toMeetingRoomCard(createdRoom) 
+    }, { status: 201 });
   } catch (error) {
     console.error('Error creating meeting:', error);
     return NextResponse.json({ 

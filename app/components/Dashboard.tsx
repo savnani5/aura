@@ -4,11 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useUser, UserButton } from '@clerk/nextjs';
 import { CreateMeetingPopup } from './CreateMeetingPopup';
-import { InstantMeetingPopup } from './InstantMeetingPopup';
 import { MeetingRoomCard } from './MeetingRoomCard';
-import { OneOffMeetingCard } from './OneOffMeetingCard';
 import { AllMeetingRoomsView } from './AllMeetingRoomsView';
-import { AllRecentMeetingsView } from './AllRecentMeetingsView';
 import styles from '@/styles/HomePage.module.css';
 
 // TypeScript interfaces for API data
@@ -23,27 +20,11 @@ interface MeetingRoom {
   recentMeetings: number;
 }
 
-interface OneOffMeeting {
-  id: string;
-  roomName: string;
-  title?: string;
-  type: string;
-  startedAt: Date;
-  endedAt?: Date;
-  participantCount: number;
-  duration?: number;
-  hasTranscripts: boolean;
-  hasSummary: boolean;
-}
-
 export function Dashboard() {
   const { user } = useUser();
   const [showCreateRoomPopup, setShowCreateRoomPopup] = useState(false);
-  const [showInstantMeetingPopup, setShowInstantMeetingPopup] = useState(false);
   const [showAllRooms, setShowAllRooms] = useState(false);
-  const [showAllMeetings, setShowAllMeetings] = useState(false);
   const [meetingRooms, setMeetingRooms] = useState<MeetingRoom[]>([]);
-  const [oneOffMeetings, setOneOffMeetings] = useState<OneOffMeeting[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Fetch real data from API endpoints
@@ -52,16 +33,12 @@ export function Dashboard() {
     console.log('🔄 Starting fetchData...');
     
     try {
-      // Fetch meeting rooms and one-off meetings in parallel
-      console.log('📡 Making API calls...');
-      const [roomsResponse, instantMeetingsResponse] = await Promise.all([
-        fetch('/api/meetings'), // Default: meeting rooms
-        fetch('/api/meetings?type=instant') // One-off meetings
-      ]);
+      // Fetch meeting rooms
+      console.log('📡 Making API call for meeting rooms...');
+      const roomsResponse = await fetch('/api/meetings');
       
-      console.log('📡 API responses received:', {
-        roomsStatus: roomsResponse.status,
-        instantStatus: instantMeetingsResponse.status
+      console.log('📡 API response received:', {
+        roomsStatus: roomsResponse.status
       });
       
       // Handle meeting rooms
@@ -97,49 +74,12 @@ export function Dashboard() {
         console.warn('⚠️ Failed to fetch meeting rooms:', roomsResponse.status, roomsResponse.statusText);
         setMeetingRooms([]);
       }
-
-      // Handle one-off meetings
-      if (instantMeetingsResponse.ok) {
-        const instantData = await instantMeetingsResponse.json();
-        console.log('⚡ Instant meetings API response:', instantData);
-        
-        if (instantData.success) {
-          // Data is already in the correct OneOffMeeting format, but dates need conversion
-          const formattedInstantMeetings: OneOffMeeting[] = instantData.data.map((meeting: any) => ({
-            id: meeting.id,
-            roomName: meeting.roomName,
-            title: meeting.title,
-            type: meeting.type,
-            startedAt: new Date(meeting.startedAt), // Convert string to Date
-            endedAt: meeting.endedAt ? new Date(meeting.endedAt) : undefined, // Convert if exists
-            participantCount: meeting.participantCount,
-            duration: meeting.duration,
-            hasTranscripts: meeting.hasTranscripts,
-            hasSummary: meeting.hasSummary
-          }));
-          console.log('⚡ Formatted instant meetings:', formattedInstantMeetings);
-          setOneOffMeetings(formattedInstantMeetings);
-        } else {
-          // API returned success: false, but this might just mean no data
-          console.log('⚠️ No instant meetings found for user:', instantData.message || instantData.error);
-          setOneOffMeetings([]);
-        }
-      } else if (instantMeetingsResponse.status === 401) {
-        // Unauthorized - user might not be properly authenticated yet
-        console.log('🔒 User not authenticated for instant meetings');
-        setOneOffMeetings([]);
-      } else {
-        // Only warn for instant meetings failures, don't crash the app
-        console.warn('⚠️ Failed to fetch instant meetings:', instantMeetingsResponse.status, instantMeetingsResponse.statusText);
-        setOneOffMeetings([]);
-      }
       
     } catch (error) {
       console.error('❌ Error fetching data:', error);
       // Don't set error state for network issues, just log and show empty state
       console.log('📝 Setting empty arrays due to fetch error');
       setMeetingRooms([]);
-      setOneOffMeetings([]);
     } finally {
       setIsLoading(false);
       console.log('✅ fetchData completed');
@@ -157,27 +97,14 @@ export function Dashboard() {
     fetchData();
   }, []);
 
-  // Sort meetings by most recent and limit to 3 for dashboard
-  const sortedOneOffMeetings = [...oneOffMeetings].sort((a, b) => {
-    const dateA = a.startedAt || new Date(0);
-    const dateB = b.startedAt || new Date(0);
-    return dateB.getTime() - dateA.getTime();
-  });
-
   const meetingRoomsPreview = meetingRooms.slice(0, 3);
-  const recentMeetingsPreview = sortedOneOffMeetings.slice(0, 3);
   const hasMoreRooms = meetingRooms.length > 3;
-  const hasMoreMeetings = oneOffMeetings.length > 3;
 
   const handleViewAllRooms = () => {
     setShowAllRooms(true);
   };
 
-  const handleViewAllMeetings = () => {
-    setShowAllMeetings(true);
-  };
-
-  // If showing all rooms or meetings, render the respective component
+  // If showing all rooms, render the respective component
   if (showAllRooms) {
     return (
       <AllMeetingRoomsView 
@@ -189,33 +116,23 @@ export function Dashboard() {
     );
   }
 
-  if (showAllMeetings) {
-    return (
-      <AllRecentMeetingsView 
-        meetings={oneOffMeetings}
-        onBack={() => setShowAllMeetings(false)}
-        onRefresh={fetchData}
-        isLoading={isLoading}
-      />
-    );
-  }
-
   return (
     <div className={styles.container}>
       {/* Header */}
       <header className={styles.header}>
         <div className={styles.headerContent}>
-          <div className={styles.logo}>
+          <div className={styles.headerLeft}>
             <Image 
               src="/images/ohm-icon.svg" 
               alt="Ohm" 
-              width={40} 
-              height={40}
+              width={32} 
+              height={32} 
+              className={styles.logo}
             />
-            <h1>Ohm</h1>
+            <h1 className={styles.appName}>Ohm</h1>
           </div>
-          <div className={styles.userSection}>
-            <span className={styles.userGreeting}>
+          <div className={styles.headerRight}>
+            <span className={styles.welcomeText}>
               Welcome back, {user?.firstName || user?.fullName || 'User'}!
             </span>
             <UserButton 
@@ -315,83 +232,6 @@ export function Dashboard() {
             )}
           </section>
 
-          {/* Instant Meetings Section */}
-          <section className={styles.contentSection}>
-            <div className={styles.sectionHeader}>
-              <div className={styles.sectionHeaderContent}>
-                <div className={styles.sectionTitleGroup}>
-                  <div className={styles.sectionIcon}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                      <polyline points="12,6 12,12 16,14" stroke="currentColor" strokeWidth="2"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <h2 className={styles.sectionTitle}>Instant Meetings</h2>
-                    <p className={styles.sectionDescription}>
-                      Your recent one-off meetings and instant calls
-                    </p>
-                  </div>
-                </div>
-                <div className={styles.headerActions}>
-                  <button 
-                    onClick={() => setShowInstantMeetingPopup(true)}
-                    className={styles.createButton}
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                      <polygon points="10,8 16,12 10,16" fill="currentColor"/>
-                    </svg>
-                    Start Meeting
-                  </button>
-                  {hasMoreMeetings && (
-                    <button 
-                      onClick={handleViewAllMeetings}
-                      className={styles.viewAllButton}
-                    >
-                      <span>View All ({oneOffMeetings.length})</span>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                        <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {isLoading ? (
-              <div className={styles.loadingState}>
-                <div className={styles.loadingSpinner}></div>
-                <p>Loading instant meetings...</p>
-              </div>
-            ) : recentMeetingsPreview.length > 0 ? (
-              <div className={styles.oneOffMeetingsGrid}>
-                {recentMeetingsPreview.map((meeting) => (
-                  <OneOffMeetingCard key={meeting.id} meeting={meeting} />
-                ))}
-              </div>
-            ) : (
-              <div className={styles.emptyState}>
-                <div className={styles.emptyStateIcon}>
-                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                    <polygon points="10,8 16,12 10,16" fill="currentColor"/>
-                  </svg>
-                </div>
-                <h3 className={styles.emptyStateTitle}>No instant meetings</h3>
-                <p className={styles.emptyStateDescription}>
-                  Start an instant meeting to see your recent calls here
-                </p>
-                <button 
-                  onClick={() => setShowInstantMeetingPopup(true)}
-                  className={styles.emptyStateButton}
-                >
-                  Start Instant Meeting
-                </button>
-              </div>
-            )}
-          </section>
-
         </div>
       </main>
 
@@ -402,15 +242,6 @@ export function Dashboard() {
         onMeetingCreated={() => {
           handleMeetingCreated();
           setShowCreateRoomPopup(false);
-        }}
-      />
-
-      <InstantMeetingPopup 
-        isOpen={showInstantMeetingPopup}
-        onClose={() => setShowInstantMeetingPopup(false)}
-        onMeetingCreated={() => {
-          handleMeetingCreated();
-          setShowInstantMeetingPopup(false);
         }}
       />
     </div>

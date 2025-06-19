@@ -15,28 +15,30 @@ export async function POST(request: NextRequest) {
     } = body;
 
     // Validate required fields
-    if (!roomName) {
+    if (!roomName || !roomId) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Missing required field: roomName' 
+        error: 'Missing required fields: roomName, roomId' 
       }, { status: 400 });
     }
 
     const db = DatabaseService.getInstance();
     
-    // Get the meeting room details if roomId is provided
-    let meetingRoom = null;
-    if (roomId) {
-      meetingRoom = await db.getMeetingRoomByName(roomId);
+    // Get the meeting room details
+    const meetingRoom = await db.getMeetingRoomByName(roomId);
+    if (!meetingRoom) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Meeting room not found' 
+      }, { status: 404 });
     }
     
     // Create the meeting record
     const meetingData = {
-      roomId: meetingRoom?._id, // Optional for one-off meetings
+      roomId: meetingRoom._id,
       roomName: roomName,
-      title: title || meetingRoom?.title || 'Meeting',
-      type: type || meetingRoom?.type || 'Meeting',
-      isOneOff: !meetingRoom, // True if no associated meeting room
+      title: title || meetingRoom.title || 'Meeting',
+      type: type || meetingRoom.type || 'Meeting',
       startedAt: new Date(),
       participants: participantName ? [{
         name: participantName,

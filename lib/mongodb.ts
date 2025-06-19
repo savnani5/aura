@@ -212,13 +212,12 @@ const MeetingRoomSchema = new mongoose.Schema({
 
 // Meeting Schema (Individual meeting sessions)
 const MeetingSchema = new mongoose.Schema({
-  roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'MeetingRoom' }, // Optional for one-off meetings
+  roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'MeetingRoom', required: true },
   
   // Meeting details
   roomName: { type: String, required: true }, // Unique identifier for the meeting (for LiveKit room)
   title: { type: String }, // Override room title if needed
-  type: { type: String, default: 'Meeting' }, // 'Instant Meeting', 'Daily Standup', etc.
-  isOneOff: { type: Boolean, default: false }, // True for instant meetings
+  type: { type: String, default: 'Meeting' }, // 'Daily Standup', 'Project Review', etc.
   startedAt: { type: Date, required: true },
   endedAt: { type: Date },
   duration: { type: Number }, // in minutes
@@ -351,11 +350,10 @@ export interface IMeetingRoom {
 
 export interface IMeeting {
   _id: string;
-  roomId?: string; // Optional for one-off meetings
+  roomId: string; // Required - all meetings must be associated with a meeting room
   roomName: string; // Unique identifier for LiveKit room
   title?: string;
   type: string;
-  isOneOff: boolean;
   startedAt: Date;
   endedAt?: Date;
   duration?: number;
@@ -493,33 +491,6 @@ export function fromCreateMeetingForm(formData: {
     isActive: false,
     meetings: [],
     tasks: []
-  };
-}
-
-// Transform meeting to OneOffMeeting format for the frontend
-export function toOneOffMeeting(meeting: IMeeting): {
-  id: string;
-  roomName: string;
-  title?: string;
-  type: string;
-  startedAt: Date;
-  endedAt?: Date;
-  participantCount: number;
-  duration?: number;
-  hasTranscripts: boolean;
-  hasSummary: boolean;
-} {
-  return {
-    id: meeting._id,
-    roomName: meeting.roomName,
-    title: meeting.title,
-    type: meeting.type,
-    startedAt: meeting.startedAt,
-    endedAt: meeting.endedAt,
-    participantCount: meeting.participants.length,
-    duration: meeting.duration,
-    hasTranscripts: meeting.transcripts.length > 0,
-    hasSummary: !!meeting.summary?.content
   };
 }
 
@@ -829,20 +800,12 @@ export class DatabaseService {
   async createOrGetUser(name: string, email?: string): Promise<IUser> {
     await this.ensureConnection();
     
-    // Try to find existing user by name or email
-    const existingUser = await User.findOne({
-      $or: [
-        { name: name },
-        ...(email ? [{ email: email }] : [])
-      ]
-    }).lean();
-
-    if (existingUser) {
-      // Update lastActive
-      await User.findByIdAndUpdate((existingUser as any)._id, {
-        $set: { lastActive: new Date() }
-      });
-      return existingUser as unknown as IUser;
+    // Try to find by email first (for invitation system)
+    if (email) {
+      const existingUser = await User.findOne({ email }).lean();
+      if (existingUser) {
+        return existingUser as unknown as IUser;
+      }
     }
 
     // Create new user (fallback for non-Clerk users)
@@ -854,67 +817,6 @@ export class DatabaseService {
     });
     const savedUser = await user.save();
     return savedUser.toObject() as IUser;
-  }
-
-  // ============= ONE-OFF MEETING METHODS =============
-  
-  async createOneOffMeeting(meetingData: {
-    roomName: string;
-    title?: string;
-    type?: string;
-    participantName?: string;
-    userId?: string;
-  }): Promise<IMeeting> {
-    await this.ensureConnection();
-    
-    const meeting = new Meeting({
-      roomName: meetingData.roomName,
-      title: meetingData.title || 'Instant Meeting',
-      type: meetingData.type || 'Instant Meeting',
-      isOneOff: true,
-      startedAt: new Date(),
-      participants: [{
-        userId: meetingData.userId,
-        name: meetingData.participantName || 'Anonymous',
-        joinedAt: new Date(),
-        isHost: true
-      }]
-    });
-    
-    const savedMeeting = await meeting.save();
-    return savedMeeting.toObject() as unknown as IMeeting;
-  }
-  
-  async getOneOffMeetings(limit?: number): Promise<IMeeting[]> {
-    await this.ensureConnection();
-    
-    const query = Meeting.find({ isOneOff: true })
-      .sort({ startedAt: -1 });
-    
-    if (limit) {
-      query.limit(limit);
-    }
-    
-    const meetings = await query.lean();
-    return meetings as unknown as IMeeting[];
-  }
-  
-  async getOneOffMeeting(roomName: string): Promise<IMeeting | null> {
-    await this.ensureConnection();
-    
-    const meeting = await Meeting.findOne({ 
-      roomName, 
-      isOneOff: true 
-    }).lean();
-    
-    return meeting as IMeeting | null;
-  }
-
-  async deleteAllOneOffMeetings(): Promise<{ deletedCount: number }> {
-    await this.ensureConnection();
-    
-    const deleteResult = await Meeting.deleteMany({ isOneOff: true });
-    return { deletedCount: deleteResult.deletedCount || 0 };
   }
 
   // ============= ADDITIONAL MEETING METHODS =============
@@ -1135,7 +1037,6 @@ export class DatabaseService {
         roomName: room.roomName,
         title: room.title,
         type: room.type,
-        isOneOff: false,
         startedAt: meetingDate,
         endedAt: endTime,
         duration: duration,
@@ -1349,24 +1250,6 @@ export class DatabaseService {
     }
     
     return await queryBuilder.lean() as unknown as IMeetingRoom[];
-  }
-  
-  /**
-   * Get one-off meetings where the user participated
-   */
-  async getOneOffMeetingsByUser(userId: string, limit?: number): Promise<IMeeting[]> {
-    await this.ensureConnection();
-    
-    const query = Meeting.find({
-      isOneOff: true,
-      'participants.userId': userId
-    }).sort({ startedAt: -1 });
-    
-    if (limit) {
-      query.limit(limit);
-    }
-    
-    return await query.lean() as unknown as IMeeting[];
   }
   
   /**

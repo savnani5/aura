@@ -78,6 +78,51 @@ export function UnifiedMeetingSummary({
     }
   }, [isModal, isOpen, meetingId]);
 
+  // Listen for background transcript processing completion
+  useEffect(() => {
+    const handleTranscriptsProcessed = (event: CustomEvent) => {
+      if (event.detail.meetingId === meetingId) {
+        console.log('🔍 Background transcripts processed, refreshing meeting data...');
+        fetchMeetingDetails();
+      }
+    };
+
+    const handleTranscriptsProcessingFailed = (event: CustomEvent) => {
+      if (event.detail.meetingId === meetingId) {
+        console.log('⚠️ Background transcript processing failed, still refreshing data...');
+        fetchMeetingDetails();
+      }
+    };
+
+    // Check for immediate processing completion signals in localStorage
+    const checkProcessingStatus = () => {
+      const completedSignal = localStorage.getItem('transcript-processing-complete');
+      const failedSignal = localStorage.getItem('transcript-processing-failed');
+      
+      if (completedSignal === meetingId) {
+        console.log('🔍 Found completed processing signal in localStorage');
+        localStorage.removeItem('transcript-processing-complete');
+        fetchMeetingDetails();
+      } else if (failedSignal === meetingId) {
+        console.log('⚠️ Found failed processing signal in localStorage');
+        localStorage.removeItem('transcript-processing-failed');
+        fetchMeetingDetails();
+      }
+    };
+
+    // Check immediately on mount
+    checkProcessingStatus();
+
+    // Listen for custom events
+    window.addEventListener('transcripts-processed', handleTranscriptsProcessed as EventListener);
+    window.addEventListener('transcripts-processing-failed', handleTranscriptsProcessingFailed as EventListener);
+
+    return () => {
+      window.removeEventListener('transcripts-processed', handleTranscriptsProcessed as EventListener);
+      window.removeEventListener('transcripts-processing-failed', handleTranscriptsProcessingFailed as EventListener);
+    };
+  }, [meetingId]);
+
   const fetchMeetingDetails = async () => {
     try {
       setLoading(true);

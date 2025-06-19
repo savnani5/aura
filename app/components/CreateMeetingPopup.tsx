@@ -15,13 +15,19 @@ interface CreateMeetingPopupProps {
 interface MeetingRoomForm {
   title: string;
   type: string;
-  participants: string[];
+  participants: { name: string; email: string }[];
   startDate: string;
   endDate: string;
   frequency: string;
   recurringDay: string;
   recurringTime: string;
 }
+
+interface QuickRoomForm {
+  title: string;
+}
+
+type CreateMode = 'selection' | 'quick' | 'full';
 
 const MEETING_TYPE_SUGGESTIONS = [
   'Daily Standup',
@@ -62,25 +68,115 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
   const router = useRouter();
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
+  const [createMode, setCreateMode] = useState<CreateMode>('selection');
   
-  // Form state for creating meeting room
+  // Form state for full setup
   const [form, setForm] = useState<MeetingRoomForm>({
     title: '',
     type: '',
-    participants: [''],
+    participants: [{ name: '', email: '' }],
     startDate: '',
     endDate: '',
-    frequency: 'daily',
+    frequency: 'weekly',
     recurringDay: '',
     recurringTime: ''
   });
 
+  // Form state for quick room
+  const [quickForm, setQuickForm] = useState<QuickRoomForm>({
+    title: '',
+  });
+
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+
+  // Reset state when popup opens - MUST be before early return
+  React.useEffect(() => {
+    if (isOpen) {
+      setCreateMode('selection');
+      setForm({
+        title: '',
+        type: '',
+        participants: [{ name: '', email: '' }],
+        startDate: '',
+        endDate: '',
+        frequency: 'weekly',
+        recurringDay: '',
+        recurringTime: ''
+      });
+      setQuickForm({
+        title: '',
+      });
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
+
+  const handleCreateQuickRoom = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickForm.title.trim()) return;
+
+    setIsLoading(true);
+    
+    try {
+      // Only add current user as host for quick rooms
+      const allParticipants = [
+        {
+          email: user?.emailAddresses[0]?.emailAddress || '',
+          name: user?.fullName || user?.firstName || 'Host',
+          role: 'host'
+        }
+      ];
+      
+      // Generate room ID from title
+      const roomId = quickForm.title.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, '-')
+        .substring(0, 30) + '-' + Date.now().toString(36);
+
+      const requestData = {
+        roomName: roomId,
+        title: quickForm.title.trim(),
+        type: 'Meeting', // Default type for quick rooms
+        isRecurring: false, // Quick rooms are not recurring by default
+        participants: allParticipants
+      };
+
+      console.log('Creating quick meeting room with data:', requestData);
+
+      // Create meeting room via API
+      const response = await fetch('/api/meetings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('API Error:', response.status, errorData);
+        throw new Error(errorData.error || `HTTP ${response.status}: Failed to create meeting room`);
+      }
+
+      const data = await response.json();
+      console.log('Quick meeting room created:', data);
+
+      // Show success message
+      toast.success(`Meeting room "${quickForm.title}" created successfully! You can configure more settings in the room dashboard.`);
+
+      // Notify parent component that a meeting room was created (this will refresh the data and close popup)
+      onMeetingCreated?.();
+
+    } catch (error) {
+      console.error('Error creating quick meeting room:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create meeting room. Please try again.';
+      toast.error(errorMessage);
+      setIsLoading(false);
+    }
+  };
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,7 +186,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
     
     try {
       // Filter out empty participants and add current user as host
-      const validParticipants = form.participants.filter(p => p.trim());
+      const validParticipants = form.participants.filter(p => p.name.trim() && p.email.trim());
       
       // Add current user as the host/creator
       const allParticipants = [
@@ -100,9 +196,9 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
           role: 'host'
         },
         // Add other participants as regular participants
-        ...validParticipants.map(email => ({
-          email: email.trim(),
-          name: '', // Will be filled when they join
+        ...validParticipants.map(participant => ({
+          email: participant.email.trim(),
+          name: participant.name.trim(),
           role: 'participant'
         }))
       ];
@@ -153,7 +249,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
       setForm({
         title: '',
         type: '',
-        participants: [''],
+        participants: [{ name: '', email: '' }],
         startDate: '',
         endDate: '',
         frequency: 'daily',
@@ -173,23 +269,32 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
   };
 
   const addParticipant = () => {
+    // Only for scheduled room (full form)
     setForm(prev => ({
       ...prev,
-      participants: [...prev.participants, '']
+      participants: [...prev.participants, { name: '', email: '' }]
     }));
   };
 
   const removeParticipant = (index: number) => {
+    // Only for scheduled room (full form)
     setForm(prev => ({
       ...prev,
       participants: prev.participants.filter((_, i) => i !== index)
     }));
   };
 
-  const updateParticipant = (index: number, value: string) => {
+  const updateParticipantName = (index: number, value: string) => {
     setForm(prev => ({
       ...prev,
-      participants: prev.participants.map((p, i) => i === index ? value : p)
+      participants: prev.participants.map((p, i) => i === index ? { ...p, name: value } : p)
+    }));
+  };
+
+  const updateParticipantEmail = (index: number, value: string) => {
+    setForm(prev => ({
+      ...prev,
+      participants: prev.participants.map((p, i) => i === index ? { ...p, email: value } : p)
     }));
   };
 
@@ -217,6 +322,347 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
   // Get user display name for host
   const userDisplayName = user?.fullName || user?.firstName || 'You';
 
+  const renderSelectionScreen = () => (
+    <div className={styles.content}>
+      <div className={styles.selectionContainer}>
+        <div className={styles.simpleOptions}>
+          <button 
+            className={styles.optionButton}
+            onClick={() => setCreateMode('quick')}
+          >
+            <div className={styles.optionButtonIcon}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                <polyline points="12,6 12,12 16,14" stroke="currentColor" strokeWidth="2"/>
+              </svg>
+            </div>
+            Quick Room
+          </button>
+          
+          <button 
+            className={styles.optionButton}
+            onClick={() => setCreateMode('full')}
+          >
+            <div className={styles.optionButtonIcon}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
+                <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" strokeWidth="2"/>
+                <line x1="8" y1="2" x2="8" y2="6" stroke="currentColor" strokeWidth="2"/>
+                <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" strokeWidth="2"/>
+              </svg>
+            </div>
+            Scheduled Room
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderQuickForm = () => (
+    <div className={styles.content}>
+      <form onSubmit={handleCreateQuickRoom} className={styles.createForm}>
+        <div className={styles.formGroup}>
+          <label htmlFor="quickTitle" className={styles.label}>
+            Meeting Room Title *
+          </label>
+          <input
+            id="quickTitle"
+            type="text"
+            value={quickForm.title}
+            onChange={(e) => setQuickForm(prev => ({ ...prev, title: e.target.value }))}
+            placeholder="e.g., Team Brainstorming Session"
+            className={styles.input}
+            autoComplete="off"
+            required
+          />
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.label}>
+            Host
+          </label>
+          <div className={styles.hostParticipant}>
+            <input
+              type="text"
+              value={`${userDisplayName} (Host)`}
+              className={`${styles.input} ${styles.hostInput}`}
+              disabled
+              readOnly
+            />
+            <div className={styles.hostBadge}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>
+              </svg>
+              Host
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.formActions}>
+          <button
+            type="button"
+            onClick={() => setCreateMode('selection')}
+            className={styles.secondaryButton}
+          >
+            Back
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading || !quickForm.title.trim()}
+            className={styles.primaryButton}
+          >
+            {isLoading ? 'Creating...' : 'Create Quick Room'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+
+  const renderFullForm = () => (
+    <div className={styles.content}>
+      <form onSubmit={handleCreateRoom} className={styles.createForm}>
+        <div className={styles.formGroup}>
+          <label htmlFor="title" className={styles.label}>
+            Meeting Room Title *
+          </label>
+          <input
+            id="title"
+            type="text"
+            value={form.title}
+            onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))}
+            placeholder="e.g., Weekly Team Standup"
+            className={styles.input}
+            autoComplete="off"
+            required
+          />
+        </div>
+
+        <div className={styles.formGroup}>
+          <label htmlFor="type" className={styles.label}>
+            Meeting Type *
+          </label>
+          <div className={styles.typeInputContainer}>
+            <input
+              id="type"
+              type="text"
+              value={form.type}
+              onChange={(e) => setForm(prev => ({ ...prev, type: e.target.value }))}
+              placeholder="Enter or select meeting type"
+              className={styles.input}
+              onClick={handleTypeInputClick}
+              autoComplete="off"
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowTypeDropdown(!showTypeDropdown)}
+              className={styles.dropdownButton}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <polyline points="6,9 12,15 18,9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            
+            {showTypeDropdown && (
+              <div className={styles.dropdown}>
+                {MEETING_TYPE_SUGGESTIONS.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => selectMeetingType(type)}
+                    className={styles.dropdownItem}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.label}>
+            Meeting Duration *
+          </label>
+          <div className={styles.scheduleContainer}>
+            <div className={styles.scheduleRow}>
+              <div className={styles.scheduleField}>
+                <label htmlFor="startDate" className={styles.subLabel}>Start Date</label>
+                <input
+                  id="startDate"
+                  type="date"
+                  value={form.startDate}
+                  onChange={(e) => setForm(prev => ({ ...prev, startDate: e.target.value }))}
+                  min={today}
+                  className={styles.input}
+                  required
+                />
+              </div>
+              <div className={styles.scheduleField}>
+                <label htmlFor="endDate" className={styles.subLabel}>End Date</label>
+                <input
+                  id="endDate"
+                  type="date"
+                  value={form.endDate}
+                  onChange={(e) => setForm(prev => ({ ...prev, endDate: e.target.value }))}
+                  min={form.startDate || today}
+                  className={styles.input}
+                  required
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.label}>
+            Recurring Schedule *
+          </label>
+          <div className={styles.scheduleContainer}>
+            <div className={styles.scheduleRow}>
+              <div className={styles.scheduleField}>
+                <label htmlFor="frequency" className={styles.subLabel}>Frequency</label>
+                <select
+                  id="frequency"
+                  value={form.frequency}
+                  onChange={handleFrequencyChange}
+                  className={styles.select}
+                  required
+                >
+                  {FREQUENCY_OPTIONS.map((freq) => (
+                    <option key={freq.value} value={freq.value}>{freq.label}</option>
+                  ))}
+                </select>
+              </div>
+              {form.frequency !== 'daily' && (
+                <div className={styles.scheduleField}>
+                  <label htmlFor="day" className={styles.subLabel}>Day</label>
+                  <select
+                    id="day"
+                    value={form.recurringDay}
+                    onChange={(e) => setForm(prev => ({ ...prev, recurringDay: e.target.value }))}
+                    className={styles.select}
+                    required
+                  >
+                    <option value="">Select day</option>
+                    {DAYS_OF_WEEK.map((day) => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+            <div className={styles.scheduleRow}>
+              <div className={`${styles.scheduleField} ${styles.scheduleFieldFullWidth}`}>
+                <label htmlFor="time" className={styles.subLabel}>Time</label>
+                <select
+                  id="time"
+                  value={form.recurringTime}
+                  onChange={(e) => setForm(prev => ({ ...prev, recurringTime: e.target.value }))}
+                  className={styles.select}
+                  required
+                >
+                  <option value="">Select time</option>
+                  {TIME_SLOTS.map((time) => (
+                    <option key={time} value={time}>{time}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.label}>
+            Participants
+          </label>
+          <div className={styles.participantsList}>
+            {/* Current user as host/creator - always first */}
+            <div className={styles.participantRow}>
+              <div className={styles.hostParticipant}>
+                <input
+                  type="text"
+                  value={`${userDisplayName} (Host)`}
+                  className={`${styles.input} ${styles.hostInput}`}
+                  disabled
+                  readOnly
+                />
+                <div className={styles.hostBadge}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>
+                  </svg>
+                  Host
+                </div>
+              </div>
+            </div>
+            
+            {/* Additional participants */}
+            {form.participants.map((participant, index) => (
+              <div key={index} className={styles.participantRow}>
+                <input
+                  type="text"
+                  value={participant.name}
+                  onChange={(e) => updateParticipantName(index, e.target.value)}
+                  placeholder="Name"
+                  className={styles.input}
+                  autoComplete="off"
+                />
+                <input
+                  type="email"
+                  value={participant.email}
+                  onChange={(e) => updateParticipantEmail(index, e.target.value)}
+                  placeholder="Email"
+                  className={styles.input}
+                  autoComplete="off"
+                />
+                {form.participants.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => removeParticipant(index)}
+                    className={styles.removeButton}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addParticipant}
+              className={styles.addButton}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              Add Participant
+            </button>
+          </div>
+        </div>
+
+        <div className={styles.formActions}>
+          <button
+            type="button"
+            onClick={() => setCreateMode('selection')}
+            className={styles.secondaryButton}
+          >
+            Back
+          </button>
+          <button
+            type="submit"
+            disabled={isLoading || !form.title.trim() || !form.type.trim() || !form.startDate || !form.endDate || (form.frequency !== 'daily' && !form.recurringDay) || !form.recurringTime}
+            className={styles.primaryButton}
+          >
+            {isLoading ? 'Creating...' : 'Create Meeting Room'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+
   return (
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.popup} onClick={(e) => e.stopPropagation()}>
@@ -230,240 +676,9 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
           </button>
         </div>
 
-        <div className={styles.content}>
-            <form onSubmit={handleCreateRoom} className={styles.createForm}>
-              <div className={styles.formGroup}>
-                <label htmlFor="title" className={styles.label}>
-                  Meeting Room Title *
-                </label>
-                <input
-                  id="title"
-                  type="text"
-                  value={form.title}
-                  onChange={(e) => setForm(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="e.g., Weekly Team Standup"
-                  className={styles.input}
-                  autoComplete="off"
-                  required
-                />
-              </div>
-
-              <div className={styles.formGroup}>
-                <label htmlFor="type" className={styles.label}>
-                  Meeting Type *
-                </label>
-                <div className={styles.typeInputContainer}>
-                  <input
-                    id="type"
-                    type="text"
-                    value={form.type}
-                    onChange={(e) => setForm(prev => ({ ...prev, type: e.target.value }))}
-                    placeholder="Enter or select meeting type"
-                    className={styles.input}
-                    onClick={handleTypeInputClick}
-                    autoComplete="off"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowTypeDropdown(!showTypeDropdown)}
-                    className={styles.dropdownButton}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <polyline points="6,9 12,15 18,9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                  
-                  {showTypeDropdown && (
-                    <div className={styles.dropdown}>
-                      {MEETING_TYPE_SUGGESTIONS.map((type) => (
-                        <button
-                          key={type}
-                          type="button"
-                          onClick={() => selectMeetingType(type)}
-                          className={styles.dropdownItem}
-                        >
-                          {type}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className={styles.formGroup}>
-                <label className={styles.label}>
-                  Meeting Duration *
-                </label>
-                <div className={styles.scheduleContainer}>
-                  <div className={styles.scheduleRow}>
-                    <div className={styles.scheduleField}>
-                      <label htmlFor="startDate" className={styles.subLabel}>Start Date</label>
-                      <input
-                        id="startDate"
-                        type="date"
-                        value={form.startDate}
-                        onChange={(e) => setForm(prev => ({ ...prev, startDate: e.target.value }))}
-                        min={today}
-                        className={styles.input}
-                        required
-                      />
-                    </div>
-                    <div className={styles.scheduleField}>
-                      <label htmlFor="endDate" className={styles.subLabel}>End Date</label>
-                      <input
-                        id="endDate"
-                        type="date"
-                        value={form.endDate}
-                        onChange={(e) => setForm(prev => ({ ...prev, endDate: e.target.value }))}
-                        min={form.startDate || today}
-                        className={styles.input}
-                        required
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.formGroup}>
-                <label className={styles.label}>
-                  Recurring Schedule *
-                </label>
-                <div className={styles.scheduleContainer}>
-                  <div className={styles.scheduleRow}>
-                    <div className={styles.scheduleField}>
-                      <label htmlFor="frequency" className={styles.subLabel}>Frequency</label>
-                      <select
-                        id="frequency"
-                        value={form.frequency}
-                        onChange={handleFrequencyChange}
-                        className={styles.select}
-                        required
-                      >
-                        {FREQUENCY_OPTIONS.map((freq) => (
-                          <option key={freq.value} value={freq.value}>{freq.label}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {form.frequency !== 'daily' && (
-                      <div className={styles.scheduleField}>
-                        <label htmlFor="day" className={styles.subLabel}>Day</label>
-                        <select
-                          id="day"
-                          value={form.recurringDay}
-                          onChange={(e) => setForm(prev => ({ ...prev, recurringDay: e.target.value }))}
-                          className={styles.select}
-                          required
-                        >
-                          <option value="">Select day</option>
-                          {DAYS_OF_WEEK.map((day) => (
-                            <option key={day} value={day}>{day}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                  <div className={styles.scheduleRow}>
-                    <div className={`${styles.scheduleField} ${styles.scheduleFieldFullWidth}`}>
-                      <label htmlFor="time" className={styles.subLabel}>Time</label>
-                      <select
-                        id="time"
-                        value={form.recurringTime}
-                        onChange={(e) => setForm(prev => ({ ...prev, recurringTime: e.target.value }))}
-                        className={styles.select}
-                        required
-                      >
-                        <option value="">Select time</option>
-                        {TIME_SLOTS.map((time) => (
-                          <option key={time} value={time}>{time}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.formGroup}>
-                <label className={styles.label}>
-                  Participants
-                </label>
-                <div className={styles.participantsList}>
-                {/* Current user as host/creator - always first */}
-                <div className={styles.participantRow}>
-                  <div className={styles.hostParticipant}>
-                    <input
-                      type="text"
-                      value={`${userDisplayName} (Host)`}
-                      className={`${styles.input} ${styles.hostInput}`}
-                      disabled
-                      readOnly
-                    />
-                    <div className={styles.hostBadge}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill="currentColor"/>
-                      </svg>
-                      Host
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Additional participants */}
-                  {form.participants.map((participant, index) => (
-                    <div key={index} className={styles.participantRow}>
-                      <input
-                        type="email"
-                        value={participant}
-                        onChange={(e) => updateParticipant(index, e.target.value)}
-                        placeholder="participant@example.com"
-                        className={styles.input}
-                        autoComplete="off"
-                      />
-                      {form.participants.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeParticipant(index)}
-                          className={styles.removeButton}
-                        >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                            <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addParticipant}
-                    className={styles.addButton}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    </svg>
-                    Add Participant
-                  </button>
-                </div>
-              </div>
-
-              <div className={styles.formActions}>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className={styles.secondaryButton}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading || !form.title.trim() || !form.type.trim() || !form.startDate || !form.endDate || (form.frequency !== 'daily' && !form.recurringDay) || !form.recurringTime}
-                  className={styles.primaryButton}
-                >
-                  {isLoading ? 'Creating...' : 'Create Meeting Room'}
-                </button>
-              </div>
-            </form>
-        </div>
+        {createMode === 'selection' && renderSelectionScreen()}
+        {createMode === 'quick' && renderQuickForm()}
+        {createMode === 'full' && renderFullForm()}
       </div>
     </div>
   );

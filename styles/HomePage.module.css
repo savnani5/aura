@@ -46,7 +46,7 @@
   align-items: center;
 }
 
-.logo {
+.headerLeft {
   display: flex;
   align-items: center;
   gap: 0.875rem;
@@ -54,7 +54,14 @@
   z-index: 1;
 }
 
-.logo h1 {
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  z-index: 1;
+}
+
+.appName {
   font-size: 1.75rem;
   font-weight: 700;
   margin: 0;
@@ -63,6 +70,20 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.welcomeText {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  color: white;
+  z-index: 1;
 }
 
 /* Authentication Styles */
@@ -457,8 +478,7 @@
   transform: translateX(3px);
 }
 
-.meetingRoomsGrid,
-.oneOffMeetingsGrid {
+.meetingRoomsGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 2rem;
@@ -626,8 +646,7 @@
 }
 
 @media (max-width: 1024px) {
-  .meetingRoomsGrid,
-  .oneOffMeetingsGrid {
+  .meetingRoomsGrid {
     grid-template-columns: repeat(2, 1fr);
   }
   
@@ -677,8 +696,7 @@
     gap: 4rem;
   }
   
-  .meetingRoomsGrid,
-  .oneOffMeetingsGrid {
+  .meetingRoomsGrid {
     grid-template-columns: 1fr;
   }
   
