@@ -58,7 +58,7 @@ export function PageClientImpl(props: {
   );
   const preJoinDefaults = React.useMemo(() => {
     return {
-      username: '',
+      username: 'Guest',
       videoEnabled: true,
       audioEnabled: true,
     };
@@ -124,6 +124,7 @@ function VideoConferenceComponent(props: {
   const [sidebarWidth, setSidebarWidth] = React.useState(400);
   const [isResizing, setIsResizing] = React.useState(false);
   const [isConnected, setIsConnected] = React.useState(false);
+  const [countdown, setCountdown] = React.useState(0);
 
   // Mobile detection
   React.useEffect(() => {
@@ -135,6 +136,25 @@ function VideoConferenceComponent(props: {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Countdown timer effect
+  React.useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (showShareModal && countdown > 0) {
+      timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            setShowShareModal(false);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [showShareModal, countdown]);
 
   // Handle resize functionality
   const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
@@ -239,6 +259,21 @@ function VideoConferenceComponent(props: {
     const handleConnected = () => {
       console.log('✅ Connected to room:', room.name);
       setIsConnected(true);
+      
+      // Set the meeting URL for sharing
+      const currentUrl = window.location.href;
+      setMeetingUrl(currentUrl);
+      
+      // Show share modal automatically when connected (with a small delay for better UX)
+      setTimeout(() => {
+        setShowShareModal(true);
+        setCountdown(10); // Set 10 second countdown
+        
+        // Auto-close the modal after 10 seconds (backup in case countdown fails)
+        setTimeout(() => {
+          setShowShareModal(false);
+        }, 10000);
+      }, 1500); // Show after 1.5 seconds to let the UI settle
       
       // Start a meeting record when successfully connected
       const startMeeting = async () => {
@@ -389,14 +424,10 @@ function VideoConferenceComponent(props: {
           await room.disconnect();
         }
         
-        // Store the meeting ID for the modal to open
-        localStorage.setItem('open-meeting-modal', meetingId);
-        
         // Redirect to meeting room dashboard for room meetings
         if (data.data?.redirectUrl) {
           router.push(data.data.redirectUrl);
         } else {
-          // The dashboard will detect the stored meeting ID and open the modal
           router.push(`/meetingroom/${props.roomName}`);
         }
       } else {
@@ -484,20 +515,9 @@ function VideoConferenceComponent(props: {
       processTranscriptsInBackground(finalTranscripts, meetingId, props.roomName)
         .then(() => {
           console.log('✅ Background transcript processing completed');
-          // Signal that processing is complete via localStorage for meeting modal
-          localStorage.setItem('transcript-processing-complete', meetingId);
-          // Dispatch a custom event to notify any listening components
-          window.dispatchEvent(new CustomEvent('transcripts-processed', { 
-            detail: { meetingId, roomName: props.roomName } 
-          }));
         })
         .catch((error) => {
           console.error('❌ Background transcript processing failed:', error);
-          // Still signal completion even if failed, so UI doesn't wait forever
-          localStorage.setItem('transcript-processing-failed', meetingId);
-          window.dispatchEvent(new CustomEvent('transcripts-processing-failed', { 
-            detail: { meetingId, roomName: props.roomName, error: error.message } 
-          }));
         });
     } else {
       console.log('🔍 No transcripts or meeting ID to process in background');
@@ -545,9 +565,6 @@ function VideoConferenceComponent(props: {
       // Clean up localStorage
       localStorage.removeItem(`meeting-id-${roomName}`);
       
-      // Store the meeting ID for the modal
-      localStorage.setItem('open-meeting-modal', meetingId);
-      
       return data;
     } else {
       const errorData = await response.json();
@@ -591,6 +608,7 @@ function VideoConferenceComponent(props: {
   const closeShareModal = () => {
     setShowShareModal(false);
     setCopied(false);
+    setCountdown(0);
   };
 
   return (
@@ -736,7 +754,9 @@ function VideoConferenceComponent(props: {
                 )}
                 
                 <div className="share-modal-footer">
-                  <p className="share-modal-timer">This popup will close automatically in a few seconds</p>
+                  <p className="share-modal-timer">
+                    {countdown > 0 ? `This popup will close automatically in ${countdown} seconds` : 'This popup will close automatically in a few seconds'}
+                  </p>
                 </div>
               </div>
             </div>

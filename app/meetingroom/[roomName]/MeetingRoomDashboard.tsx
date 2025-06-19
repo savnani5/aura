@@ -54,7 +54,7 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
   const [activePanel, setActivePanel] = useState<'prep' | 'history' | 'tasks' | 'settings'>('prep');
   const [isCurrentUserHost, setIsCurrentUserHost] = useState(false);
   
-  // Modal state for auto-opening after meeting ends
+  // Modal state for manually opening meeting details
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
 
   const getInitials = (name: string) => {
@@ -147,30 +147,6 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
 
     fetchData();
   }, [roomName, user, isLoaded]);
-
-  // Check for auto-open meeting modal after meeting ends
-  useEffect(() => {
-    const checkForAutoOpenModal = () => {
-      const meetingIdToOpen = localStorage.getItem('open-meeting-modal');
-      if (meetingIdToOpen) {
-        console.log('🔍 Auto-opening meeting modal for meeting ID:', meetingIdToOpen);
-        setSelectedMeetingId(meetingIdToOpen);
-        // Clear the flag so it doesn't auto-open again
-        localStorage.removeItem('open-meeting-modal');
-        // Also switch to history panel to make it clear what happened
-        setActivePanel('history');
-      }
-    };
-
-    // Check immediately when component mounts
-    if (isLoaded && user) {
-      checkForAutoOpenModal();
-    }
-
-    // Also check periodically in case the modal flag is set while this page is open
-    const interval = setInterval(checkForAutoOpenModal, 1000);
-    return () => clearInterval(interval);
-  }, [isLoaded, user]);
 
   const handleBackToHome = () => {
     router.push('/');
@@ -337,7 +313,12 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
               </div>
             )}
             {activePanel === 'tasks' && <TaskBoard roomName={roomName} />}
-            {activePanel === 'history' && <MeetingHistoryPanel roomName={roomName} />}
+            {activePanel === 'history' && (
+              <MeetingHistoryPanel 
+                roomName={roomName} 
+                onMeetingSelect={setSelectedMeetingId}
+              />
+            )}
             {activePanel === 'settings' && room && isCurrentUserHost && (
               <RoomSettings 
                 room={room} 

@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import { useUser } from '@clerk/nextjs';
+import { Ban, Clock, User, Calendar, Plus, Trash2, Edit2, Save, X, MessageSquare, Send } from 'lucide-react';
 import styles from '@/styles/TaskBoard.module.css';
 
 interface Task {
@@ -28,6 +30,7 @@ interface TaskBoardProps {
 }
 
 export function TaskBoard({ roomName }: TaskBoardProps) {
+  const { user, isLoaded: userLoaded } = useUser();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddingTask, setIsAddingTask] = useState(false);
@@ -49,6 +52,18 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
   // Fetch tasks and participants
   useEffect(() => {
     const fetchData = async () => {
+      // Check if user is authenticated before making API calls
+      if (!userLoaded) return; // Wait for user to load
+      
+      if (!user) {
+        // Guest user - don't fetch dashboard data
+        console.log('Guest user detected - TaskBoard not available for guests');
+        setTasks([]);
+        setParticipants([]);
+        setLoading(false);
+        return;
+      }
+      
       try {
         // Fetch room data first to get room ID
         const roomResponse = await fetch(`/api/meetings/${roomName}`);
@@ -105,7 +120,7 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
     };
 
     fetchData();
-  }, [roomName]);
+  }, [roomName, user, userLoaded]);
 
   // Focus on title input when adding new task
   useEffect(() => {
@@ -352,12 +367,26 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
     return new Date(dateString) < new Date();
   };
 
-  if (loading) {
+  // If user is not loaded yet, show loading
+  if (!userLoaded) {
     return (
       <div className={styles.container}>
         <div className={styles.loadingState}>
           <div className={styles.loadingSpinner}></div>
-          <p>Loading tasks...</p>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If user is not authenticated (guest), show message
+  if (!user) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.guestMessage}>
+          <Ban size={48} />
+          <h3>Task Management Not Available</h3>
+          <p>Task management is only available to authenticated meeting participants. Please sign in to access this feature.</p>
         </div>
       </div>
     );

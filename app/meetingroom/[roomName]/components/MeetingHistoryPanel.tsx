@@ -2,8 +2,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import styles from '@/styles/MeetingHistoryPanel.module.css';
-import { MeetingModal } from './MeetingModal';
+import { 
+  Calendar, 
+  Clock, 
+  Users, 
+  Search,
+  Filter,
+  Video,
+  FileText,
+  Play,
+  ChevronDown,
+  ChevronUp,
+  X,
+  Ban
+} from 'lucide-react';
 
 interface Meeting {
   id: string;
@@ -40,31 +54,40 @@ interface Meeting {
 
 interface MeetingHistoryPanelProps {
   roomName: string;
+  onMeetingSelect?: (meetingId: string) => void;
 }
 
-export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
+export function MeetingHistoryPanel({ roomName, onMeetingSelect }: MeetingHistoryPanelProps) {
+  const { user, isLoaded: userLoaded } = useUser();
   const router = useRouter();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState('all');
   const [joiningMeeting, setJoiningMeeting] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchMeetings();
-  }, [roomName]);
-
-  // Check for meeting modal to open after ending a meeting
-  useEffect(() => {
-    const meetingToOpen = localStorage.getItem('open-meeting-modal');
-    if (meetingToOpen) {
-      setSelectedMeetingId(meetingToOpen);
-      localStorage.removeItem('open-meeting-modal');
+    if (!userLoaded) return; // Wait for user to load
+    
+    if (!user) {
+      // Guest user - don't fetch dashboard data
+      console.log('Guest user detected - Meeting history not available for guests');
+      setMeetings([]);
+      setLoading(false);
+      return;
     }
-  }, []);
+
+    fetchMeetings();
+  }, [dateFilter, user, userLoaded]);
 
   const fetchMeetings = async () => {
+    // Check if user is authenticated before making API calls
+    if (!user) {
+      setMeetings([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       
@@ -233,6 +256,31 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
     return matchesSearch;
   });
 
+  // If user is not loaded yet, show loading
+  if (!userLoaded) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.loadingState}>
+          <div className={styles.loadingSpinner}></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If user is not authenticated (guest), show message
+  if (!user) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.guestMessage}>
+          <Ban size={48} />
+          <h3>Meeting History Not Available</h3>
+          <p>Meeting history is only available to authenticated meeting participants. Please sign in to access this feature.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className={styles.container}>
@@ -307,7 +355,7 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
             <div
               key={meeting.isUpcoming ? `upcoming-${meeting.startTime}` : meeting.id}
               className={`${styles.meetingCard} ${meeting.isUpcoming ? styles.upcomingMeeting : ''}`}
-              onClick={() => meeting.isUpcoming ? null : setSelectedMeetingId(meeting.id)}
+              onClick={() => meeting.isUpcoming ? null : onMeetingSelect?.(meeting.id)}
               style={{ cursor: meeting.isUpcoming ? 'default' : 'pointer' }}
             >
               {meeting.isUpcoming && (
@@ -404,14 +452,6 @@ export function MeetingHistoryPanel({ roomName }: MeetingHistoryPanelProps) {
           ))
         )}
       </div>
-
-      {selectedMeetingId && (
-        <MeetingModal
-          meetingId={selectedMeetingId}
-          isOpen={!!selectedMeetingId}
-          onClose={() => setSelectedMeetingId(null)}
-        />
-      )}
     </div>
   );
 } 

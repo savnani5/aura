@@ -4,15 +4,6 @@ import { AIChatbot } from '@/lib/ai-chatbot';
 
 export async function POST(request: NextRequest) {
   try {
-    // Check authentication
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
     const { message, roomName, userName, currentTranscripts, isLiveMeeting } = await request.json();
 
     // Validate required fields
@@ -21,6 +12,17 @@ export async function POST(request: NextRequest) {
         { error: 'Missing required fields: message, roomName, userName' },
         { status: 400 }
       );
+    }
+
+    // For live meetings, allow guest access. For other uses, require authentication
+    if (!isLiveMeeting) {
+      const { userId } = await auth();
+      if (!userId) {
+        return NextResponse.json(
+          { error: 'Unauthorized - authentication required for non-live meeting AI chat' },
+          { status: 401 }
+        );
+      }
     }
 
     // Check if required API keys are configured

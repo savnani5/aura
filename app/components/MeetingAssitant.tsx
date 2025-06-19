@@ -486,7 +486,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
         const data = JSON.parse(decoder.decode(payload)) as SharedTranscript;
         
         // Skip if this transcript is from the current user (prevents duplication)
-        const currentUserId = room.localParticipant?.identity || room.localParticipant?.name || user?.id;
+        const currentUserId = room.localParticipant?.identity || room.localParticipant?.name || user?.id || 'guest';
         if (data.participantId === currentUserId) {
           console.log('🔍 TRANSCRIPT DEBUG: Skipping own transcript from data channel to prevent duplication');
           return;
@@ -609,15 +609,16 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
 
   // Load notes on mount
   useEffect(() => {
-    if (!user || !room?.name) return;
+    if (!room?.name) return;
     
-    // Use consistent storage key format: meeting-notes-${roomName}-${userId}
-    const storageKey = `meeting-notes-${room.name}-${user.id}`;
+    // Use participant identity or user ID for storage key
+    const userId = user?.id || room.localParticipant?.identity || 'guest';
+    const storageKey = `meeting-notes-${room.name}-${userId}`;
     const savedNotes = localStorage.getItem(storageKey);
     if (savedNotes) {
       setNotes(savedNotes);
     }
-  }, [user, room?.name]);
+  }, [user, room?.name, room?.localParticipant?.identity]);
 
   // Notify parent component when transcripts change
   useEffect(() => {
@@ -654,18 +655,19 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
 
   // Auto-save notes
   useEffect(() => {
-    if (!notes || !user || !room?.name) return;
+    if (!notes || !room?.name) return;
 
     setSaveStatus('saving');
     const timeoutId = setTimeout(() => {
-      // Use consistent storage key format: meeting-notes-${roomName}-${userId}
-      const storageKey = `meeting-notes-${room.name}-${user.id}`;
+      // Use participant identity or user ID for storage key
+      const userId = user?.id || room.localParticipant?.identity || 'guest';
+      const storageKey = `meeting-notes-${room.name}-${userId}`;
       localStorage.setItem(storageKey, notes);
       setSaveStatus('saved');
     }, 1000);
 
     return () => clearTimeout(timeoutId);
-  }, [notes, user, room?.name]);
+  }, [notes, user, room?.name, room?.localParticipant?.identity]);
 
   // Cleanup transcription service on unmount or room disconnect
   useEffect(() => {
@@ -720,9 +722,10 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
   const clearNotes = () => {
     if (confirm('Are you sure you want to clear all notes?')) {
       setNotes('');
-      if (user && room?.name) {
-        // Use consistent storage key format: meeting-notes-${roomName}-${userId}
-        const storageKey = `meeting-notes-${room.name}-${user.id}`;
+      if (room?.name) {
+        // Use participant identity or user ID for storage key
+        const userId = user?.id || room.localParticipant?.identity || 'guest';
+        const storageKey = `meeting-notes-${room.name}-${userId}`;
         localStorage.removeItem(storageKey);
       }
     }
