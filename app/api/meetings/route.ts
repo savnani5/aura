@@ -81,7 +81,12 @@ export async function GET(request: NextRequest) {
       participants: room.participants.map(p => ({ name: p.name, role: p.role, userId: p.userId, email: p.email }))
     })));
     
-    const formattedRooms = meetingRooms.map(room => toMeetingRoomCard(room));
+    // Get real-time meeting counts for all rooms
+    const roomIds = meetingRooms.map(room => room._id);
+    const meetingCounts = await db.getRealMeetingCountsByRooms(roomIds);
+    console.log('📊 Real-time meeting counts:', meetingCounts);
+    
+    const formattedRooms = meetingRooms.map(room => toMeetingRoomCard(room, meetingCounts[room._id]));
     console.log('🏠 Formatted meeting rooms:', formattedRooms);
     
     return NextResponse.json({ 
@@ -191,9 +196,12 @@ export async function POST(request: NextRequest) {
 
     const createdRoom = await db.createMeetingRoom(roomData);
     
+    // Get real-time meeting count for the new room (should be 0 since it's new)
+    const meetingCount = await db.getRealMeetingCountByRoom(createdRoom._id);
+    
     return NextResponse.json({ 
       success: true, 
-      data: toMeetingRoomCard(createdRoom) 
+      data: toMeetingRoomCard(createdRoom, meetingCount) 
     }, { status: 201 });
   } catch (error) {
     console.error('Error creating meeting:', error);

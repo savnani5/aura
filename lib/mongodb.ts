@@ -231,12 +231,19 @@ const MeetingSchema = new mongoose.Schema({
     isHost: { type: Boolean, default: false }
   }],
   
-  // Transcripts with embeddings for RAG
+  // Transcripts WITHOUT embeddings for faster loading
   transcripts: [{
     speaker: { type: String, required: true },
     text: { type: String, required: true },
     timestamp: { type: Date, required: true },
-    embedding: [{ type: Number }] // Vector embeddings as simple array
+    // Remove embedding from here - it's now in separate collection
+    // embedding: [{ type: Number }] // REMOVED
+    
+    // Enhanced fields for speaker diarization
+    speakerConfidence: { type: Number },
+    deepgramSpeaker: { type: Number },
+    participantId: { type: String },
+    isLocal: { type: Boolean }
   }],
   
   // AI-generated content
@@ -250,7 +257,11 @@ const MeetingSchema = new mongoose.Schema({
   
   // Recording metadata
   isRecording: { type: Boolean, default: false },
-  recordingUrl: { type: String }
+  recordingUrl: { type: String },
+  
+  // Performance metadata
+  transcriptCount: { type: Number, default: 0 }, // Cache transcript count
+  hasEmbeddings: { type: Boolean, default: false } // Flag to know if embeddings exist
 }, {
   timestamps: true
 });
@@ -293,15 +304,101 @@ const TaskSchema = new mongoose.Schema({
 
 // Create indexes for better performance
 UserSchema.index({ email: 1 });
+UserSchema.index({ clerkId: 1 });
 MeetingRoomSchema.index({ createdBy: 1 });
+MeetingRoomSchema.index({ roomName: 1 }); // Critical for room lookups
+MeetingRoomSchema.index({ isActive: 1, lastMeetingAt: -1 });
 MeetingSchema.index({ roomId: 1, startedAt: -1 });
+MeetingSchema.index({ roomName: 1, startedAt: -1 });
 TaskSchema.index({ roomId: 1, status: 1 });
+TaskSchema.index({ roomId: 1, createdAt: -1 });
+
+// New separate schema for embeddings to avoid loading them unnecessarily
+const TranscriptEmbeddingSchema = new mongoose.Schema({
+  meetingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Meeting', required: true },
+  transcriptIndex: { type: Number, required: true }, // Index within the meeting's transcripts array
+  speaker: { type: String, required: true },
+  text: { type: String, required: true },
+  timestamp: { type: Date, required: true },
+  embedding: [{ type: Number }], // The vector embeddings
+  
+  // Metadata for faster filtering
+  roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'MeetingRoom', required: true },
+  meetingDate: { type: Date, required: true }
+}, {
+  timestamps: true
+});
+
+// Indexes for embedding collection
+TranscriptEmbeddingSchema.index({ meetingId: 1, transcriptIndex: 1 });
+TranscriptEmbeddingSchema.index({ roomId: 1, meetingDate: -1 });
+TranscriptEmbeddingSchema.index({ meetingId: 1 });
+
+// Update the transcripts schema to remove embeddings
+const TranscriptsSchemaUpdated = [{
+  speaker: { type: String, required: true },
+  text: { type: String, required: true },
+  timestamp: { type: Date, required: true },
+  // Remove embedding from here - it's now in separate collection
+  // embedding: [{ type: Number }] // REMOVED
+  
+  // Enhanced fields for speaker diarization
+  speakerConfidence: { type: Number },
+  deepgramSpeaker: { type: Number },
+  participantId: { type: String },
+  isLocal: { type: Boolean }
+}];
+
+// Update Meeting Schema to use the new transcripts structure
+const MeetingSchemaUpdated = new mongoose.Schema({
+  roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'MeetingRoom', required: true },
+  roomName: { type: String, required: true }, // For LiveKit room management
+  
+  // Meeting metadata
+  title: { type: String },
+  type: { type: String, default: 'Meeting' }, // 'Daily Standup', 'Project Review', etc.
+  startedAt: { type: Date, required: true },
+  endedAt: { type: Date },
+  duration: { type: Number }, // in minutes
+  
+  // Participants in this specific meeting
+  participants: [{
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    name: { type: String, required: true },
+    joinedAt: { type: Date, default: Date.now },
+    leftAt: { type: Date },
+    isHost: { type: Boolean, default: false }
+  }],
+  
+  // Transcripts WITHOUT embeddings for faster loading
+  transcripts: TranscriptsSchemaUpdated,
+  
+  // AI-generated content
+  summary: {
+    content: { type: String },
+    keyPoints: [{ type: String }],
+    actionItems: [{ type: String }],
+    decisions: [{ type: String }],
+    generatedAt: { type: Date }
+  },
+  
+  // Recording metadata
+  isRecording: { type: Boolean, default: false },
+  recordingUrl: { type: String },
+  
+  // Performance metadata
+  transcriptCount: { type: Number, default: 0 }, // Cache transcript count
+  hasEmbeddings: { type: Boolean, default: false } // Flag to know if embeddings exist
+}, {
+  timestamps: true
+});
 
 // Models
 export const User = mongoose.models.User || mongoose.model('User', UserSchema);
 export const MeetingRoom = mongoose.models.MeetingRoom || mongoose.model('MeetingRoom', MeetingRoomSchema);
-export const Meeting = mongoose.models.Meeting || mongoose.model('Meeting', MeetingSchema);
+export const Meeting = mongoose.models.Meeting || mongoose.model('Meeting', MeetingSchemaUpdated);
 export const Task = mongoose.models.Task || mongoose.model('Task', TaskSchema);
+export const TranscriptEmbedding = mongoose.models.TranscriptEmbedding || mongoose.model('TranscriptEmbedding', TranscriptEmbeddingSchema);
 
 // ============= TYPE DEFINITIONS =============
 
@@ -384,6 +481,11 @@ export interface IMeeting {
   };
   isRecording: boolean;
   recordingUrl?: string;
+  
+  // Performance metadata
+  transcriptCount?: number; // Cache transcript count
+  hasEmbeddings?: boolean; // Flag to know if embeddings exist
+  
   createdAt: Date;
   updatedAt: Date;
 }
@@ -635,15 +737,212 @@ export class DatabaseService {
 
   async getMeetingsByRoom(roomId: string, limit?: number): Promise<IMeeting[]> {
     await this.ensureConnection();
-    const query = Meeting.find({ roomId })
+    
+    // Query to only get meetings with content (transcripts or summary)
+    const query = {
+      roomId,
+      $or: [
+        { 'transcripts.0': { $exists: true } }, // Has at least one transcript
+        { 
+          $and: [
+            { 'summary.content': { $exists: true } },
+            { 'summary.content': { $ne: '' } },
+            { 'summary.content': { $ne: null } }
+          ]
+        } // Has non-empty summary
+      ]
+    };
+    
+    // Optimized query - only get essential fields, no embeddings
+    const meetings = await Meeting.find(query)
+      .select('-transcripts.embedding') // Exclude embeddings for performance
       .sort({ startedAt: -1 })
+      .limit(limit || 50)
       .lean();
     
-    if (limit) {
-      query.limit(limit);
+    return meetings as unknown as IMeeting[];
+  }
+
+  // NEW: Optimized method for getting meeting metadata only (for dashboard/history)
+  async getMeetingMetadata(roomId: string, options: {
+    limit?: number;
+    skip?: number;
+    includeTranscripts?: boolean;
+  } = {}): Promise<Array<Omit<IMeeting, 'transcripts'> & { transcriptCount: number }>> {
+    await this.ensureConnection();
+    
+    const { limit = 50, skip = 0, includeTranscripts = false } = options;
+    
+    // Query to only get meetings with content (transcripts or summary)
+    const query = {
+      roomId,
+      $or: [
+        { 'transcripts.0': { $exists: true } }, // Has at least one transcript
+        { 
+          $and: [
+            { 'summary.content': { $exists: true } },
+            { 'summary.content': { $ne: '' } },
+            { 'summary.content': { $ne: null } }
+          ]
+        } // Has non-empty summary
+      ]
+    };
+    
+    // Build projection - exclude transcripts by default for performance
+    const projection: Record<string, number> = {
+      roomId: 1,
+      roomName: 1,
+      title: 1,
+      type: 1,
+      startedAt: 1,
+      endedAt: 1,
+      duration: 1,
+      participants: 1,
+      summary: 1,
+      isRecording: 1,
+      transcriptCount: 1,
+      hasEmbeddings: 1,
+      createdAt: 1,
+      updatedAt: 1
+    };
+    
+    if (includeTranscripts) {
+      projection['transcripts'] = 1;
     }
     
-    const meetings = await query.exec();
+    const meetings = await Meeting.find(query)
+      .select(projection)
+      .sort({ startedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+      
+    return meetings.map(meeting => ({
+      ...meeting,
+      transcriptCount: meeting.transcriptCount || meeting.transcripts?.length || 0
+    })) as any;
+  }
+
+  // NEW: Get embeddings for specific meetings (only when needed for RAG)
+  async getEmbeddingsByMeeting(meetingIds: string[]): Promise<Array<{
+    meetingId: string;
+    transcripts: Array<{
+      transcriptIndex: number;
+      speaker: string;
+      text: string;
+      timestamp: Date;
+      embedding: number[];
+    }>;
+  }>> {
+    await this.ensureConnection();
+    
+    const embeddings = await TranscriptEmbedding.find({
+      meetingId: { $in: meetingIds }
+    })
+    .sort({ meetingId: 1, transcriptIndex: 1 })
+    .lean();
+    
+    // Group by meeting
+    const groupedEmbeddings: Record<string, any[]> = {};
+    embeddings.forEach(embedding => {
+      const meetingId = embedding.meetingId.toString();
+      if (!groupedEmbeddings[meetingId]) {
+        groupedEmbeddings[meetingId] = [];
+      }
+      groupedEmbeddings[meetingId].push({
+        transcriptIndex: embedding.transcriptIndex,
+        speaker: embedding.speaker,
+        text: embedding.text,
+        timestamp: embedding.timestamp,
+        embedding: embedding.embedding
+      });
+    });
+    
+    return Object.entries(groupedEmbeddings).map(([meetingId, transcripts]) => ({
+      meetingId,
+      transcripts
+    }));
+  }
+
+  // NEW: Store embeddings separately
+  async storeEmbeddings(meetingId: string, transcripts: Array<{
+    transcriptIndex: number;
+    speaker: string;
+    text: string;
+    timestamp: Date;
+    embedding: number[];
+  }>): Promise<void> {
+    await this.ensureConnection();
+    
+    const meeting = await Meeting.findById(meetingId).lean() as any;
+    if (!meeting) {
+      throw new Error('Meeting not found');
+    }
+    
+    // Delete existing embeddings for this meeting
+    await TranscriptEmbedding.deleteMany({ meetingId });
+    
+    // Insert new embeddings
+    const embeddingDocs = transcripts.map(transcript => ({
+      meetingId,
+      transcriptIndex: transcript.transcriptIndex,
+      speaker: transcript.speaker,
+      text: transcript.text,
+      timestamp: transcript.timestamp,
+      embedding: transcript.embedding,
+      roomId: meeting.roomId,
+      meetingDate: meeting.startedAt
+    }));
+    
+    if (embeddingDocs.length > 0) {
+      await TranscriptEmbedding.insertMany(embeddingDocs);
+      
+      // Update meeting to mark it has embeddings
+      await Meeting.findByIdAndUpdate(meetingId, {
+        hasEmbeddings: true,
+        transcriptCount: transcripts.length
+      });
+    }
+  }
+
+  // UPDATED: Optimized method that uses the new metadata approach
+  async getMeetingsByRoomWithFilters(options: {
+    roomId: string;
+    limit?: number;
+    skip?: number;
+    type?: string | null;
+    dateQuery?: Record<string, any>;
+    includeTranscripts?: boolean;
+  }): Promise<IMeeting[]> {
+    await this.ensureConnection();
+    
+    const { roomId, limit = 50, skip = 0, type, dateQuery = {}, includeTranscripts = false } = options;
+    
+    // Build query
+    const query: Record<string, any> = { 
+      roomId,
+      ...dateQuery
+    };
+    
+    // Add type filter if provided
+    if (type) {
+      query.type = type;
+    }
+    
+    // Build projection based on whether transcripts are needed
+    let projection = {};
+    if (!includeTranscripts) {
+      projection = {
+        'transcripts.embedding': 0 // Exclude embeddings even if transcripts are included
+      };
+    }
+    
+    const meetings = await Meeting.find(query, projection)
+      .sort({ startedAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+      
     return meetings as unknown as IMeeting[];
   }
 
@@ -840,35 +1139,27 @@ export class DatabaseService {
     return meeting as unknown as IMeeting | null;
   }
   
-  async getMeetingsByRoomWithFilters(options: {
-    roomId: string;
-    limit?: number;
-    skip?: number;
-    type?: string | null;
-    dateQuery?: Record<string, any>;
-  }): Promise<IMeeting[]> {
+  async deleteMeeting(meetingId: string): Promise<boolean> {
     await this.ensureConnection();
     
-    const { roomId, limit = 50, skip = 0, type, dateQuery = {} } = options;
-    
-    // Build query
-    const query: Record<string, any> = { 
-      roomId,
-      ...dateQuery
-    };
-    
-    // Add type filter if provided
-    if (type) {
-      query.type = type;
-    }
-    
-    const meetings = await Meeting.find(query)
-      .sort({ startedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    try {
+      // First delete any associated embeddings
+      await TranscriptEmbedding.deleteMany({ meetingId });
       
-    return meetings as unknown as IMeeting[];
+      // Then delete the meeting itself
+      const deleteResult = await Meeting.findByIdAndDelete(meetingId);
+      
+      if (deleteResult) {
+        console.log(`✅ Deleted meeting and associated embeddings: ${meetingId}`);
+        return true;
+      }
+      
+      console.log(`⚠️ Meeting not found for deletion: ${meetingId}`);
+      return false;
+    } catch (error) {
+      console.error(`❌ Error deleting meeting ${meetingId}:`, error);
+      throw error;
+    }
   }
 
   // ============= RECURRING MEETING METHODS =============
@@ -1289,5 +1580,109 @@ export class DatabaseService {
     
     console.log(`🔗 Linked user ${userId} to ${result.modifiedCount} meeting rooms via email ${userEmail}`);
     return result.modifiedCount || 0;
+  }
+
+  // NEW: Get real-time meeting count for a room
+  async getRealMeetingCountByRoom(roomId: string): Promise<number> {
+    await this.ensureConnection();
+    
+    // Count actual meetings with content for this room
+    const count = await Meeting.countDocuments({
+      roomId,
+      $or: [
+        { 'transcripts.0': { $exists: true } }, // Has at least one transcript
+        { 
+          $and: [
+            { 'summary.content': { $exists: true } },
+            { 'summary.content': { $ne: '' } },
+            { 'summary.content': { $ne: null } }
+          ]
+        } // Has non-empty summary
+      ]
+    });
+    
+    return count;
+  }
+
+  // NEW: Get real-time meeting counts for multiple rooms
+  async getRealMeetingCountsByRooms(roomIds: string[]): Promise<Record<string, number>> {
+    await this.ensureConnection();
+    
+    const pipeline = [
+      {
+        $match: {
+          roomId: { $in: roomIds.map(id => id) },
+          $or: [
+            { 'transcripts.0': { $exists: true } },
+            { 
+              $and: [
+                { 'summary.content': { $exists: true } },
+                { 'summary.content': { $ne: '' } },
+                { 'summary.content': { $ne: null } }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        $group: {
+          _id: '$roomId',
+          count: { $sum: 1 }
+        }
+      }
+    ];
+    
+    const results = await Meeting.aggregate(pipeline);
+    
+    // Convert to Record<string, number> format
+    const countMap: Record<string, number> = {};
+    roomIds.forEach(roomId => {
+      countMap[roomId] = 0; // Default to 0
+    });
+    
+    results.forEach((result: any) => {
+      countMap[result._id.toString()] = result.count;
+    });
+    
+    return countMap;
+  }
+
+  // NEW: Clean up stale meeting references from meeting room
+  async cleanupMeetingRoomReferences(roomId: string): Promise<number> {
+    await this.ensureConnection();
+    
+    // Get all actual meeting IDs for this room
+    const actualMeetings = await Meeting.find({ roomId }).select('_id').lean() as Array<{ _id: any }>;
+    const actualMeetingIds = actualMeetings.map(m => m._id.toString());
+    
+    // Update the meeting room to only include existing meetings
+    const result = await MeetingRoom.findByIdAndUpdate(
+      roomId,
+      { $set: { meetings: actualMeetingIds } },
+      { new: true }
+    );
+    
+    return actualMeetingIds.length;
+  }
+
+  // NEW: Clean up all meeting room references
+  async cleanupAllMeetingRoomReferences(): Promise<{ updated: number; totalCleaned: number }> {
+    await this.ensureConnection();
+    
+    const rooms = await MeetingRoom.find({}).lean() as Array<{ _id: any; meetings?: string[] }>;
+    let totalCleaned = 0;
+    let updated = 0;
+    
+    for (const room of rooms) {
+      const cleanedCount = await this.cleanupMeetingRoomReferences(room._id.toString());
+      const originalCount = room.meetings?.length || 0;
+      
+      if (originalCount !== cleanedCount) {
+        updated++;
+        totalCleaned += (originalCount - cleanedCount);
+      }
+    }
+    
+    return { updated, totalCleaned };
   }
 } 

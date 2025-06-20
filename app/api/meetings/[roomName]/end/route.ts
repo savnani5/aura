@@ -215,7 +215,38 @@ export async function POST(
       }
     }
 
-    // Update meeting with end data first
+    // CHECK: If no transcripts were processed, delete the meeting instead of saving it
+    if (transcriptsStored === 0) {
+      console.log(`🗑️ No transcripts found - deleting empty meeting record: ${meetingId}`);
+      
+      try {
+        // Delete the meeting record since it has no content
+        await dbService.deleteMeeting(meetingId);
+        console.log(`✅ Deleted empty meeting record`);
+        
+        return NextResponse.json({
+          success: true,
+          message: 'Meeting ended but no content was recorded - meeting record removed',
+          data: {
+            meetingId: null, // Indicate meeting was deleted
+            roomName,
+            endedAt: meetingEndedAt.toISOString(),
+            duration: calculatedDuration,
+            transcriptsStored: 0,
+            summaryGenerated: false,
+            meetingDeleted: true,
+            redirectUrl: meeting.roomId 
+              ? `/meetingroom/${roomName}` 
+              : '/'
+          }
+        });
+      } catch (deleteError) {
+        console.error('Error deleting empty meeting:', deleteError);
+        // Fall through to normal flow if deletion fails
+      }
+    }
+
+    // Update meeting with end data first (only if we have transcripts)
     await dbService.updateMeeting(meetingId, updateData);
     console.log(`✅ Updated meeting with end data`);
 

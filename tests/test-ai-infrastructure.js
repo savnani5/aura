@@ -89,7 +89,7 @@ async function testDatabaseConnection() {
   
   try {
     // Test if we can import and connect to database
-    const { DatabaseService } = await import('./lib/mongodb.ts');
+    const { DatabaseService } = await import('../lib/mongodb.ts');
     const db = DatabaseService.getInstance();
     
     logTest('Database service import', 'PASS');
@@ -109,7 +109,7 @@ async function testEmbeddingsService() {
   logSection('Embeddings Service Tests');
   
   try {
-    const { EmbeddingsService } = await import('./lib/embeddings-service.ts');
+    const { EmbeddingsService } = await import('../lib/embeddings-service.ts');
     const embeddingsService = EmbeddingsService.getInstance();
     
     logTest('Embeddings service import', 'PASS');
@@ -166,7 +166,7 @@ async function testRAGService() {
   logSection('RAG Service Tests');
   
   try {
-    const { RAGService } = await import('./lib/rag-service.ts');
+    const { RAGService } = await import('../lib/rag-service.ts');
     const ragService = RAGService.getInstance();
     
     logTest('RAG service import', 'PASS');
@@ -225,7 +225,7 @@ async function testAIChatbot() {
   logSection('AI Chatbot Tests');
   
   try {
-    const { AIChatbot } = await import('./lib/ai-chatbot.ts');
+    const { AIChatbot } = await import('../lib/ai-chatbot.ts');
     const chatbot = AIChatbot.getInstance();
     
     logTest('AI chatbot import', 'PASS');
@@ -288,7 +288,7 @@ async function testAiContextManager() {
   logSection('AI Context Manager Tests');
   
   try {
-    const { AiContextManager } = await import('./lib/ai-context-manager.ts');
+    const { AiContextManager } = await import('../lib/ai-context-manager.ts');
     const contextManager = AiContextManager.getInstance();
     
     logTest('AI context manager import', 'PASS');

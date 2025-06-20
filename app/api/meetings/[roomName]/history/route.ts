@@ -42,11 +42,18 @@ export async function GET(
       };
     }
     
-    // Get historical meetings
-    const historicalMeetings = await db.getMeetingsByRoomWithFilters({
-      roomId: room._id,
+    // Get historical meetings using optimized metadata query (no transcripts by default)
+    const historicalMeetings = await db.getMeetingMetadata(room._id, {
       limit: 50,
-      dateQuery
+      // Only include transcripts if specifically requested (adds query param support)
+      includeTranscripts: searchParams.get('includeTranscripts') === 'true'
+    });
+    
+    // Filter out meetings with no content (no transcripts and no summary)
+    const meetingsWithContent = historicalMeetings.filter(meeting => {
+      const hasTranscripts = meeting.transcriptCount > 0;
+      const hasSummary = meeting.summary && meeting.summary.content && meeting.summary.content.trim().length > 0;
+      return hasTranscripts || hasSummary;
     });
     
     // Calculate upcoming meetings for recurring rooms
@@ -76,7 +83,7 @@ export async function GET(
     }
     
     // Transform historical meetings to match frontend interface
-    const transformedHistoricalMeetings = historicalMeetings.map(meeting => ({
+    const transformedHistoricalMeetings = meetingsWithContent.map(meeting => ({
       id: meeting._id,
       roomName: meeting.roomName,
       title: meeting.title || meeting.type,
@@ -92,7 +99,8 @@ export async function GET(
         actionItems: meeting.summary.actionItems || [],
         decisions: meeting.summary.decisions || []
       } : undefined,
-      transcripts: meeting.transcripts || []
+      // Only include transcripts if they were requested and available
+      transcripts: (meeting as any).transcripts || []
     }));
     
     // Combine and sort all meetings (upcoming first, then historical by date)

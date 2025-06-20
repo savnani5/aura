@@ -339,26 +339,6 @@
   font-weight: 500;
 }
 
-/* Actions Column */
-.moreButton {
-  width: 24px;
-  height: 24px;
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.5);
-  cursor: pointer;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s ease;
-}
-
-.moreButton:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.8);
-}
-
 /* Input Fields for New Task */
 .taskInput,
 .ownerInput,

@@ -6,9 +6,10 @@ export interface TranscriptContext {
   text: string;
   timestamp: Date;
   meetingId: string;
-  meetingTitle?: string;
   meetingType: string;
   similarity?: number;
+  meetingDate: Date;
+  embedding: number[];
 }
 
 export interface RAGContext {
@@ -38,7 +39,7 @@ export class RAGService {
   /**
    * Detect if query requires comprehensive data or targeted search
    */
-  private detectQueryType(query: string): 'comprehensive' | 'targeted' {
+  private detectQueryType(query: string): 'comprehensive' | 'targeted' | 'specific' {
     const comprehensiveKeywords = [
       'summarize', 'summary', 'overview', 'all', 'everything', 'comprehensive',
       'recurring', 'frequent', 'patterns', 'trends', 'overall', 'general',
@@ -75,6 +76,19 @@ export class RAGService {
       const room = await this.dbService.getMeetingRoomByName(roomName);
       if (!room) {
         console.log(`❌ Room not found: ${roomName}`);
+        
+        // Debug: List all available rooms to see what's in the database
+        try {
+          const allRooms = await this.dbService.getAllMeetingRooms(10);
+          console.log(`🏠 Available rooms in database:`, allRooms.map(r => ({
+            roomName: r.roomName,
+            title: r.title,
+            type: r.type
+          })));
+        } catch (debugError) {
+          console.log(`⚠️ Could not fetch rooms for debugging:`, debugError);
+        }
+        
         return {
           currentTranscripts: [],
           historicalContext: [],
@@ -82,6 +96,8 @@ export class RAGService {
           usedContext: false,
         };
       }
+
+      console.log(`✅ Found room: ${room.title} (${room.roomName})`);
 
       // Detect query type
       const queryType = this.detectQueryType(query);
@@ -104,6 +120,8 @@ export class RAGService {
               timestamp: new Date(),
               meetingId: 'current',
               meetingType: 'Live Meeting',
+              meetingDate: new Date(),
+              embedding: [],
             });
           }
         }
@@ -112,41 +130,71 @@ export class RAGService {
         console.log(`🚫 No current transcripts - currentTranscripts: ${!!currentTranscripts}, isLiveMeeting: ${isLiveMeeting}`);
       }
 
-      // Get historical meetings for this room
-      const historicalMeetings = await this.dbService.getMeetingsByRoomWithFilters({
-        roomId: room._id,
-        limit: queryType === 'comprehensive' ? 20 : 10, // More meetings for comprehensive queries
+      // Get historical meetings metadata (without transcripts for performance)
+      const historicalMeetings = await this.dbService.getMeetingMetadata(room._id, {
+        limit: queryType === 'comprehensive' ? 20 : 10,
       });
 
-      console.log(`📚 Found ${historicalMeetings.length} historical meetings`);
+      console.log(`📚 Found ${historicalMeetings.length} historical meetings for room ${room.title}`);
 
+      // Get meetings that have embeddings
+      const meetingsWithEmbeddings = historicalMeetings.filter(m => m.hasEmbeddings);
+      const meetingIds = meetingsWithEmbeddings.map(m => m._id);
+
+      console.log(`🔗 ${meetingsWithEmbeddings.length}/${historicalMeetings.length} meetings have embeddings`);
+
+      if (meetingIds.length === 0) {
+        console.log(`⚠️ No meetings have embeddings for RAG context`);
+        return {
+          currentTranscripts: currentTranscriptContext,
+          historicalContext: [],
+          totalRelevantTranscripts: currentTranscriptContext.length,
+          usedContext: currentTranscriptContext.length > 0,
+        };
+      }
+
+      // Get embeddings for relevant meetings
+      const embeddingResults = await this.dbService.getEmbeddingsByMeeting(meetingIds);
+      
       // Extract all historical transcripts with embeddings
-      const historicalTranscripts: Array<{
-        embedding: number[];
-        metadata: TranscriptContext;
-      }> = [];
+      const allHistoricalTranscripts: TranscriptContext[] = [];
+      for (const embeddingResult of embeddingResults) {
+        const meeting = meetingsWithEmbeddings.find(m => m._id === embeddingResult.meetingId);
+        if (!meeting) continue;
 
-      for (const meeting of historicalMeetings) {
-        if (meeting.transcripts && meeting.transcripts.length > 0) {
-          for (const transcript of meeting.transcripts) {
-            if (transcript.embedding && transcript.embedding.length > 0) {
-              historicalTranscripts.push({
-                embedding: transcript.embedding,
-                metadata: {
-                  speaker: transcript.speaker,
-                  text: transcript.text,
-                  timestamp: transcript.timestamp,
-                  meetingId: meeting._id,
-                  meetingTitle: meeting.title,
-                  meetingType: meeting.type,
-                },
-              });
-            }
-          }
+        console.log(`📝 Meeting "${meeting.title || 'Untitled'}" (${meeting.startedAt.toDateString()}): ${embeddingResult.transcripts.length} transcripts with embeddings`);
+        
+        for (const transcript of embeddingResult.transcripts) {
+          allHistoricalTranscripts.push({
+            speaker: transcript.speaker,
+            text: transcript.text,
+            timestamp: transcript.timestamp,
+            meetingId: meeting._id,
+            meetingType: meeting.type,
+            meetingDate: meeting.startedAt,
+            embedding: transcript.embedding,
+          });
         }
       }
 
-      console.log(`📝 Found ${historicalTranscripts.length} historical transcripts with embeddings`);
+      console.log(`🔍 Total historical transcripts with embeddings: ${allHistoricalTranscripts.length}`);
+
+      // Rank transcripts by similarity to query
+      const rankedTranscripts = allHistoricalTranscripts
+        .map(transcript => ({
+          ...transcript,
+          similarity: this.embeddingsService.calculateCosineSimilarity(
+            queryEmbedding.embedding,
+            transcript.embedding
+          ),
+        }))
+        .sort((a, b) => b.similarity - a.similarity);
+
+      console.log(`📊 Similarity scores (top 5): ${rankedTranscripts.slice(0, 5).map(t => `${t.similarity.toFixed(3)}`).join(', ')}`);
+
+      // Select top relevant transcripts based on query type
+      const relevanceThreshold = queryType === 'specific' ? 0.65 : 0.45;
+      const maxTranscripts = queryType === 'comprehensive' ? 15 : 8;
 
       let historicalContext: TranscriptContext[] = [];
 
@@ -155,26 +203,16 @@ export class RAGService {
         console.log(`🌐 Using comprehensive retrieval strategy`);
         
         // Get more results with a lower threshold for comprehensive coverage
-        const relevantHistorical = this.embeddingsService.findMostSimilar(
-          queryEmbedding.embedding,
-          historicalTranscripts,
-          25, // More results for comprehensive queries
-          0.3  // Lower threshold to capture more relevant content
-        );
+        const relevantHistorical = rankedTranscripts
+          .filter(item => item.similarity >= relevanceThreshold)
+          .slice(0, maxTranscripts);
 
         // If we still don't get enough results, include recent transcripts
         if (relevantHistorical.length < 15) {
           console.log(`📈 Comprehensive query needs more context, including recent transcripts`);
           
           // Sort by recency and include recent transcripts even with lower similarity
-          const recentTranscripts = historicalTranscripts
-            .map(item => ({
-              ...item.metadata,
-              similarity: this.embeddingsService.calculateCosineSimilarity(
-                queryEmbedding.embedding, 
-                item.embedding
-              ),
-            }))
+          const recentTranscripts = rankedTranscripts
             .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
             .slice(0, 20); // Top 20 most recent
 
@@ -183,8 +221,8 @@ export class RAGService {
           
           // Add similarity-based results first
           relevantHistorical.forEach(item => {
-            combinedResults.set(`${item.metadata.meetingId}-${item.metadata.timestamp}`, {
-              ...item.metadata,
+            combinedResults.set(`${item.meetingId}-${item.timestamp}`, {
+              ...item,
               similarity: item.similarity,
             });
           });
@@ -199,27 +237,18 @@ export class RAGService {
 
           historicalContext = Array.from(combinedResults.values());
         } else {
-          historicalContext = relevantHistorical.map(item => ({
-            ...item.metadata,
-            similarity: item.similarity,
-          }));
+          historicalContext = relevantHistorical;
         }
 
       } else {
         // For targeted queries, use higher threshold and fewer results
         console.log(`🎯 Using targeted retrieval strategy`);
         
-        const relevantHistorical = this.embeddingsService.findMostSimilar(
-          queryEmbedding.embedding,
-          historicalTranscripts,
-          8, // Fewer, more relevant results
-          0.5 // Higher threshold for more precise matches
-        );
+        const relevantHistorical = rankedTranscripts
+          .filter(item => item.similarity >= relevanceThreshold)
+          .slice(0, maxTranscripts);
 
-        historicalContext = relevantHistorical.map(item => ({
-          ...item.metadata,
-          similarity: item.similarity,
-        }));
+        historicalContext = relevantHistorical;
       }
 
       console.log(`✅ Retrieved ${historicalContext.length} relevant historical transcripts`);
@@ -346,7 +375,7 @@ export class RAGService {
     if (context.historicalContext.length > 0) {
       prompt += 'RELEVANT HISTORICAL CONTEXT:\n';
       context.historicalContext.forEach(transcript => {
-        const meetingInfo = transcript.meetingTitle || transcript.meetingType;
+        const meetingInfo = transcript.meetingType;
         const similarity = transcript.similarity ? ` (${Math.round(transcript.similarity * 100)}% relevant)` : '';
         prompt += `[${meetingInfo}${similarity}] ${transcript.speaker}: ${transcript.text}\n`;
       });

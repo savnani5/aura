@@ -103,8 +103,8 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
         })) : [];
         
         // Get participants from room data
-        const transformedParticipants = room.participants.map((participant: any) => ({
-          id: participant.userId || participant.name.toLowerCase().replace(/\s+/g, '-'),
+        const transformedParticipants = room.participants.map((participant: any, index: number) => ({
+          id: participant.userId || `${participant.name.toLowerCase().replace(/\s+/g, '-')}-${index}`,
           name: participant.name
         }));
 
@@ -552,19 +552,7 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
               )}
             </div>
             <div className={styles.actionsColumn}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Additional actions menu could go here
-                }}
-                className={styles.moreButton}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="12" cy="12" r="1" stroke="currentColor" strokeWidth="2"/>
-                  <circle cx="12" cy="5" r="1" stroke="currentColor" strokeWidth="2"/>
-                  <circle cx="12" cy="19" r="1" stroke="currentColor" strokeWidth="2"/>
-                </svg>
-              </button>
+              {/* Removed non-functional three dots button */}
             </div>
           </div>
         ))}
