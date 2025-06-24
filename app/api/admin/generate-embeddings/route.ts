@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/mongodb';
 import { EmbeddingsService } from '@/lib/embeddings-service';
+import { RAGService } from '@/lib/rag-service';
 
 export async function POST() {
   try {
     const dbService = DatabaseService.getInstance();
     const embeddingsService = EmbeddingsService.getInstance();
+    const ragService = RAGService.getInstance();
     
     console.log('🔍 Finding meetings without embeddings...');
     
@@ -28,56 +30,26 @@ export async function POST() {
       
       for (const meeting of meetings) {
         if (!meeting.transcripts || meeting.transcripts.length === 0) {
+          console.log(`   ⏩ Skipping meeting ${meeting._id} - no transcripts`);
           continue;
         }
         
-        // Check if transcripts already have embeddings
-        const transcriptsNeedingEmbeddings = meeting.transcripts.filter(
-          transcript => !transcript.embedding || transcript.embedding.length === 0
-        );
-        
-        if (transcriptsNeedingEmbeddings.length === 0) {
+        // Check if meeting already has embeddings in the new schema
+        if (meeting.hasEmbeddings) {
+          console.log(`   ✅ Meeting ${meeting._id} already has embeddings`);
           continue;
         }
         
-        console.log(`   🔄 Processing ${transcriptsNeedingEmbeddings.length} transcripts for meeting: ${meeting.title || 'Untitled'}`);
-        
-        // Generate embeddings for transcripts that need them
-        const transcriptTexts = transcriptsNeedingEmbeddings.map(
-          t => `${t.speaker}: ${t.text}`
-        );
+        console.log(`   🔄 Processing ${meeting.transcripts.length} transcripts for meeting: ${meeting.title || 'Untitled'}`);
         
         try {
-          const embeddings = await embeddingsService.generateEmbeddings(transcriptTexts);
-          
-          // Update the meeting with embeddings
-          const updatedTranscripts = meeting.transcripts.map(transcript => {
-            const needsEmbedding = transcriptsNeedingEmbeddings.find(
-              t => t.speaker === transcript.speaker && 
-                   t.text === transcript.text && 
-                   t.timestamp.getTime() === transcript.timestamp.getTime()
-            );
-            
-            if (needsEmbedding) {
-              const embeddingIndex = transcriptsNeedingEmbeddings.indexOf(needsEmbedding);
-              return {
-                ...transcript,
-                embedding: embeddings[embeddingIndex]?.embedding || []
-              };
-            }
-            
-            return transcript;
-          });
-          
-          // Save updated meeting
-          await dbService.updateMeeting(meeting._id, {
-            transcripts: updatedTranscripts
-          });
+          // Store transcripts with embeddings using the RAG service which handles the new schema
+          await ragService.storeTranscriptEmbeddings(meeting._id, meeting.transcripts);
           
           totalMeetingsProcessed++;
-          totalTranscriptsProcessed += transcriptsNeedingEmbeddings.length;
+          totalTranscriptsProcessed += meeting.transcripts.length;
           
-          console.log(`   ✅ Generated embeddings for ${transcriptsNeedingEmbeddings.length} transcripts`);
+          console.log(`   ✅ Generated embeddings for ${meeting.transcripts.length} transcripts`);
           
         } catch (embeddingError) {
           console.error(`   ❌ Error generating embeddings for meeting ${meeting._id}:`, embeddingError);
@@ -100,7 +72,7 @@ export async function POST() {
     });
     
   } catch (error) {
-    console.error('❌ Error generating embeddings:', error);
+    console.error('Error generating embeddings:', error);
     return NextResponse.json({
       success: false,
       error: 'Failed to generate embeddings',

@@ -459,6 +459,9 @@ function VideoConferenceComponent(props: {
   // Use ref to preserve transcripts during room cleanup
   const transcriptsRef = React.useRef<Transcript[]>([]);
   
+  // Add flag to prevent duplicate meeting end calls
+  const meetingEndTriggeredRef = React.useRef<boolean>(false);
+  
   // Update ref whenever transcripts change
   React.useEffect(() => {
     transcriptsRef.current = sharedTranscripts;
@@ -479,6 +482,15 @@ function VideoConferenceComponent(props: {
 
   const handleOnLeave = React.useCallback(async () => {
     console.log('🚪 User leaving room - implementing immediate exit...');
+    
+    // Check if meeting end has already been triggered
+    if (meetingEndTriggeredRef.current) {
+      console.log('⚠️ Meeting end already triggered, skipping duplicate call');
+      return;
+    }
+    
+    // Set flag immediately to prevent concurrent calls
+    meetingEndTriggeredRef.current = true;
     
     // Get transcripts immediately before any disconnection
     const finalTranscripts = transcriptsRef.current;

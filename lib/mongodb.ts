@@ -261,7 +261,10 @@ const MeetingSchema = new mongoose.Schema({
   
   // Performance metadata
   transcriptCount: { type: Number, default: 0 }, // Cache transcript count
-  hasEmbeddings: { type: Boolean, default: false } // Flag to know if embeddings exist
+  hasEmbeddings: { type: Boolean, default: false }, // Flag to know if embeddings exist
+  embeddingsGeneratedAt: { type: Date }, // When embeddings were last generated
+  embeddingError: { type: String }, // Error message if embedding generation failed
+  embeddingErrorAt: { type: Date }, // When embedding generation failed
 }, {
   timestamps: true
 });
@@ -388,7 +391,10 @@ const MeetingSchemaUpdated = new mongoose.Schema({
   
   // Performance metadata
   transcriptCount: { type: Number, default: 0 }, // Cache transcript count
-  hasEmbeddings: { type: Boolean, default: false } // Flag to know if embeddings exist
+  hasEmbeddings: { type: Boolean, default: false }, // Flag to know if embeddings exist
+  embeddingsGeneratedAt: { type: Date }, // When embeddings were last generated
+  embeddingError: { type: String }, // Error message if embedding generation failed
+  embeddingErrorAt: { type: Date }, // When embedding generation failed
 }, {
   timestamps: true
 });
@@ -485,6 +491,9 @@ export interface IMeeting {
   // Performance metadata
   transcriptCount?: number; // Cache transcript count
   hasEmbeddings?: boolean; // Flag to know if embeddings exist
+  embeddingsGeneratedAt?: Date; // When embeddings were last generated
+  embeddingError?: string; // Error message if embedding generation failed
+  embeddingErrorAt?: Date; // When embedding generation failed
   
   createdAt: Date;
   updatedAt: Date;
@@ -710,11 +719,65 @@ export class DatabaseService {
     return result.deletedCount || 0;
   }
   
-  async deleteMeetingRoom(roomId: string): Promise<boolean> {
+  // ENHANCED: Comprehensive method to delete meeting room and all associated data
+  async deleteMeetingRoom(roomId: string): Promise<{
+    success: boolean;
+    deletedCounts: {
+      room: number;
+      meetings: number;
+      tasks: number;
+      embeddings: number;
+    };
+  }> {
     await this.ensureConnection();
     
-    const result = await MeetingRoom.findByIdAndDelete(roomId);
-    return !!result;
+    let deletedCounts = {
+      room: 0,
+      meetings: 0,
+      tasks: 0,
+      embeddings: 0
+    };
+    
+    try {
+      // Step 1: Get all meetings in this room to know which embeddings to delete
+      const meetings = await Meeting.find({ roomId }).select('_id').lean();
+      const meetingIds = meetings.map(m => (m._id as any).toString());
+      
+      // Step 2: Delete all transcript embeddings for meetings in this room
+      if (meetingIds.length > 0) {
+        const embeddingResult = await TranscriptEmbedding.deleteMany({ 
+          meetingId: { $in: meetingIds }
+        });
+        deletedCounts.embeddings = embeddingResult.deletedCount || 0;
+        
+        // Also delete embeddings by roomId (backup cleanup)
+        const embeddingRoomResult = await TranscriptEmbedding.deleteMany({ roomId });
+        deletedCounts.embeddings += embeddingRoomResult.deletedCount || 0;
+      }
+      
+      // Step 3: Delete all meetings in this room
+      const meetingResult = await Meeting.deleteMany({ roomId });
+      deletedCounts.meetings = meetingResult.deletedCount || 0;
+      
+      // Step 4: Delete all tasks in this room
+      const taskResult = await Task.deleteMany({ roomId });
+      deletedCounts.tasks = taskResult.deletedCount || 0;
+      
+      // Step 5: Finally delete the meeting room itself
+      const roomResult = await MeetingRoom.findByIdAndDelete(roomId);
+      deletedCounts.room = roomResult ? 1 : 0;
+      
+      return {
+        success: true,
+        deletedCounts
+      };
+    } catch (error) {
+      console.error('Error in comprehensive room deletion:', error);
+      return {
+        success: false,
+        deletedCounts
+      };
+    }
   }
 
   // ===== MEETING OPERATIONS =====
@@ -1127,6 +1190,20 @@ export class DatabaseService {
     return meeting as IMeeting | null;
   }
   
+  // NEW: Check for active meeting in a room (meeting without endedAt)
+  async getActiveMeetingByRoom(roomName: string): Promise<IMeeting | null> {
+    await this.ensureConnection();
+    
+    const activeMeeting = await Meeting.findOne({
+      roomName,
+      endedAt: { $exists: false } // Meeting has not ended yet
+    })
+    .sort({ startedAt: -1 }) // Get the most recent active meeting
+    .lean();
+    
+    return activeMeeting as IMeeting | null;
+  }
+  
   async updateMeeting(meetingId: string, updates: Partial<IMeeting>): Promise<IMeeting | null> {
     await this.ensureConnection();
     
@@ -1261,255 +1338,6 @@ export class DatabaseService {
   private getDayIndex(day: string): number {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days.indexOf(day);
-  }
-  
-  /**
-   * Generate historical meetings for a recurring room for testing
-   */
-  async generateRecurringMeetingHistory(roomId: string, weeksBack: number = 8): Promise<IMeeting[]> {
-    await this.ensureConnection();
-    
-    const room = await MeetingRoom.findById(roomId).lean() as unknown as IMeetingRoom;
-    if (!room || !room.isRecurring || !room.recurringPattern) {
-      throw new Error('Room is not a recurring meeting room');
-    }
-
-    const { frequency, day, time } = room.recurringPattern;
-    if (!frequency || !day || !time) {
-      throw new Error('Invalid recurring pattern');
-    }
-
-    const [hours, minutes] = time.split(':').map(Number);
-    const dayIndex = this.getDayIndex(day);
-    const meetings: IMeeting[] = [];
-    
-    // Generate meetings going backwards from current week
-    for (let week = 1; week <= weeksBack; week++) {
-      // Skip some meetings randomly to make it more realistic
-      if (Math.random() < 0.15) continue; // 15% chance to skip a meeting
-      
-      const meetingDate = new Date();
-      meetingDate.setDate(meetingDate.getDate() - (week * 7));
-      
-      // Adjust to the correct day of week
-      const currentDay = meetingDate.getDay();
-      const daysToAdjust = dayIndex - currentDay;
-      meetingDate.setDate(meetingDate.getDate() + daysToAdjust);
-      meetingDate.setHours(hours, minutes, 0, 0);
-      
-      // Skip future dates
-      if (meetingDate > new Date()) continue;
-      
-      // Generate meeting duration (25-60 minutes)
-      const duration = Math.floor(Math.random() * 35) + 25;
-      const endTime = new Date(meetingDate.getTime() + duration * 60 * 1000);
-      
-      // Generate random participants from room participants
-      const meetingParticipants = room.participants
-        .filter(() => Math.random() < 0.8) // 80% chance each participant joins
-        .map(p => ({
-          userId: p.userId,
-          name: p.name,
-          joinedAt: meetingDate,
-          leftAt: endTime,
-          isHost: p.role === 'host'
-        }));
-
-      // Generate mock transcripts for the meeting
-      const transcripts = this.generateMockTranscripts(
-        meetingParticipants.map(p => p.name), 
-        room.type, 
-        meetingDate,
-        duration
-      );
-      
-      const meeting: Partial<IMeeting> = {
-        roomId: roomId,
-        roomName: room.roomName,
-        title: room.title,
-        type: room.type,
-        startedAt: meetingDate,
-        endedAt: endTime,
-        duration: duration,
-        participants: meetingParticipants,
-        transcripts: transcripts,
-        summary: Math.random() < 0.7 ? { // 70% chance of having a summary
-          content: this.generateMockSummary(room.type),
-          keyPoints: this.generateMockKeyPoints(),
-          actionItems: this.generateMockActionItems(),
-          decisions: this.generateMockDecisions(),
-          generatedAt: endTime
-        } : undefined,
-        isRecording: false
-      };
-      
-      const savedMeeting = await this.createMeeting(meeting);
-      meetings.push(savedMeeting);
-    }
-    
-    return meetings;
-  }
-
-  private generateMockTranscripts(
-    participants: string[], 
-    meetingType: string, 
-    meetingDate: Date,
-    durationMinutes: number
-  ): Array<{
-    speaker: string;
-    text: string;
-    timestamp: Date;
-    embedding?: number[];
-  }> {
-    const transcripts: Array<{
-      speaker: string;
-      text: string;
-      timestamp: Date;
-      embedding?: number[];
-    }> = [];
-
-    // Generate 15-30 transcript entries based on meeting duration
-    const numTranscripts = Math.floor(durationMinutes / 2) + Math.floor(Math.random() * 10) + 5;
-    
-    // Transcript templates based on meeting type
-    const transcriptTemplates = {
-      'Daily Standup': [
-        "Yesterday I completed the user authentication module and fixed the database connection issues.",
-        "Today I'm planning to work on the API endpoints for user profile management.",
-        "I'm blocked on the third-party integration - waiting for API keys from the vendor.",
-        "The sprint is going well, we're about 70% complete with our planned features.",
-        "I finished the code review for the payment system and it looks good to merge.",
-        "Today I'll be focusing on the frontend components for the dashboard.",
-        "No blockers for me today, everything is on track.",
-        "I need help with the deployment pipeline - having some Docker issues.",
-        "The testing suite is now covering 85% of our codebase which is great progress.",
-        "I'll be pairing with [teammate] on the search functionality this afternoon."
-      ],
-      'Project Planning': [
-        "Let's review the project timeline and see if we need to adjust any milestones.",
-        "The client has requested some additional features - we need to evaluate the scope impact.",
-        "Our current velocity suggests we can complete Phase 1 by the end of next month.",
-        "We should allocate more resources to the testing phase based on complexity.",
-        "The integration with the external API is taking longer than expected.",
-        "Let's prioritize the core features first and move the nice-to-haves to Phase 2.",
-        "We need to coordinate with the design team on the new user interface mockups.",
-        "The database migration should be scheduled for the weekend to minimize downtime.",
-        "Risk assessment shows we might need a backup plan for the cloud deployment.",
-        "Budget tracking shows we're on target but need to monitor the external contractor costs.",
-        "The MVP features are well-defined, we should focus on getting those rock solid.",
-        "Quality assurance will need an extra week for thorough testing of the payment system."
-      ],
-      'Client Review': [
-        "The client is happy with the progress on the user dashboard functionality.",
-        "They've requested a few UI changes to better match their brand guidelines.",
-        "The performance improvements are meeting their expectations - 40% faster load times.",
-        "We need to clarify the requirements for the reporting module.",
-        "The client wants to add mobile support to the scope for this quarter.",
-        "Security audit results look good, just a few minor recommendations to implement.",
-        "They're impressed with the new analytics features and want to expand them.",
-        "The deployment went smoothly and users are adapting well to the new interface.",
-        "Client feedback on the beta version is very positive overall.",
-        "We should schedule a demo of the upcoming features for their stakeholders."
-      ]
-    };
-
-    const templates = transcriptTemplates[meetingType as keyof typeof transcriptTemplates] || transcriptTemplates['Daily Standup'];
-    
-    for (let i = 0; i < numTranscripts; i++) {
-      // Pick a random participant
-      const speaker = participants[Math.floor(Math.random() * participants.length)];
-      
-      // Pick a random template and customize it
-      let text = templates[Math.floor(Math.random() * templates.length)];
-      
-      // Replace [teammate] placeholder with actual participant name
-      if (text.includes('[teammate]')) {
-        const otherParticipants = participants.filter(p => p !== speaker);
-        const teammate = otherParticipants[Math.floor(Math.random() * otherParticipants.length)] || 'the team';
-        text = text.replace('[teammate]', teammate);
-      }
-      
-      // Calculate timestamp within the meeting duration
-      const minutesIntoMeeting = Math.floor((i / numTranscripts) * durationMinutes);
-      const timestamp = new Date(meetingDate.getTime() + minutesIntoMeeting * 60 * 1000);
-      
-      transcripts.push({
-        speaker,
-        text,
-        timestamp,
-        // Note: embeddings will be generated later by the RAG service
-      });
-    }
-
-    return transcripts;
-  }
-  
-  private generateMockSummary(meetingType: string): string {
-    const summaries = {
-      'Daily Standup': [
-        'Team discussed current sprint progress, identified blockers, and aligned on priorities for the day.',
-        'Quick sync on yesterday\'s achievements and today\'s goals. Addressed technical challenges and dependencies.',
-        'Daily standup covered completed tasks, upcoming work, and team coordination for ongoing projects.'
-      ],
-      'Project Planning': [
-        'Strategic planning session focused on project roadmap, resource allocation, and timeline optimization.',
-        'Comprehensive project review including scope definition, milestone planning, and risk assessment.',
-        'Planning meeting covered project objectives, deliverables, and cross-team collaboration strategies.'
-      ],
-      'Client Review': [
-        'Client presentation and feedback session covering recent deliverables and upcoming milestones.',
-        'Review meeting with stakeholders to demonstrate progress and gather requirements for next phase.',
-        'Client sync focused on project status, deliverable quality, and adjustment of priorities based on feedback.'
-      ]
-    };
-    
-    const typesSummaries = summaries[meetingType as keyof typeof summaries] || summaries['Daily Standup'];
-    return typesSummaries[Math.floor(Math.random() * typesSummaries.length)];
-  }
-  
-  private generateMockKeyPoints(): string[] {
-    const keyPoints = [
-      'Sprint velocity is on track with planned estimates',
-      'New feature deployment scheduled for next week',
-      'Database optimization showing 40% performance improvement',
-      'Client feedback incorporated into current iteration',
-      'Team capacity adjusted for upcoming holiday period',
-      'Integration testing completed successfully',
-      'Code review process streamlined with new tools',
-      'Documentation updates pushed to knowledge base'
-    ];
-    
-    const count = Math.floor(Math.random() * 3) + 2; // 2-4 key points
-    return keyPoints.sort(() => 0.5 - Math.random()).slice(0, count);
-  }
-  
-  private generateMockActionItems(): string[] {
-    const actions = [
-      'Update project timeline based on current progress',
-      'Schedule follow-up meeting with stakeholders',
-      'Complete code review for pending pull requests',
-      'Prepare demo for client presentation',
-      'Update documentation for new features',
-      'Coordinate with QA team for testing schedule',
-      'Set up monitoring for production deployment',
-      'Create tickets for identified technical debt'
-    ];
-    
-    const count = Math.floor(Math.random() * 4) + 1; // 1-4 action items
-    return actions.sort(() => 0.5 - Math.random()).slice(0, count);
-  }
-  
-  private generateMockDecisions(): string[] {
-    const decisions = [
-      'Approved moving forward with proposed architecture changes',
-      'Decided to postpone feature X to next sprint',
-      'Agreed on new deployment schedule for better stability',
-      'Confirmed resource allocation for Q1 objectives',
-      'Selected technology stack for upcoming project phase'
-    ];
-    
-    const count = Math.floor(Math.random() * 3); // 0-2 decisions
-    return decisions.sort(() => 0.5 - Math.random()).slice(0, count);
   }
 
   // ============= USER-SPECIFIC DATA METHODS =============

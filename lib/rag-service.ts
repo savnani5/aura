@@ -137,14 +137,14 @@ export class RAGService {
 
       console.log(`📚 Found ${historicalMeetings.length} historical meetings for room ${room.title}`);
 
-      // Get meetings that have embeddings
-      const meetingsWithEmbeddings = historicalMeetings.filter(m => m.hasEmbeddings);
-      const meetingIds = meetingsWithEmbeddings.map(m => m._id);
-
-      console.log(`🔗 ${meetingsWithEmbeddings.length}/${historicalMeetings.length} meetings have embeddings`);
+      // Instead of filtering by hasEmbeddings flag, get all meeting IDs and let 
+      // getEmbeddingsByMeeting filter out meetings without embeddings
+      const meetingIds = historicalMeetings.map(m => m._id);
+      
+      console.log(`🔍 Querying embeddings for ${meetingIds.length} meetings`);
 
       if (meetingIds.length === 0) {
-        console.log(`⚠️ No meetings have embeddings for RAG context`);
+        console.log(`⚠️ No meetings found for room`);
         return {
           currentTranscripts: currentTranscriptContext,
           historicalContext: [],
@@ -153,14 +153,30 @@ export class RAGService {
         };
       }
 
-      // Get embeddings for relevant meetings
+      // Get embeddings for relevant meetings (this will only return meetings that actually have embeddings)
       const embeddingResults = await this.dbService.getEmbeddingsByMeeting(meetingIds);
+      
+      console.log(`🔗 Found embeddings for ${embeddingResults.length}/${meetingIds.length} meetings`);
+
+      if (embeddingResults.length === 0) {
+        console.log(`⚠️ No meetings have embeddings for RAG context`);
+        return {
+          currentTranscripts: currentTranscriptContext,
+          historicalContext: [],
+          totalRelevantTranscripts: currentTranscriptContext.length,
+          usedContext: currentTranscriptContext.length > 0,
+        };
+      }
       
       // Extract all historical transcripts with embeddings
       const allHistoricalTranscripts: TranscriptContext[] = [];
       for (const embeddingResult of embeddingResults) {
-        const meeting = meetingsWithEmbeddings.find(m => m._id === embeddingResult.meetingId);
-        if (!meeting) continue;
+        // Convert meetingId to string for comparison since embeddingResult.meetingId is a string
+        const meeting = historicalMeetings.find(m => m._id.toString() === embeddingResult.meetingId);
+        if (!meeting) {
+          console.log(`⚠️ Meeting metadata not found for embedding result: ${embeddingResult.meetingId}`);
+          continue;
+        }
 
         console.log(`📝 Meeting "${meeting.title || 'Untitled'}" (${meeting.startedAt.toDateString()}): ${embeddingResult.transcripts.length} transcripts with embeddings`);
         
@@ -329,31 +345,100 @@ export class RAGService {
     }>
   ): Promise<void> {
     try {
-      const meeting = await this.dbService.getMeetingById(meetingId);
-      if (!meeting) {
-        throw new Error('Meeting not found');
+      // Validate inputs
+      if (!meetingId) {
+        throw new Error('Meeting ID is required');
+      }
+      
+      if (!transcripts || transcripts.length === 0) {
+        console.log('⚠️ No transcripts provided for embedding generation');
+        return;
       }
 
+      // Validate transcript format
+      const validTranscripts = transcripts.filter(t => 
+        t.speaker && 
+        t.text && 
+        t.text.trim().length > 0 && 
+        t.timestamp instanceof Date
+      );
+
+      if (validTranscripts.length === 0) {
+        console.log('⚠️ No valid transcripts found for embedding generation');
+        return;
+      }
+
+      if (validTranscripts.length !== transcripts.length) {
+        console.log(`⚠️ Filtered ${transcripts.length} → ${validTranscripts.length} valid transcripts`);
+      }
+
+      const meeting = await this.dbService.getMeetingById(meetingId);
+      if (!meeting) {
+        throw new Error(`Meeting not found: ${meetingId}`);
+      }
+
+      console.log(`🔗 Generating embeddings for ${validTranscripts.length} transcripts in meeting: ${meeting.title || 'Untitled'}`);
+
       // Generate embeddings for all transcripts
-      const transcriptTexts = transcripts.map(t => `${t.speaker}: ${t.text}`);
+      const transcriptTexts = validTranscripts.map(t => `${t.speaker}: ${t.text}`);
       const embeddings = await this.embeddingsService.generateEmbeddings(transcriptTexts);
 
-      // Update meeting with transcripts and embeddings
-      const transcriptsWithEmbeddings = transcripts.map((transcript, index) => ({
+      if (embeddings.length !== validTranscripts.length) {
+        throw new Error(`Embeddings count mismatch: expected ${validTranscripts.length}, got ${embeddings.length}`);
+      }
+
+      // Prepare transcripts with embeddings for the new schema
+      const transcriptsWithEmbeddings = validTranscripts.map((transcript, index) => ({
+        transcriptIndex: index,
         speaker: transcript.speaker,
         text: transcript.text,
         timestamp: transcript.timestamp,
         embedding: embeddings[index]?.embedding || [],
       }));
 
-      // Update the meeting in database
-      await this.dbService.updateMeeting(meetingId, {
-        transcripts: transcriptsWithEmbeddings,
-      });
+      // Validate embeddings were generated
+      const invalidEmbeddings = transcriptsWithEmbeddings.filter(t => !t.embedding || t.embedding.length === 0);
+      if (invalidEmbeddings.length > 0) {
+        throw new Error(`${invalidEmbeddings.length} transcripts failed to generate embeddings`);
+      }
 
-      console.log(`Stored ${transcriptsWithEmbeddings.length} transcripts with embeddings for meeting ${meetingId}`);
+      // Store embeddings in the separate TranscriptEmbedding collection
+      // This method handles deletion of existing embeddings to prevent duplicates
+      await this.dbService.storeEmbeddings(meetingId, transcriptsWithEmbeddings);
+
+      // Update meeting with transcripts (without embeddings) and metadata flags
+      const updateData: any = {
+        transcripts: validTranscripts.map(transcript => ({
+          speaker: transcript.speaker,
+          text: transcript.text,
+          timestamp: transcript.timestamp,
+          // No embedding field here anymore - stored separately
+        })),
+        hasEmbeddings: true,
+        transcriptCount: validTranscripts.length,
+        // Add timestamp of when embeddings were last generated
+        embeddingsGeneratedAt: new Date(),
+      };
+
+      await this.dbService.updateMeeting(meetingId, updateData);
+
+      console.log(`✅ Successfully stored ${transcriptsWithEmbeddings.length} transcripts with embeddings for meeting ${meetingId}`);
+      
     } catch (error) {
-      console.error('Error storing transcript embeddings:', error);
+      console.error(`❌ Error storing transcript embeddings for meeting ${meetingId}:`, error);
+      
+      // Update meeting to mark embedding generation failed
+      try {
+        await this.dbService.updateMeeting(meetingId, {
+          hasEmbeddings: false,
+          transcriptCount: 0,
+          embeddingError: error instanceof Error ? error.message : 'Unknown error',
+          embeddingErrorAt: new Date(),
+        });
+      } catch (updateError) {
+        console.error('Failed to update meeting with embedding error:', updateError);
+      }
+      
       throw error;
     }
   }
@@ -405,19 +490,25 @@ export class RAGService {
         };
       }
 
+      // Only get meetings that have transcripts (content that matters for context)
       const meetings = await this.dbService.getMeetingsByRoomWithFilters({
         roomId: room._id,
         limit: 20,
       });
 
-      const totalTranscripts = meetings.reduce((sum, meeting) => 
+      // Filter meetings to only include those with actual transcript content
+      const meetingsWithContent = meetings.filter(meeting => 
+        meeting.transcripts && meeting.transcripts.length > 0
+      );
+
+      const totalTranscripts = meetingsWithContent.reduce((sum, meeting) => 
         sum + (meeting.transcripts?.length || 0), 0
       );
 
-      const meetingTypes = [...new Set(meetings.map(m => m.type))];
+      const meetingTypes = [...new Set(meetingsWithContent.map(m => m.type))];
       
       const participantCounts: Record<string, number> = {};
-      meetings.forEach(meeting => {
+      meetingsWithContent.forEach(meeting => {
         meeting.participants.forEach(participant => {
           participantCounts[participant.name] = (participantCounts[participant.name] || 0) + 1;
         });
@@ -429,7 +520,7 @@ export class RAGService {
         .map(([name]) => name);
 
       return {
-        totalMeetings: meetings.length,
+        totalMeetings: meetingsWithContent.length, // Only count meetings with actual content
         totalTranscripts,
         recentMeetingTypes: meetingTypes,
         frequentParticipants,

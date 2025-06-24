@@ -97,8 +97,8 @@ export function Dashboard() {
     fetchData();
   }, []);
 
-  const meetingRoomsPreview = meetingRooms.slice(0, 3);
-  const hasMoreRooms = meetingRooms.length > 3;
+  const meetingRoomsPreview = meetingRooms.slice(0, 6);
+  const hasMoreRooms = meetingRooms.length > 6;
 
   const handleViewAllRooms = () => {
     setShowAllRooms(true);

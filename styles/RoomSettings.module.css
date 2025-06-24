@@ -557,4 +557,138 @@
   .sectionTitle {
     font-size: 1rem;
   }
+}
+
+/* Modal Styles */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modalContent {
+  background: rgba(15, 15, 15, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.modalContent::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 30% 20%, rgba(220, 38, 38, 0.08) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.modalHeader {
+  padding: 1.5rem 1.5rem 0 1.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.modalTitle {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #ef4444;
+  letter-spacing: -0.01em;
+}
+
+.modalBody {
+  padding: 1rem 1.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.modalDescription {
+  margin: 0 0 1.5rem 0;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.6;
+  font-size: 0.875rem;
+}
+
+.modalLabel {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 0.75rem;
+}
+
+.modalLabel strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.modalActions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 0 1.5rem 1.5rem 1.5rem;
+  position: relative;
+  z-index: 1;
+}
+
+.deleteButtonModal {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+}
+
+.deleteButtonModal:hover:not(:disabled) {
+  background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 25px rgba(220, 38, 38, 0.3);
+}
+
+.deleteButtonModal:disabled {
+  background: rgba(107, 114, 128, 0.6) !important;
+  cursor: not-allowed;
+}
+
+.deleteButtonModal:disabled::before {
+  display: none;
+}
+
+/* Mobile modal adjustments */
+@media (max-width: 768px) {
+  .modalOverlay {
+    padding: 0.5rem;
+  }
+  
+  .modalContent {
+    margin: 0;
+  }
+  
+  .modalHeader,
+  .modalBody {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  
+  .modalActions {
+    padding: 0 1rem 1rem 1rem;
+    flex-direction: column-reverse;
+  }
+  
+  .modalActions button {
+    width: 100%;
+  }
 } 

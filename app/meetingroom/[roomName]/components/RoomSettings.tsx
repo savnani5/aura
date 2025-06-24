@@ -33,6 +33,7 @@ interface RoomSettingsProps {
   room: MeetingRoom;
   roomName: string;
   onRoomUpdated: () => void;
+  onRoomDeleted?: () => void;
 }
 
 interface RoomSettingsForm {
@@ -87,11 +88,16 @@ const TIME_SLOTS = [
   '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
 ];
 
-export function RoomSettings({ room, roomName, onRoomUpdated }: RoomSettingsProps) {
+export function RoomSettings({ room, roomName, onRoomUpdated, onRoomDeleted }: RoomSettingsProps) {
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  
+  // NEW: Delete functionality states
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   
   const [form, setForm] = useState<RoomSettingsForm>({
     title: '',
@@ -237,6 +243,57 @@ export function RoomSettings({ room, roomName, onRoomUpdated }: RoomSettingsProp
       });
       setHasChanges(false);
     }
+  };
+
+  // NEW: Delete functionality handlers
+  const handleDeleteRoom = async () => {
+    if (deleteConfirmText !== room.title) {
+      alert('Please type the exact room title to confirm deletion');
+      return;
+    }
+
+    setIsDeleting(true);
+    
+    try {
+      const response = await fetch(`/api/meetings/${roomName}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete meeting room');
+      }
+
+      const data = await response.json();
+      console.log('Meeting room deleted:', data);
+
+      // Show success message
+      alert(`Meeting room deleted successfully! Removed:
+• ${data.deletedCounts.room} room
+• ${data.deletedCounts.meetings} meetings  
+• ${data.deletedCounts.tasks} tasks
+• ${data.deletedCounts.embeddings} embeddings`);
+
+      // Redirect to dashboard
+      if (onRoomDeleted) {
+        onRoomDeleted();
+      } else {
+        // Fallback redirect
+        window.location.href = '/';
+      }
+    } catch (error) {
+      console.error('Error deleting meeting room:', error);
+      alert(`Failed to delete meeting room: ${(error as Error).message}`);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteConfirm(false);
+      setDeleteConfirmText('');
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setDeleteConfirmText('');
   };
 
   // Get today's date in YYYY-MM-DD format
@@ -532,8 +589,95 @@ export function RoomSettings({ room, roomName, onRoomUpdated }: RoomSettingsProp
               </div>
             </div>
           </div>
+
+          {/* Danger Zone */}
+          <div className={styles.section}>
+            <h3 className={styles.sectionTitle} style={{ color: '#dc2626' }}>⚠️ Danger Zone</h3>
+            <div className={styles.formGroup}>
+              <p className={styles.label} style={{ color: '#6b7280', marginBottom: '12px' }}>
+                Delete this meeting room permanently. This action cannot be undone and will remove:
+              </p>
+              <ul style={{ color: '#6b7280', marginLeft: '20px', marginBottom: '16px' }}>
+                <li>• The meeting room and all settings</li>
+                <li>• All meeting transcripts and recordings</li>
+                <li>• All task assignments and history</li>
+                <li>• All AI-generated embeddings and summaries</li>
+              </ul>
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={isLoading}
+                className={styles.deleteButton}
+                style={{
+                  backgroundColor: '#dc2626',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 16px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              >
+                Delete Meeting Room
+              </button>
+            </div>
+          </div>
         </form>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className={styles.modalOverlay}>
+          <div className={styles.modalContent}>
+            <div className={styles.modalHeader}>
+              <h3 className={styles.modalTitle}>
+                ⚠️ Delete Meeting Room
+              </h3>
+            </div>
+            
+            <div className={styles.modalBody}>
+              <p className={styles.modalDescription}>
+                This action cannot be undone. This will permanently delete the "{room.title}" meeting room and all associated data.
+              </p>
+              
+              <div className={styles.formGroup}>
+                <label className={styles.modalLabel}>
+                  Please type <strong>{room.title}</strong> to confirm:
+                </label>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="Type room title here..."
+                  className={styles.input}
+                  autoFocus
+                />
+              </div>
+            </div>
+            
+            <div className={styles.modalActions}>
+              <button
+                onClick={handleCancelDelete}
+                disabled={isDeleting}
+                className={styles.secondaryButton}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteRoom}
+                disabled={isDeleting || deleteConfirmText !== room.title}
+                className={`${styles.primaryButton} ${styles.deleteButtonModal}`}
+              >
+                {isDeleting ? 'Deleting...' : 'Delete Room'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className={styles.actions}>

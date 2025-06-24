@@ -1,6 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/mongodb';
 
+// Simple in-memory lock to prevent race conditions during meeting creation
+const meetingStartLocks = new Map<string, Promise<any>>();
+
+// Helper function to acquire a lock for meeting start processing
+async function withMeetingStartLock<T>(roomName: string, operation: () => Promise<T>): Promise<T> {
+  // Check if there's already an operation in progress for this room
+  const existingLock = meetingStartLocks.get(roomName);
+  if (existingLock) {
+    console.log(`🔒 Meeting start for room ${roomName} is already being processed, waiting for completion...`);
+    
+    try {
+      // Wait for the existing operation to complete and return its result
+      const result = await existingLock;
+      console.log(`✅ Meeting start for room ${roomName} completed by another request`);
+      return result;
+    } catch (error) {
+      console.log(`❌ Previous meeting start failed for room ${roomName}, continuing with new attempt`);
+      // If the previous operation failed, we'll try again
+    }
+  }
+
+  // Create a new lock for this operation
+  const operationPromise = operation();
+  meetingStartLocks.set(roomName, operationPromise);
+
+  try {
+    const result = await operationPromise;
+    return result;
+  } finally {
+    // Always clean up the lock when done
+    meetingStartLocks.delete(roomName);
+  }
+}
+
 // POST /api/meetings/start - Create a meeting record when starting/joining a meeting
 export async function POST(request: NextRequest) {
   try {
@@ -22,46 +56,75 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const db = DatabaseService.getInstance();
-    
-    // Get the meeting room details
-    const meetingRoom = await db.getMeetingRoomByName(roomId);
-    if (!meetingRoom) {
-      return NextResponse.json({ 
-        success: false, 
-        error: 'Meeting room not found' 
-      }, { status: 404 });
-    }
-    
-    // Create the meeting record
-    const meetingData = {
-      roomId: meetingRoom._id,
-      roomName: roomName,
-      title: title || meetingRoom.title || 'Meeting',
-      type: type || meetingRoom.type || 'Meeting',
-      startedAt: new Date(),
-      participants: participantName ? [{
-        name: participantName,
-        joinedAt: new Date(),
-        isHost: true
-      }] : [],
-      transcripts: [], // Will be populated during/after the meeting
-      summary: undefined, // Will be generated after the meeting
-      isRecording: false
-    };
-
-    const createdMeeting = await db.createMeeting(meetingData);
-    
-    return NextResponse.json({ 
-      success: true, 
-      data: {
-        meetingId: createdMeeting._id,
-        roomName: createdMeeting.roomName,
-        title: createdMeeting.title,
-        type: createdMeeting.type,
-        startedAt: createdMeeting.startedAt
+    // Use lock mechanism to prevent race conditions during meeting creation
+    return await withMeetingStartLock(roomName, async () => {
+      const db = DatabaseService.getInstance();
+      
+      // Check for existing active meeting first (inside lock)
+      const existingActiveMeeting = await db.getActiveMeetingByRoom(roomName);
+      if (existingActiveMeeting) {
+        console.log(`⚠️ Active meeting already exists for room ${roomName}: ${existingActiveMeeting._id}`);
+        
+        // Return the existing meeting info instead of creating a new one
+        return NextResponse.json({ 
+          success: true, 
+          message: 'Joined existing active meeting',
+          data: {
+            meetingId: existingActiveMeeting._id,
+            roomName: existingActiveMeeting.roomName,
+            title: existingActiveMeeting.title,
+            type: existingActiveMeeting.type,
+            startedAt: existingActiveMeeting.startedAt,
+            isExisting: true // Flag to indicate this was an existing meeting
+          }
+        });
       }
-    }, { status: 201 });
+      
+      // Get the meeting room details
+      const meetingRoom = await db.getMeetingRoomByName(roomId);
+      if (!meetingRoom) {
+        return NextResponse.json({ 
+          success: false, 
+          error: 'Meeting room not found' 
+        }, { status: 404 });
+      }
+      
+      console.log(`🚀 Creating new meeting for room ${roomName}`);
+      
+      // Create the meeting record (only if no active meeting exists)
+      const meetingData = {
+        roomId: meetingRoom._id,
+        roomName: roomName,
+        title: title || meetingRoom.title || 'Meeting',
+        type: type || meetingRoom.type || 'Meeting',
+        startedAt: new Date(),
+        participants: participantName ? [{
+          name: participantName,
+          joinedAt: new Date(),
+          isHost: true
+        }] : [],
+        transcripts: [], // Will be populated during/after the meeting
+        summary: undefined, // Will be generated after the meeting
+        isRecording: false
+      };
+
+      const createdMeeting = await db.createMeeting(meetingData);
+      
+      console.log(`✅ Created new meeting: ${createdMeeting._id} for room ${roomName}`);
+      
+      return NextResponse.json({ 
+        success: true, 
+        message: 'New meeting created successfully',
+        data: {
+          meetingId: createdMeeting._id,
+          roomName: createdMeeting.roomName,
+          title: createdMeeting.title,
+          type: createdMeeting.type,
+          startedAt: createdMeeting.startedAt,
+          isExisting: false // Flag to indicate this is a new meeting
+        }
+      }, { status: 201 });
+    });
     
   } catch (error) {
     console.error('Error starting meeting:', error);

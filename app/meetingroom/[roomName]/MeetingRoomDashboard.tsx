@@ -324,6 +324,7 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
                 room={room} 
                 roomName={roomName}
                 onRoomUpdated={refreshRoomData}
+                onRoomDeleted={handleBackToHome}
               />
             )}
           </div>

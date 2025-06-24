@@ -11,6 +11,40 @@ const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
 
+// Simple in-memory lock to prevent race conditions during meeting end
+const meetingEndLocks = new Map<string, Promise<any>>();
+
+// Helper function to acquire a lock for meeting end processing
+async function withMeetingEndLock<T>(meetingId: string, operation: () => Promise<T>): Promise<T> {
+  // Check if there's already an operation in progress for this meeting
+  const existingLock = meetingEndLocks.get(meetingId);
+  if (existingLock) {
+    console.log(`🔒 Meeting ${meetingId} is already being processed, waiting for completion...`);
+    
+    try {
+      // Wait for the existing operation to complete and return its result
+      const result = await existingLock;
+      console.log(`✅ Meeting ${meetingId} processing completed by another request`);
+      return result;
+    } catch (error) {
+      console.log(`❌ Previous processing failed for meeting ${meetingId}, continuing with new attempt`);
+      // If the previous operation failed, we'll try again
+    }
+  }
+
+  // Create a new lock for this operation
+  const operationPromise = operation();
+  meetingEndLocks.set(meetingId, operationPromise);
+
+  try {
+    const result = await operationPromise;
+    return result;
+  } finally {
+    // Always clean up the lock when done
+    meetingEndLocks.delete(meetingId);
+  }
+}
+
 // Helper function to deduplicate transcripts
 function deduplicateTranscripts(transcripts: Array<{
   speaker: string;
@@ -133,179 +167,219 @@ export async function POST(
       }, { status: 400 });
     }
 
-    const dbService = DatabaseService.getInstance();
-    const ragService = RAGService.getInstance();
+    // Use lock mechanism to prevent race conditions
+    return await withMeetingEndLock(meetingId, async () => {
+      const dbService = DatabaseService.getInstance();
+      const ragService = RAGService.getInstance();
 
-    // Get the meeting to verify it exists
-    const meeting = await dbService.getMeetingById(meetingId);
-    if (!meeting) {
-      return NextResponse.json({
-        success: false,
-        error: 'Meeting not found'
-      }, { status: 404 });
-    }
-
-    if (meeting.roomName !== roomName) {
-      return NextResponse.json({
-        success: false,
-        error: 'Meeting does not belong to this room'
-      }, { status: 400 });
-    }
-
-    // Check if meeting is already ended
-    if (meeting.endedAt) {
-      return NextResponse.json({
-        success: false,
-        error: 'Meeting has already ended'
-      }, { status: 400 });
-    }
-
-    console.log(`🔚 Ending meeting: ${meeting.title || meeting.type} (${meetingId})`);
-
-    // Calculate end time and duration if not provided
-    const meetingEndedAt = endedAt ? new Date(endedAt) : new Date();
-    const calculatedDuration = duration || Math.round(
-      (meetingEndedAt.getTime() - new Date(meeting.startedAt).getTime()) / (1000 * 60)
-    );
-
-    // Prepare meeting update data
-    const updateData: any = {
-      endedAt: meetingEndedAt,
-      duration: calculatedDuration
-    };
-
-    // Update participants if provided
-    if (participants.length > 0) {
-      updateData.participants = participants.map((p: any) => ({
-        ...p,
-        leftAt: p.leftAt ? new Date(p.leftAt) : meetingEndedAt
-      }));
-    }
-
-    // Store transcripts with embeddings if provided
-    let transcriptsStored = 0;
-    let processedTranscripts: any[] = [];
-    if (transcripts.length > 0) {
-      console.log(`📝 Processing ${transcripts.length} transcripts...`);
-      
-      // Validate transcript format
-      const validTranscripts = transcripts.filter((transcript: any) => 
-        transcript.speaker && 
-        transcript.text && 
-        transcript.timestamp
-      );
-
-      if (validTranscripts.length > 0) {
-        // Convert timestamp strings to Date objects if needed
-        const rawTranscripts = validTranscripts.map((transcript: any) => ({
-          speaker: transcript.speaker,
-          text: transcript.text,
-          timestamp: new Date(transcript.timestamp),
-          // Enhanced fields for speaker diarization
-          speakerConfidence: transcript.speakerConfidence,
-          deepgramSpeaker: transcript.deepgramSpeaker,
-          participantId: transcript.participantId,
-          isLocal: transcript.isLocal
-        }));
-        
-        // Apply deduplication logic before storing
-        processedTranscripts = deduplicateTranscripts(rawTranscripts);
-        transcriptsStored = processedTranscripts.length;
-        console.log(`📝 Deduplicated ${validTranscripts.length} → ${transcriptsStored} transcripts for storage`);
+      // Get the meeting to verify it exists (check again inside lock)
+      const meeting = await dbService.getMeetingById(meetingId);
+      if (!meeting) {
+        return NextResponse.json({
+          success: false,
+          error: 'Meeting not found'
+        }, { status: 404 });
       }
-    }
 
-    // CHECK: If no transcripts were processed, delete the meeting instead of saving it
-    if (transcriptsStored === 0) {
-      console.log(`🗑️ No transcripts found - deleting empty meeting record: ${meetingId}`);
-      
-      try {
-        // Delete the meeting record since it has no content
-        await dbService.deleteMeeting(meetingId);
-        console.log(`✅ Deleted empty meeting record`);
+      if (meeting.roomName !== roomName) {
+        return NextResponse.json({
+          success: false,
+          error: 'Meeting does not belong to this room'
+        }, { status: 400 });
+      }
+
+      // Check if meeting is already ended - if so, return success to prevent duplicates
+      if (meeting.endedAt) {
+        console.log(`⚠️ Meeting ${meetingId} already ended at ${meeting.endedAt}. Returning cached result to prevent duplicate.`);
         
+        // Return success response with existing meeting data to prevent duplicate processing
         return NextResponse.json({
           success: true,
-          message: 'Meeting ended but no content was recorded - meeting record removed',
+          message: 'Meeting was already ended successfully',
           data: {
-            meetingId: null, // Indicate meeting was deleted
-            roomName,
-            endedAt: meetingEndedAt.toISOString(),
-            duration: calculatedDuration,
-            transcriptsStored: 0,
-            summaryGenerated: false,
-            meetingDeleted: true,
+            meetingId: meeting._id,
+            roomName: meeting.roomName,
+            endedAt: meeting.endedAt.toISOString(),
+            duration: meeting.duration || 0,
+            transcriptsStored: meeting.transcripts?.length || 0,
+            summaryGenerated: !!meeting.summary,
+            alreadyEnded: true, // Flag to indicate this was already processed
             redirectUrl: meeting.roomId 
               ? `/meetingroom/${roomName}` 
               : '/'
           }
         });
-      } catch (deleteError) {
-        console.error('Error deleting empty meeting:', deleteError);
-        // Fall through to normal flow if deletion fails
       }
-    }
 
-    // Update meeting with end data first (only if we have transcripts)
-    await dbService.updateMeeting(meetingId, updateData);
-    console.log(`✅ Updated meeting with end data`);
+      console.log(`🔚 Ending meeting: ${meeting.title || meeting.type} (${meetingId})`);
 
-    // Now store transcripts with embeddings (after meeting update)
-    if (processedTranscripts.length > 0) {
-      try {
-        await ragService.storeTranscriptEmbeddings(meetingId, processedTranscripts);
-        console.log(`✅ Stored ${transcriptsStored} transcripts with embeddings`);
-      } catch (transcriptError) {
-        console.error('Error storing transcripts:', transcriptError);
-        // Don't fail the whole request if transcript storage fails
-        transcriptsStored = 0;
+      // Calculate end time and duration if not provided
+      const meetingEndedAt = endedAt ? new Date(endedAt) : new Date();
+      const calculatedDuration = duration || Math.round(
+        (meetingEndedAt.getTime() - new Date(meeting.startedAt).getTime()) / (1000 * 60)
+      );
+
+      // Prepare meeting update data
+      const updateData: any = {
+        endedAt: meetingEndedAt,
+        duration: calculatedDuration
+      };
+
+      // Update participants if provided
+      if (participants.length > 0) {
+        updateData.participants = participants.map((p: any) => ({
+          ...p,
+          leftAt: p.leftAt ? new Date(p.leftAt) : meetingEndedAt
+        }));
       }
-    }
 
-    // Generate summary if we have transcripts (background process)
-    let summaryGenerated = false;
-    if (transcriptsStored > 0) {
-      try {
-        console.log(`🤖 Generating AI summary...`);
+      // Store transcripts with embeddings if provided
+      let transcriptsStored = 0;
+      let processedTranscripts: any[] = [];
+      if (transcripts.length > 0) {
+        console.log(`📝 Processing ${transcripts.length} transcripts...`);
         
-        // Get the updated meeting with transcripts
-        const updatedMeeting = await dbService.getMeetingById(meetingId);
-        
-        if (updatedMeeting && updatedMeeting.transcripts.length > 0) {
-          // Generate summary using Claude AI
-          const summary = await generateMeetingSummary(
-            updatedMeeting.type,
-            updatedMeeting.transcripts,
-            participants
-          );
+        // Validate transcript format
+        const validTranscripts = transcripts.filter((transcript: any) => 
+          transcript.speaker && 
+          transcript.text && 
+          transcript.timestamp
+        );
 
-          // Update meeting with summary
-          await dbService.updateMeeting(meetingId, { summary });
-          summaryGenerated = true;
-          console.log(`✅ Generated and stored AI summary`);
+        if (validTranscripts.length > 0) {
+          // Convert timestamp strings to Date objects if needed
+          const rawTranscripts = validTranscripts.map((transcript: any) => ({
+            speaker: transcript.speaker,
+            text: transcript.text,
+            timestamp: new Date(transcript.timestamp),
+            // Enhanced fields for speaker diarization
+            speakerConfidence: transcript.speakerConfidence,
+            deepgramSpeaker: transcript.deepgramSpeaker,
+            participantId: transcript.participantId,
+            isLocal: transcript.isLocal
+          }));
+          
+          // Apply deduplication logic before storing
+          processedTranscripts = deduplicateTranscripts(rawTranscripts);
+          transcriptsStored = processedTranscripts.length;
+          console.log(`📝 Deduplicated ${validTranscripts.length} → ${transcriptsStored} transcripts for storage`);
         }
-      } catch (summaryError) {
-        console.error('Error generating summary:', summaryError);
-        // Don't fail the whole request if summary generation fails
       }
-    }
 
-    console.log(`🎉 Meeting ended successfully: ${meeting.title || meeting.type}`);
-
-    return NextResponse.json({
-      success: true,
-      message: 'Meeting ended successfully',
-      data: {
-        meetingId,
-        roomName,
-        endedAt: meetingEndedAt.toISOString(),
-        duration: calculatedDuration,
-        transcriptsStored,
-        summaryGenerated,
-        redirectUrl: meeting.roomId 
-          ? `/meetingroom/${roomName}` 
-          : '/'
+      // CHECK: If no transcripts were processed, delete the meeting instead of saving it
+      if (transcriptsStored === 0) {
+        console.log(`🗑️ No transcripts found - deleting empty meeting record: ${meetingId}`);
+        
+        try {
+          // Delete the meeting record since it has no content
+          await dbService.deleteMeeting(meetingId);
+          console.log(`✅ Deleted empty meeting record`);
+          
+          return NextResponse.json({
+            success: true,
+            message: 'Meeting ended but no content was recorded - meeting record removed',
+            data: {
+              meetingId: null, // Indicate meeting was deleted
+              roomName,
+              endedAt: meetingEndedAt.toISOString(),
+              duration: calculatedDuration,
+              transcriptsStored: 0,
+              summaryGenerated: false,
+              meetingDeleted: true,
+              redirectUrl: meeting.roomId 
+                ? `/meetingroom/${roomName}` 
+                : '/'
+            }
+          });
+        } catch (deleteError) {
+          console.error('Error deleting empty meeting:', deleteError);
+          // Fall through to normal flow if deletion fails
+        }
       }
+
+      // Update meeting with end data first (only if we have transcripts)
+      await dbService.updateMeeting(meetingId, updateData);
+      console.log(`✅ Updated meeting with end data`);
+
+      // Now store transcripts with embeddings (after meeting update)
+      if (processedTranscripts.length > 0) {
+        try {
+          console.log(`📝 Storing ${processedTranscripts.length} transcripts with embeddings...`);
+          
+          // Check if embeddings already exist for this meeting to prevent duplication
+          const existingEmbeddings = await dbService.getEmbeddingsByMeeting([meetingId]);
+          const alreadyHasEmbeddings = existingEmbeddings.length > 0 && existingEmbeddings[0]?.transcripts?.length > 0;
+          
+          if (alreadyHasEmbeddings) {
+            console.log(`⚠️ Meeting ${meetingId} already has ${existingEmbeddings[0].transcripts.length} embeddings - skipping embedding generation`);
+            transcriptsStored = processedTranscripts.length; // Mark as stored since they exist
+          } else {
+            // Store transcripts with embeddings using RAG service
+            await ragService.storeTranscriptEmbeddings(meetingId, processedTranscripts);
+            console.log(`✅ Stored ${transcriptsStored} transcripts with embeddings`);
+            
+            // Verify embeddings were actually stored
+            const verifyEmbeddings = await dbService.getEmbeddingsByMeeting([meetingId]);
+            if (verifyEmbeddings.length === 0 || verifyEmbeddings[0]?.transcripts?.length === 0) {
+              console.error(`❌ Embedding verification failed - no embeddings found after storage`);
+              transcriptsStored = 0;
+            } else {
+              console.log(`✅ Verified ${verifyEmbeddings[0].transcripts.length} embeddings stored successfully`);
+            }
+          }
+        } catch (transcriptError) {
+          console.error('Error storing transcripts with embeddings:', transcriptError);
+          // Don't fail the whole request if transcript storage fails, but log it clearly
+          transcriptsStored = 0;
+          console.log(`⚠️ Meeting ended successfully but transcript embeddings failed to store`);
+        }
+      }
+
+      // Generate summary if we have transcripts (background process)
+      let summaryGenerated = false;
+      if (transcriptsStored > 0) {
+        try {
+          console.log(`🤖 Generating AI summary...`);
+          
+          // Get the updated meeting with transcripts
+          const updatedMeeting = await dbService.getMeetingById(meetingId);
+          
+          if (updatedMeeting && updatedMeeting.transcripts.length > 0) {
+            // Generate summary using Claude AI
+            const summary = await generateMeetingSummary(
+              updatedMeeting.type,
+              updatedMeeting.transcripts,
+              participants
+            );
+
+            // Update meeting with summary
+            await dbService.updateMeeting(meetingId, { summary });
+            summaryGenerated = true;
+            console.log(`✅ Generated and stored AI summary`);
+          }
+        } catch (summaryError) {
+          console.error('Error generating summary:', summaryError);
+          // Don't fail the whole request if summary generation fails
+        }
+      }
+
+      console.log(`🎉 Meeting ended successfully: ${meeting.title || meeting.type}`);
+
+      return NextResponse.json({
+        success: true,
+        message: 'Meeting ended successfully',
+        data: {
+          meetingId,
+          roomName,
+          endedAt: meetingEndedAt.toISOString(),
+          duration: calculatedDuration,
+          transcriptsStored,
+          summaryGenerated,
+          redirectUrl: meeting.roomId 
+            ? `/meetingroom/${roomName}` 
+            : '/'
+        }
+      });
     });
 
   } catch (error) {
