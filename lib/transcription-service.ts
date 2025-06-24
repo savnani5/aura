@@ -631,6 +631,17 @@ export class TranscriptionService {
           };
           
           if (isFinal) {
+            // Filter out low confidence speaker attributions (40% or less) for debounced transcripts too
+            if (debouncedSpeaker.confidence <= 0.4) {
+              console.log('🔍 SKIPPING LOW CONFIDENCE DEBOUNCED TRANSCRIPT:', {
+                speaker: debouncedSpeaker.name,
+                confidence: debouncedSpeaker.confidence,
+                text: transcriptText.substring(0, 50) + '...',
+                reason: 'Debounced speaker confidence too low (≤40%)'
+              });
+              return; // Skip this transcript to avoid incorrect speaker attribution
+            }
+            
             const finalTranscript: Transcript = {
               speaker: debouncedSpeaker.name,
               text: transcriptText,
@@ -665,6 +676,17 @@ export class TranscriptionService {
         // Only send final transcripts to avoid duplication
         // Deepgram sends interim results with cumulative text, then a final result
         if (isFinal) {
+          // Filter out low confidence speaker attributions (40% or less)
+          if (speaker.confidence <= 0.4) {
+            console.log('🔍 SKIPPING LOW CONFIDENCE TRANSCRIPT:', {
+              speaker: speaker.name,
+              confidence: speaker.confidence,
+              text: transcriptText.substring(0, 50) + '...',
+              reason: 'Speaker confidence too low (≤40%)'
+            });
+            return; // Skip this transcript to avoid incorrect speaker attribution
+          }
+          
           const finalTranscript: Transcript = {
             speaker: speaker.name,
             text: transcriptText,

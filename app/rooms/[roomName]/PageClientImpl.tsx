@@ -58,7 +58,7 @@ export function PageClientImpl(props: {
   );
   const preJoinDefaults = React.useMemo(() => {
     return {
-      username: 'Guest',
+      username: '',
       videoEnabled: true,
       audioEnabled: true,
     };
@@ -282,7 +282,7 @@ function VideoConferenceComponent(props: {
           
           const userName = localStorage.getItem('meetingSettings')?.includes('participantName') 
             ? JSON.parse(localStorage.getItem('meetingSettings') || '{}').participantName 
-            : 'Guest';
+            : props.userChoices.username || 'Participant';
           
           const response = await fetch('/api/meetings/start', {
             method: 'POST',

@@ -391,6 +391,17 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
 
   // Share transcript with other participants via data channel
   const shareTranscript = useCallback((transcript: Transcript) => {
+    // Filter out low confidence transcripts (30% or less) to prevent incorrect speaker attribution
+    if (transcript.speakerConfidence !== undefined && transcript.speakerConfidence <= 0.3) {
+      console.log('🔍 TRANSCRIPT SHARE: Skipping low confidence transcript:', {
+        speaker: transcript.speaker,
+        confidence: transcript.speakerConfidence,
+        text: transcript.text.substring(0, 50) + '...',
+        reason: 'Speaker confidence too low (≤30%)'
+      });
+      return;
+    }
+    
     // Check if room and connection are still active before sharing
     if (!room?.localParticipant || !sendData || room.state !== 'connected') {
       console.log('🔍 TRANSCRIPT SHARE: Skipping share - room not connected or missing dependencies:', {
@@ -499,6 +510,17 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
           entryId: data.entryId,
           timestamp: new Date(data.timestamp).toLocaleTimeString()
         });
+        
+        // Filter out low confidence transcripts from remote participants too
+        if (data.speakerConfidence !== undefined && data.speakerConfidence <= 0.3) {
+          console.log('🔍 TRANSCRIPT RECEIVED: Skipping low confidence remote transcript:', {
+            speaker: data.speaker,
+            confidence: data.speakerConfidence,
+            text: data.text.substring(0, 50) + '...',
+            reason: 'Remote speaker confidence too low (≤30%)'
+          });
+          return;
+        }
         
         if (data.type === 'transcript' || data.type === 'transcript_update') {
           setSharedTranscripts(prev => {
@@ -1173,7 +1195,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                       disabled={isAiProcessing}
                       title="Web Search"
                     >
-                      🌐
+                      🌐 Web
                     </button>
                   </div>
                   <div className="chat-input-row">

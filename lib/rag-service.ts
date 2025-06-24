@@ -99,9 +99,9 @@ export class RAGService {
 
       console.log(`✅ Found room: ${room.title} (${room.roomName})`);
 
-      // Detect query type
+      // Detect query type for comprehensive vs targeted search
       const queryType = this.detectQueryType(query);
-      console.log(`🎯 Query type detected: ${queryType}`);
+      console.log(`🎯 Query type: ${queryType}`);
 
       // Generate embedding for query
       const queryEmbedding = await this.embeddingsService.generateEmbedding(query);
@@ -130,20 +130,16 @@ export class RAGService {
         console.log(`🚫 No current transcripts - currentTranscripts: ${!!currentTranscripts}, isLiveMeeting: ${isLiveMeeting}`);
       }
 
-      // Get historical meetings metadata (without transcripts for performance)
-      const historicalMeetings = await this.dbService.getMeetingMetadata(room._id, {
-        limit: queryType === 'comprehensive' ? 20 : 10,
+      // Get historical meetings metadata AND full meeting details for summary context
+      const historicalMeetings = await this.dbService.getMeetingsByRoomWithFilters({
+        roomId: room._id,
+        limit: queryType === 'comprehensive' ? 15 : 10,
+        includeTranscripts: false // We'll get embeddings separately
       });
 
       console.log(`📚 Found ${historicalMeetings.length} historical meetings for room ${room.title}`);
 
-      // Instead of filtering by hasEmbeddings flag, get all meeting IDs and let 
-      // getEmbeddingsByMeeting filter out meetings without embeddings
-      const meetingIds = historicalMeetings.map(m => m._id);
-      
-      console.log(`🔍 Querying embeddings for ${meetingIds.length} meetings`);
-
-      if (meetingIds.length === 0) {
+      if (historicalMeetings.length === 0) {
         console.log(`⚠️ No meetings found for room`);
         return {
           currentTranscripts: currentTranscriptContext,
@@ -153,7 +149,8 @@ export class RAGService {
         };
       }
 
-      // Get embeddings for relevant meetings (this will only return meetings that actually have embeddings)
+      // Get embeddings for relevant meetings
+      const meetingIds = historicalMeetings.map(m => m._id);
       const embeddingResults = await this.dbService.getEmbeddingsByMeeting(meetingIds);
       
       console.log(`🔗 Found embeddings for ${embeddingResults.length}/${meetingIds.length} meetings`);
@@ -171,7 +168,6 @@ export class RAGService {
       // Extract all historical transcripts with embeddings
       const allHistoricalTranscripts: TranscriptContext[] = [];
       for (const embeddingResult of embeddingResults) {
-        // Convert meetingId to string for comparison since embeddingResult.meetingId is a string
         const meeting = historicalMeetings.find(m => m._id.toString() === embeddingResult.meetingId);
         if (!meeting) {
           console.log(`⚠️ Meeting metadata not found for embedding result: ${embeddingResult.meetingId}`);
@@ -180,13 +176,16 @@ export class RAGService {
 
         console.log(`📝 Meeting "${meeting.title || 'Untitled'}" (${meeting.startedAt.toDateString()}): ${embeddingResult.transcripts.length} transcripts with embeddings`);
         
+        // Get all participants in this meeting for context
+        const allParticipants = meeting.participants?.map((p: any) => p.name).join(', ') || 'Unknown participants';
+        
         for (const transcript of embeddingResult.transcripts) {
           allHistoricalTranscripts.push({
             speaker: transcript.speaker,
             text: transcript.text,
             timestamp: transcript.timestamp,
-            meetingId: meeting._id,
-            meetingType: meeting.type,
+            meetingId: meeting._id.toString(),
+            meetingType: `${meeting.type} (All participants: ${allParticipants})`,
             meetingDate: meeting.startedAt,
             embedding: transcript.embedding,
           });
@@ -195,79 +194,67 @@ export class RAGService {
 
       console.log(`🔍 Total historical transcripts with embeddings: ${allHistoricalTranscripts.length}`);
 
-      // Rank transcripts by similarity to query
-      const rankedTranscripts = allHistoricalTranscripts
-        .map(transcript => ({
-          ...transcript,
-          similarity: this.embeddingsService.calculateCosineSimilarity(
-            queryEmbedding.embedding,
-            transcript.embedding
-          ),
-        }))
-        .sort((a, b) => b.similarity - a.similarity);
-
-      console.log(`📊 Similarity scores (top 5): ${rankedTranscripts.slice(0, 5).map(t => `${t.similarity.toFixed(3)}`).join(', ')}`);
-
-      // Select top relevant transcripts based on query type
-      const relevanceThreshold = queryType === 'specific' ? 0.65 : 0.45;
-      const maxTranscripts = queryType === 'comprehensive' ? 15 : 8;
-
+      // Enhanced context retrieval with meeting summaries
       let historicalContext: TranscriptContext[] = [];
 
-      if (queryType === 'comprehensive') {
-        // For comprehensive queries, include more context with lower threshold
-        console.log(`🌐 Using comprehensive retrieval strategy`);
+      // Always include meeting summaries that might mention participants or topics
+      let meetingSummaryContext: TranscriptContext[] = [];
+      try {
+        console.log(`📋 Checking meeting summaries for relevant content...`);
         
-        // Get more results with a lower threshold for comprehensive coverage
-        const relevantHistorical = rankedTranscripts
-          .filter(item => item.similarity >= relevanceThreshold)
-          .slice(0, maxTranscripts);
-
-        // If we still don't get enough results, include recent transcripts
-        if (relevantHistorical.length < 15) {
-          console.log(`📈 Comprehensive query needs more context, including recent transcripts`);
-          
-          // Sort by recency and include recent transcripts even with lower similarity
-          const recentTranscripts = rankedTranscripts
-            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-            .slice(0, 20); // Top 20 most recent
-
-          // Combine similarity-based and recency-based results
-          const combinedResults = new Map();
-          
-          // Add similarity-based results first
-          relevantHistorical.forEach(item => {
-            combinedResults.set(`${item.meetingId}-${item.timestamp}`, {
-              ...item,
-              similarity: item.similarity,
+        for (const meeting of historicalMeetings) {
+          if (meeting.summary && meeting.summary.content) {
+            console.log(`📝 Found summary for meeting "${meeting.title || 'Untitled'}"`);
+            
+            // Create a synthetic transcript entry from the meeting summary
+            meetingSummaryContext.push({
+              speaker: 'AI Summary',
+              text: `Meeting Summary: ${meeting.summary.content}`,
+              timestamp: meeting.startedAt,
+              meetingId: meeting._id.toString(),
+              meetingType: `${meeting.type} (All participants: ${meeting.participants?.map((p: any) => p.name).join(', ') || 'Unknown'})`,
+              meetingDate: meeting.startedAt,
+              embedding: [], // Will be filled with relevance score
+              similarity: 0.85 // High relevance for summaries
             });
-          });
-
-          // Add recent results if not already included
-          recentTranscripts.forEach(item => {
-            const key = `${item.meetingId}-${item.timestamp}`;
-            if (!combinedResults.has(key) && combinedResults.size < 25) {
-              combinedResults.set(key, item);
-            }
-          });
-
-          historicalContext = Array.from(combinedResults.values());
-        } else {
-          historicalContext = relevantHistorical;
+          }
         }
-
-      } else {
-        // For targeted queries, use higher threshold and fewer results
-        console.log(`🎯 Using targeted retrieval strategy`);
         
-        const relevantHistorical = rankedTranscripts
-          .filter(item => item.similarity >= relevanceThreshold)
-          .slice(0, maxTranscripts);
-
-        historicalContext = relevantHistorical;
+        console.log(`📋 Found ${meetingSummaryContext.length} meeting summaries`);
+      } catch (summaryError) {
+        console.log(`⚠️ Error checking meeting summaries:`, summaryError);
       }
 
-      console.log(`✅ Retrieved ${historicalContext.length} relevant historical transcripts`);
+      // Use general semantic search for all queries
+      const transcriptContext = await this.getGeneralContext(
+        allHistoricalTranscripts,
+        queryEmbedding.embedding,
+        queryType
+      );
+
+      // Combine summaries with transcript context
+      historicalContext = [...meetingSummaryContext, ...transcriptContext];
+
+      // Sort by relevance and recency, prioritizing summaries
+      historicalContext = historicalContext
+        .sort((a, b) => {
+          // Prioritize summaries first
+          if (a.speaker === 'AI Summary' && b.speaker !== 'AI Summary') return -1;
+          if (b.speaker === 'AI Summary' && a.speaker !== 'AI Summary') return 1;
+          
+          // Then by similarity/relevance
+          const aSimilarity = a.similarity || 0;
+          const bSimilarity = b.similarity || 0;
+          if (Math.abs(aSimilarity - bSimilarity) > 0.1) {
+            return bSimilarity - aSimilarity;
+          }
+          
+          // Finally by recency
+          return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        })
+        .slice(0, 25); // Limit total results
+
+      console.log(`✅ Retrieved ${historicalContext.length} relevant historical transcripts (${meetingSummaryContext.length} summaries + ${historicalContext.length - meetingSummaryContext.length} transcripts)`);
       console.log(`📋 Current transcript context: ${currentTranscriptContext.length} entries`);
       
       const totalRelevantTranscripts = historicalContext.length + currentTranscriptContext.length;
@@ -291,6 +278,84 @@ export class RAGService {
         usedContext: false,
       };
     }
+  }
+
+  /**
+   * Get general context using existing similarity-based approach
+   */
+  private async getGeneralContext(
+    allTranscripts: TranscriptContext[],
+    queryEmbedding: number[],
+    queryType: 'comprehensive' | 'targeted' | 'specific'
+  ): Promise<TranscriptContext[]> {
+    // Rank transcripts by similarity to query
+    const rankedTranscripts = allTranscripts
+      .map(transcript => ({
+        ...transcript,
+        similarity: this.embeddingsService.calculateCosineSimilarity(
+          queryEmbedding,
+          transcript.embedding
+        ),
+      }))
+      .sort((a, b) => b.similarity - a.similarity);
+
+    console.log(`📊 Similarity scores (top 5): ${rankedTranscripts.slice(0, 5).map(t => `${t.similarity.toFixed(3)}`).join(', ')}`);
+
+    // Select top relevant transcripts based on query type
+    const relevanceThreshold = queryType === 'specific' ? 0.65 : 0.45;
+    const maxTranscripts = queryType === 'comprehensive' ? 15 : 8;
+
+    let historicalContext: TranscriptContext[] = [];
+
+    if (queryType === 'comprehensive') {
+      // For comprehensive queries, include more context with lower threshold
+      console.log(`🌐 Using comprehensive retrieval strategy`);
+      
+      const relevantHistorical = rankedTranscripts
+        .filter(item => item.similarity >= relevanceThreshold)
+        .slice(0, maxTranscripts);
+
+      // If we still don't get enough results, include recent transcripts
+      if (relevantHistorical.length < 15) {
+        console.log(`📈 Comprehensive query needs more context, including recent transcripts`);
+        
+        const recentTranscripts = rankedTranscripts
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          .slice(0, 20);
+
+        const combinedResults = new Map();
+        
+        relevantHistorical.forEach(item => {
+          combinedResults.set(`${item.meetingId}-${item.timestamp}`, {
+            ...item,
+            similarity: item.similarity,
+          });
+        });
+
+        recentTranscripts.forEach(item => {
+          const key = `${item.meetingId}-${item.timestamp}`;
+          if (!combinedResults.has(key) && combinedResults.size < 25) {
+            combinedResults.set(key, item);
+          }
+        });
+
+        historicalContext = Array.from(combinedResults.values());
+      } else {
+        historicalContext = relevantHistorical;
+      }
+
+    } else {
+      // For targeted queries, use higher threshold and fewer results
+      console.log(`🎯 Using targeted retrieval strategy`);
+      
+      const relevantHistorical = rankedTranscripts
+        .filter(item => item.similarity >= relevanceThreshold)
+        .slice(0, maxTranscripts);
+
+      historicalContext = relevantHistorical;
+    }
+
+    return historicalContext;
   }
 
   /**
@@ -451,6 +516,7 @@ export class RAGService {
 
     if (context.currentTranscripts.length > 0) {
       prompt += 'CURRENT MEETING TRANSCRIPTS:\n';
+      prompt += '(This is what was just said in the live meeting)\n';
       context.currentTranscripts.forEach(transcript => {
         prompt += `${transcript.speaker}: ${transcript.text}\n`;
       });
@@ -459,12 +525,64 @@ export class RAGService {
 
     if (context.historicalContext.length > 0) {
       prompt += 'RELEVANT HISTORICAL CONTEXT:\n';
+      prompt += '(These are relevant excerpts from past meetings in this room)\n';
+      
+      // Group by meeting for better context and include meeting summaries
+      const transcriptsByMeeting = new Map<string, TranscriptContext[]>();
       context.historicalContext.forEach(transcript => {
-        const meetingInfo = transcript.meetingType;
-        const similarity = transcript.similarity ? ` (${Math.round(transcript.similarity * 100)}% relevant)` : '';
-        prompt += `[${meetingInfo}${similarity}] ${transcript.speaker}: ${transcript.text}\n`;
+        const key = transcript.meetingId;
+        if (!transcriptsByMeeting.has(key)) {
+          transcriptsByMeeting.set(key, []);
+        }
+        transcriptsByMeeting.get(key)!.push(transcript);
       });
-      prompt += '\n';
+
+      // Sort meetings by date (most recent first)
+      const sortedMeetings = Array.from(transcriptsByMeeting.entries())
+        .sort(([, transcriptsA], [, transcriptsB]) => {
+          const dateA = transcriptsA[0]?.meetingDate || new Date(0);
+          const dateB = transcriptsB[0]?.meetingDate || new Date(0);
+          return dateB.getTime() - dateA.getTime();
+        });
+
+      // Format each meeting's context with enhanced metadata
+      for (const [meetingId, transcripts] of sortedMeetings) {
+        const firstTranscript = transcripts[0];
+        const meetingDate = firstTranscript.meetingDate.toLocaleDateString();
+        
+        // Enhanced meeting type parsing
+        const meetingTypeInfo = firstTranscript.meetingType || 'Meeting';
+        const meetingType = meetingTypeInfo.split(' (All participants:')[0];
+        const allParticipantsMatch = meetingTypeInfo.match(/\(All participants: ([^)]+)\)/);
+        const allParticipants = allParticipantsMatch ? allParticipantsMatch[1] : 'Unknown';
+        
+        // Get speakers who actually spoke in this segment
+        const speakers = [...new Set(transcripts.map(t => t.speaker))];
+        
+        // Enhanced header with participant context
+        prompt += `\n--- MEETING: ${meetingType} (${meetingDate}) ---\n`;
+        prompt += `Participants in meeting: ${allParticipants}\n`;
+        prompt += `Speakers in this excerpt: ${speakers.join(', ')}\n`;
+        
+        // Add meeting summary if we can get it (this requires fetching meeting details)
+        // For now, we'll note that this is transcript-level context
+        prompt += `Context: Selected relevant excerpts from meeting transcript\n`;
+        prompt += `Relevance scores: ${transcripts.map(t => t.similarity?.toFixed(3) || 'N/A').join(', ')}\n\n`;
+
+        // Sort transcripts within meeting by timestamp for chronological order
+        const sortedTranscripts = transcripts.sort((a, b) => 
+          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+        );
+
+        // Format transcript excerpts with enhanced context
+        sortedTranscripts.forEach((transcript, index) => {
+          const timestamp = transcript.timestamp.toLocaleTimeString();
+          const similarityIndicator = transcript.similarity ? ` [similarity: ${transcript.similarity.toFixed(3)}]` : '';
+          prompt += `[${timestamp}] ${transcript.speaker}: ${transcript.text}${similarityIndicator}\n`;
+        });
+        
+        prompt += '\n';
+      }
     }
 
     return prompt;
