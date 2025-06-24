@@ -641,7 +641,7 @@ export function RoomSettings({ room, roomName, onRoomUpdated, onRoomDeleted }: R
             
             <div className={styles.modalBody}>
               <p className={styles.modalDescription}>
-                This action cannot be undone. This will permanently delete the "{room.title}" meeting room and all associated data.
+                This action cannot be undone. This will permanently delete the &ldquo;{room.title}&rdquo; meeting room and all associated data.
               </p>
               
               <div className={styles.formGroup}>
