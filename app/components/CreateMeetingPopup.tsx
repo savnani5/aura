@@ -21,6 +21,8 @@ interface MeetingRoomForm {
   frequency: string;
   recurringDay: string;
   recurringTime: string;
+  recurringDuration: number;
+  recurringTimezone: string;
 }
 
 interface QuickRoomForm {
@@ -64,11 +66,48 @@ const TIME_SLOTS = [
   '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
 ];
 
+const COMMON_TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern Time (US)' },
+  { value: 'America/Chicago', label: 'Central Time (US)' },
+  { value: 'America/Denver', label: 'Mountain Time (US)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (US)' },
+  { value: 'Europe/London', label: 'London (GMT/BST)' },
+  { value: 'Europe/Paris', label: 'Paris (CET/CEST)' },
+  { value: 'Europe/Berlin', label: 'Berlin (CET/CEST)' },
+  { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
+  { value: 'Asia/Shanghai', label: 'Shanghai (CST)' },
+  { value: 'Asia/Kolkata', label: 'India (IST)' },
+  { value: 'Australia/Sydney', label: 'Sydney (AEDT/AEST)' },
+  { value: 'UTC', label: 'UTC (Coordinated Universal Time)' }
+];
+
+const DURATION_OPTIONS = [
+  { value: 15, label: '15 minutes' },
+  { value: 30, label: '30 minutes' },
+  { value: 45, label: '45 minutes' },
+  { value: 60, label: '1 hour' },
+  { value: 90, label: '1.5 hours' },
+  { value: 120, label: '2 hours' },
+  { value: 180, label: '3 hours' }
+];
+
 export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: CreateMeetingPopupProps) {
   const router = useRouter();
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
   const [createMode, setCreateMode] = useState<CreateMode>('selection');
+  
+  // Detect user's timezone
+  const getUserTimezone = () => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (error) {
+      console.warn('Unable to detect timezone, falling back to UTC:', error);
+      return 'UTC';
+    }
+  };
+
+  const defaultTimezone = getUserTimezone();
   
   // Form state for full setup
   const [form, setForm] = useState<MeetingRoomForm>({
@@ -79,7 +118,9 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
     endDate: '',
     frequency: 'weekly',
     recurringDay: '',
-    recurringTime: ''
+    recurringTime: '',
+    recurringDuration: 60,
+    recurringTimezone: defaultTimezone
   });
 
   // Form state for quick room
@@ -101,7 +142,9 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
         endDate: '',
         frequency: 'weekly',
         recurringDay: '',
-        recurringTime: ''
+        recurringTime: '',
+        recurringDuration: 60,
+        recurringTimezone: defaultTimezone
       });
       setQuickForm({
         title: '',
@@ -165,7 +208,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
       console.log('Quick meeting room created:', data);
 
       // Show success message
-      toast.success(`Meeting room "${quickForm.title}" created successfully! You can configure more settings in the room dashboard.`);
+      toast.success(`Workspace "${quickForm.title}" created successfully! You can configure more settings in the room dashboard.`);
 
       // Notify parent component that a meeting room was created (this will refresh the data and close popup)
       onMeetingCreated?.();
@@ -219,7 +262,9 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
         endDate: form.endDate,
         frequency: form.frequency,
         recurringDay: form.recurringDay,
-        recurringTime: form.recurringTime
+        recurringTime: form.recurringTime,
+        recurringDuration: form.recurringDuration,
+        recurringTimezone: form.recurringTimezone
       };
 
       console.log('Creating meeting room with data:', requestData);
@@ -243,7 +288,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
       console.log('Meeting room created:', data);
 
       // Show success message
-      toast.success(`Meeting room "${form.title}" created successfully! You can now see it in your meeting rooms.`);
+      toast.success(`Workspace "${form.title}" created successfully! You can now see it in your workspaces.`);
 
       // Reset form for next use
       setForm({
@@ -254,7 +299,9 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
         endDate: '',
         frequency: 'daily',
         recurringDay: '',
-        recurringTime: ''
+        recurringTime: '',
+        recurringDuration: 0,
+        recurringTimezone: defaultTimezone
       });
 
       // Notify parent component that a meeting room was created (this will refresh the data and close popup)
@@ -336,7 +383,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
                 <polyline points="12,6 12,12 16,14" stroke="currentColor" strokeWidth="2"/>
               </svg>
             </div>
-            Quick Room
+            Quick Workspace
           </button>
           
           <button 
@@ -351,7 +398,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
                 <line x1="3" y1="10" x2="21" y2="10" stroke="currentColor" strokeWidth="2"/>
               </svg>
             </div>
-            Scheduled Room
+            Scheduled Workspace
           </button>
         </div>
       </div>
@@ -363,7 +410,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
       <form onSubmit={handleCreateQuickRoom} className={styles.createForm}>
         <div className={styles.formGroup}>
           <label htmlFor="quickTitle" className={styles.label}>
-            Meeting Room Title *
+            Workspace Title *
           </label>
           <input
             id="quickTitle"
@@ -411,7 +458,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
             disabled={isLoading || !quickForm.title.trim()}
             className={styles.primaryButton}
           >
-            {isLoading ? 'Creating...' : 'Create Quick Room'}
+            {isLoading ? 'Creating...' : 'Create Quick Workspace'}
           </button>
         </div>
       </form>
@@ -423,7 +470,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
       <form onSubmit={handleCreateRoom} className={styles.createForm}>
         <div className={styles.formGroup}>
           <label htmlFor="title" className={styles.label}>
-            Meeting Room Title *
+            Workspace Title *
           </label>
           <input
             id="title"
@@ -574,6 +621,43 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
 
         <div className={styles.formGroup}>
           <label className={styles.label}>
+            Duration
+          </label>
+          <select
+            value={form.recurringDuration}
+            onChange={(e) => setForm(prev => ({ ...prev, recurringDuration: Number(e.target.value) }))}
+            className={styles.select}
+            required
+          >
+            {DURATION_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.label}>
+            Timezone
+          </label>
+          <div className={styles.timezoneContainer}>
+            <select
+              id="timezone"
+              value={form.recurringTimezone}
+              onChange={(e) => setForm(prev => ({ ...prev, recurringTimezone: e.target.value }))}
+              className={styles.select}
+              required
+            >
+              {COMMON_TIMEZONES.map((timezone) => (
+                <option key={timezone.value} value={timezone.value}>{timezone.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className={styles.formGroup}>
+          <label className={styles.label}>
             Participants
           </label>
           <div className={styles.participantsList}>
@@ -653,10 +737,10 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
           </button>
           <button
             type="submit"
-            disabled={isLoading || !form.title.trim() || !form.type.trim() || !form.startDate || !form.endDate || (form.frequency !== 'daily' && !form.recurringDay) || !form.recurringTime}
+            disabled={isLoading || !form.title.trim() || !form.type.trim() || !form.startDate || !form.endDate || (form.frequency !== 'daily' && !form.recurringDay) || !form.recurringTime || !form.recurringTimezone}
             className={styles.primaryButton}
           >
-            {isLoading ? 'Creating...' : 'Create Meeting Room'}
+            {isLoading ? 'Creating...' : 'Create Workspace'}
           </button>
         </div>
       </form>
@@ -667,7 +751,7 @@ export function CreateMeetingPopup({ isOpen, onClose, onMeetingCreated }: Create
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.popup} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
-          <h2 className={styles.title}>Create Meeting Room</h2>
+          <h2 className={styles.title}>Create Workspace</h2>
           <button onClick={onClose} className={styles.closeButton}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>

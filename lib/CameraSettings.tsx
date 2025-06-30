@@ -11,15 +11,15 @@ import { BackgroundBlur, VirtualBackground } from '@livekit/track-processors';
 import { isLocalTrack, LocalTrackPublication, Track } from 'livekit-client';
 
 // Background image paths - ensure these are in public/background-images/
-const BACKGROUND_IMAGES = [
-  { 
-    name: 'Desk', 
-    url: '/background-images/samantha-gades-BlIhVfXbi9s-unsplash.jpg'
-  },
-  { 
-    name: 'Nature', 
-    url: '/background-images/ali-kazal-tbw_KQE3Cbg-unsplash.jpg'
-  },
+const BACKGROUND_IMAGES: Array<{ name: string; url: string }> = [
+  // { 
+  //   name: 'Desk', 
+  //   url: '/background-images/samantha-gades-BlIhVfXbi9s-unsplash.jpg'
+  // },
+  // { 
+  //   name: 'Nature', 
+  //   url: '/background-images/ali-kazal-tbw_KQE3Cbg-unsplash.jpg'
+  // },
 ];
 
 // Background options
@@ -40,6 +40,38 @@ export function CameraSettings() {
   );
 
   const [imagesLoaded, setImagesLoaded] = React.useState(false);
+
+  // Camera mirroring state - default to true (flipped/mirrored)
+  const [isMirrored, setIsMirrored] = React.useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('camera-mirrored');
+      return saved !== null ? JSON.parse(saved) : true; // Default to mirrored
+    }
+    return true;
+  });
+
+  // Save mirror preference to localStorage
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('camera-mirrored', JSON.stringify(isMirrored));
+      
+      // Also save to a global CSS custom property to apply to all local participant videos
+      document.documentElement.style.setProperty(
+        '--local-camera-transform', 
+        isMirrored ? 'scaleX(-1)' : 'scaleX(1)'
+      );
+    }
+  }, [isMirrored]);
+
+  // Initialize global CSS custom property on mount
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      document.documentElement.style.setProperty(
+        '--local-camera-transform', 
+        isMirrored ? 'scaleX(-1)' : 'scaleX(1)'
+      );
+    }
+  }, []);
 
   // Preload background images
   React.useEffect(() => {
@@ -97,6 +129,10 @@ export function CameraSettings() {
     }
   };
 
+  const toggleMirror = () => {
+    setIsMirrored(!isMirrored);
+  };
+
   React.useEffect(() => {
     if (isLocalTrack(cameraTrack?.track)) {
       if (backgroundType === 'blur') {
@@ -117,7 +153,7 @@ export function CameraSettings() {
             maxHeight: '280px',
             objectFit: 'contain',
             objectPosition: 'right',
-            transform: 'scaleX(-1)',
+            transform: isMirrored ? 'scaleX(-1)' : 'scaleX(1)',
           }}
           trackRef={camTrackRef}
         />
@@ -129,6 +165,43 @@ export function CameraSettings() {
           <MediaDeviceMenu kind="videoinput" />
         </div>
       </section>
+
+      <div style={{ marginTop: '10px' }}>
+        <div style={{ marginBottom: '8px' }}>Camera Settings</div>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '15px' }}>
+          <button
+            onClick={toggleMirror}
+            className="lk-button"
+            aria-pressed={isMirrored}
+            style={{
+              border: isMirrored ? '2px solid #0090ff' : '1px solid #d1d1d1',
+              minWidth: '100px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              fontSize: '12px',
+            }}
+            title={isMirrored ? 'Camera is mirrored - click to show normal view' : 'Camera is normal - click to mirror'}
+          >
+            <svg 
+              width="14" 
+              height="14" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              xmlns="http://www.w3.org/2000/svg"
+              style={{ transform: isMirrored ? 'scaleX(-1)' : 'scaleX(1)' }}
+            >
+              <path 
+                d="M21 6H3C2.45 6 2 6.45 2 7V17C2 17.55 2.45 18 3 18H21C21.55 18 22 17.55 22 17V7C22 6.45 21.55 6 21 6ZM21 17H3V7H21V17Z" 
+                fill="currentColor"
+              />
+              <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+            </svg>
+            {isMirrored ? 'Mirrored' : 'Normal'}
+          </button>
+        </div>
+      </div>
 
       <div style={{ marginTop: '10px' }}>
         <div style={{ marginBottom: '8px' }}>Background Effects</div>

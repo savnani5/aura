@@ -60,7 +60,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [activeView, setActiveView] = useState<MainView>('private');
   const [publicSubView, setPublicSubView] = useState<PublicSubView>('chat');
-  const [privateSubView, setPrivateSubView] = useState<PrivateSubView>('notes');
+  const [privateSubView, setPrivateSubView] = useState<PrivateSubView>('ohm');
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   const [isExpanded, setIsExpanded] = useState(false);
@@ -112,6 +112,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
 
   // Mobile responsive helpers
   const [isMobile, setIsMobile] = useState(false);
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
 
   React.useEffect(() => {
     const checkMobile = () => {
@@ -153,6 +154,55 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
 
   const formatTimestamp = (timestamp: number) => {
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // You could add a toast notification here if desired
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
+  const toggleSources = (messageId: string) => {
+    setExpandedSources(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId);
+      } else {
+        newSet.add(messageId);
+      }
+      return newSet;
+    });
+  };
+
+  // Function to make URLs clickable
+  const makeLinksClickable = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    
+    return parts.map((part, index) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a 
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="chat-link"
+            style={{
+              color: '#60a5fa',
+              textDecoration: 'underline',
+              cursor: 'pointer'
+            }}
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
   };
 
   // Group chat messages by consecutive sender
@@ -677,14 +727,20 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
 
   // Auto-save notes
   useEffect(() => {
-    if (!notes || !room?.name) return;
+    if (!room?.name) return;
 
     setSaveStatus('saving');
     const timeoutId = setTimeout(() => {
       // Use participant identity or user ID for storage key
       const userId = user?.id || room.localParticipant?.identity || 'guest';
       const storageKey = `meeting-notes-${room.name}-${userId}`;
-      localStorage.setItem(storageKey, notes);
+      
+      // Always save, even empty notes (which removes the key)
+      if (notes.trim()) {
+        localStorage.setItem(storageKey, notes);
+      } else {
+        localStorage.removeItem(storageKey);
+      }
       setSaveStatus('saved');
     }, 1000);
 
@@ -719,6 +775,9 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
           console.error('Error stopping transcription on disconnect:', error);
         }
       }
+      
+      // Handle meeting end when user disconnects
+      handleMeetingEnd();
     };
 
     room.on('disconnected', handleDisconnected);
@@ -727,6 +786,106 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
       room.off('disconnected', handleDisconnected);
     };
   }, [room, transcriptionService, isRecording]);
+
+  // Function to handle meeting end and send summary emails
+  const handleMeetingEnd = async () => {
+    if (!room?.name) return;
+    
+    try {
+      console.log('🔚 Handling meeting end for room:', room.name);
+      
+      // Get current room participants (from LiveKit) - handle types properly
+      const allParticipants = [];
+      
+      // Add remote participants
+      room.remoteParticipants.forEach(participant => {
+        allParticipants.push(participant);
+      });
+      
+      // Add local participant if exists
+      if (room.localParticipant) {
+        allParticipants.push(room.localParticipant);
+      }
+      
+      // Combine all transcripts for the meeting
+      const allTranscripts = [
+        ...transcripts,
+        ...sharedTranscripts.map(st => ({
+          speaker: st.speaker,
+          text: st.text,
+          timestamp: st.timestamp,
+          speakerConfidence: st.speakerConfidence,
+          deepgramSpeaker: st.deepgramSpeaker,
+          participantId: st.participantId
+        }))
+      ];
+      
+      // Sort by timestamp
+      allTranscripts.sort((a, b) => a.timestamp - b.timestamp);
+      
+      // Format transcripts for the API (convert timestamp to Date object)
+      const formattedTranscripts = allTranscripts.map(t => ({
+        speaker: t.speaker,
+        text: t.text,
+        timestamp: new Date(t.timestamp),
+        speakerConfidence: t.speakerConfidence,
+        deepgramSpeaker: t.deepgramSpeaker,
+        participantId: t.participantId
+      }));
+      
+      // Extract participant information with proper structure for the /end endpoint
+      const participantsData = allParticipants.map(p => ({
+        name: p.name || p.identity || 'Unknown Participant',
+        identity: p.identity,
+        isHost: false // You may want to determine host status differently
+      })).filter(p => p.identity); // Filter out invalid participants
+      
+      // Calculate approximate meeting duration (in minutes)
+      const startTime = allTranscripts.length > 0 ? allTranscripts[0].timestamp : Date.now();
+      const endTime = Date.now();
+      const duration = Math.max(1, Math.round((endTime - startTime) / (1000 * 60))); // At least 1 minute
+      
+      console.log('📊 Meeting end data:', {
+        roomName: room.name,
+        participantCount: participantsData.length,
+        transcriptCount: formattedTranscripts.length,
+        duration: duration
+      });
+      
+      // Only process meeting end if there are participants and transcript content
+      if (participantsData.length > 0 && formattedTranscripts.length > 0) {
+        // Generate a meeting ID for this session
+        const meetingId = `meeting-${room.name}-${Date.now()}`;
+        
+        // Call the comprehensive /end API endpoint
+        const response = await fetch(`/api/meetings/${room.name}/end`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            meetingId: meetingId,
+            transcripts: formattedTranscripts,
+            participants: participantsData,
+            endedAt: new Date().toISOString(),
+            duration: duration
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          console.log('✅ Meeting ended successfully, summary generated and emails sent');
+        } else {
+          console.error('❌ Failed to end meeting:', result.error);
+        }
+      } else {
+        console.log('⏭️ Skipping meeting end - no participants or transcript content');
+      }
+    } catch (error) {
+      console.error('❌ Error handling meeting end:', error);
+    }
+  };
 
   const exportNotes = () => {
     const timestamp = new Date().toISOString().split('T')[0];
@@ -765,10 +924,10 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
           )}
         </h3>
         
-        {/* Main View Toggle - More compact design */}
-        <div className="main-view-toggle compact">
+        {/* Main View Toggle */}
+        <div className="main-view-toggle">
           <button 
-            className={`view-toggle-button compact ${activeView === 'private' ? 'view-toggle-button--active' : ''}`}
+            className={`view-toggle-button ${activeView === 'private' ? 'view-toggle-button--active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (isMobile) {
@@ -782,6 +941,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                 setActiveView('private');
               }
             }}
+            title="Only visible to you"
           >
             🔒 Private
             {(aiChatHistory.length > 0 || notes.trim()) && (
@@ -789,7 +949,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
             )}
           </button>
           <button 
-            className={`view-toggle-button compact ${activeView === 'public' ? 'view-toggle-button--active' : ''}`}
+            className={`view-toggle-button ${activeView === 'public' ? 'view-toggle-button--active' : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (isMobile) {
@@ -803,9 +963,10 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                 setActiveView('public');
               }
             }}
+            title="Visible to all participants"
           >
-            👥 Public
-            {(chatMessages.length > 0 || sharedTranscripts.length > 0) && (
+            👥 Shared
+            {(groupedChatMessages.length > 0 || sharedTranscripts.length > 0) && (
               <span className="notification-dot"></span>
             )}
           </button>
@@ -859,7 +1020,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                         <div className="chat-message-text">
                           {group.messages.map((msg) => (
                             <div key={msg.id} className="chat-message">
-                              {msg.text}
+                              {makeLinksClickable(msg.text)}
                             </div>
                           ))}
                         </div>
@@ -884,7 +1045,16 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                       disabled={isSending || !chatInput.trim()}
                       title="Send message"
                     >
-                      {isSending ? '⏳' : '📤'}
+                      {isSending ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="m5 12 14 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="m12 5 7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
                     </button>
                   </div>
                 </form>
@@ -964,7 +1134,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                           {/* Concatenate all messages from the same speaker into continuous text */}
                           <div className="transcript-message">
                             <p className="transcript-text">
-                              {group.messages.map(message => message.text).join(' ')}
+                              {makeLinksClickable(group.messages.map(message => message.text).join(' '))}
                             </p>
                           </div>
                         </div>
@@ -982,21 +1152,21 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
             {/* Sub-tabs for private content */}
             <div className="sub-tab-container">
               <button 
-                className={`sub-tab-button ${privateSubView === 'notes' ? 'sub-tab-button--active' : ''}`}
-                onClick={() => setPrivateSubView('notes')}
-              >
-                📋 Notes
-                {notes.trim() && (
-                  <span className="notification-dot"></span>
-                )}
-              </button>
-              <button 
                 className={`sub-tab-button ${privateSubView === 'ohm' ? 'sub-tab-button--active' : ''}`}
                 onClick={() => setPrivateSubView('ohm')}
               >
-                🤖 Ohm AI
+                🤖 Ask AI
                 {aiChatHistory.length > 0 && (
                   <span className="chat-badge">{aiChatHistory.length}</span>
+                )}
+              </button>
+              <button 
+                className={`sub-tab-button ${privateSubView === 'notes' ? 'sub-tab-button--active' : ''}`}
+                onClick={() => setPrivateSubView('notes')}
+              >
+                📝 Notes
+                {notes.trim() && (
+                  <span className="notification-dot"></span>
                 )}
               </button>
             </div>
@@ -1008,13 +1178,10 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                     <button onClick={exportNotes} className="action-button" disabled={!notes.trim()} title="Export notes">
                       📥 Export
                     </button>
-                    <button onClick={clearNotes} className="action-button action-button--danger" disabled={!notes.trim()} title="Clear all notes">
-                      🗑️ Clear
-                    </button>
                   </div>
                   <div className="save-status">
                     <span className={`save-indicator save-indicator--${saveStatus}`}>
-                      {saveStatus === 'saved' && '✅ Saved'}
+                      {saveStatus === 'saved' && '✅ Auto-saved'}
                       {saveStatus === 'saving' && '⏳ Saving...'}
                       {saveStatus === 'unsaved' && '⚠️ Unsaved'}
                     </span>
@@ -1041,10 +1208,10 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                   {aiChatHistory.length === 0 ? (
                     <div className="chat-empty">
                       <div className="empty-icon">🤖</div>
-                      <p>Ask Ohm about the meeting, participants, or search the web!</p>
+                      <p>Ask AI about the meeting, participants, or search the web!</p>
                       
                       <div className="ai-suggestions" style={{ marginTop: '0.75rem' }}>
-                        <p className="suggestions-title">💡 Try asking Ohm:</p>
+                        <p className="suggestions-title">💡 Try asking AI:</p>
                         <div className="suggestion-buttons">
                           {questionSuggestions.map((suggestion, index) => (
                             <button
@@ -1069,7 +1236,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                     <>
                       {/* Show suggestions at the top for any chat activity */}
                       <div className="ai-suggestions-compact">
-                        <p className="suggestions-title-compact">💡 Ask Ohm AI:</p>
+                        <p className="suggestions-title-compact">💡 Ask AI:</p>
                         <div className="suggestion-buttons-compact">
                           {questionSuggestions.slice(0, 3).map((suggestion, index) => (
                             <button
@@ -1097,7 +1264,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                             <span className="chat-sender">
                               {aiMsg.type === 'ai' ? (
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                  Ohm AI
+                                  Ask AI
                                   {aiMsg.usedWebSearch && (
                                     <span style={{ 
                                       fontSize: '0.625rem', 
@@ -1106,7 +1273,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                                       padding: '0.125rem 0.25rem',
                                       borderRadius: '4px'
                                     }}>
-                                      🌐 web
+                                      🌐 search web
                                     </span>
                                   )}
                                   {aiMsg.usedContext && (
@@ -1125,15 +1292,65 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                                 `👤 ${aiMsg.userName} → AI`
                               )}
                             </span>
-                            <span className="chat-timestamp">
-                              {formatTimestamp(aiMsg.timestamp)}
-                            </span>
+                            {aiMsg.type === 'ai' ? (
+                              <button
+                                onClick={() => copyToClipboard(aiMsg.message)}
+                                className="copy-icon-button"
+                                title="Copy response"
+                              >
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                                </svg>
+                              </button>
+                            ) : (
+                              <span className="chat-timestamp">
+                                {formatTimestamp(aiMsg.timestamp)}
+                              </span>
+                            )}
                           </div>
                           <div className="chat-message-text">
                             <div className="chat-message">
                               <ReactMarkdown>{aiMsg.message}</ReactMarkdown>
                             </div>
-                            {aiMsg.citations && aiMsg.citations.length > 0 && (
+                            
+                            {/* Copy Button and Sources for AI messages */}
+                            {aiMsg.type === 'ai' && (
+                              <div className="message-actions">
+                                <button
+                                  onClick={() => copyToClipboard(aiMsg.message)}
+                                  className="copy-button"
+                                  title="Copy response"
+                                >
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                                  </svg>
+                                  Copy
+                                </button>
+                                
+                                {aiMsg.citations && aiMsg.citations.length > 0 && (
+                                  <button
+                                    onClick={() => toggleSources(aiMsg.id)}
+                                    className="sources-toggle"
+                                    title="Toggle sources"
+                                  >
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                      <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                    Sources ({aiMsg.citations.length})
+                                    <span className={`chevron ${expandedSources.has(aiMsg.id) ? 'expanded' : ''}`}>
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </svg>
+                                    </span>
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            
+                            {/* Sources dropdown - separate from the button */}
+                            {aiMsg.type === 'ai' && aiMsg.citations && aiMsg.citations.length > 0 && expandedSources.has(aiMsg.id) && (
                               <div className="message-citations">
                                 <div className="citations-label">🔗 Sources:</div>
                                 <div className="citations-list">
@@ -1159,7 +1376,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                       {isAiProcessing && (
                         <div className="chat-message-group ai-message">
                           <div className="chat-message-header">
-                            <span className="chat-sender">Ohm AI</span>
+                            <span className="chat-sender">Ask AI</span>
                             <span className="chat-timestamp">⏳ Processing...</span>
                           </div>
                           <div className="chat-message-text">
@@ -1195,14 +1412,14 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                       disabled={isAiProcessing}
                       title="Web Search"
                     >
-                      🌐 Web
+                      🌐 search web
                     </button>
                   </div>
                   <div className="chat-input-row">
                     <input
                       type="text"
                       className="chat-input"
-                      placeholder={aiChatInput.toLowerCase().startsWith('@web ') ? "🔍 Search the web..." : "🤖 Ask Ohm about the meeting..."}
+                      placeholder={aiChatInput.toLowerCase().startsWith('@web ') ? "🔍 Search the web..." : "🤖 Ask AI about the meeting..."}
                       value={aiChatInput}
                       onChange={(e) => setAiChatInput(e.target.value)}
                       disabled={isAiProcessing}
@@ -1213,7 +1430,16 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                       disabled={isAiProcessing || !aiChatInput.trim()}
                       title="Send to AI"
                     >
-                      {isAiProcessing ? '⏳' : '🚀'}
+                      {isAiProcessing ? (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="m5 12 14 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="m12 5 7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
                     </button>
                   </div>
                 </form>

@@ -51,39 +51,19 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-  color: white;
-  border-radius: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background: none;
+  color: rgba(255, 255, 255, 0.6);
+  border-radius: 0.375rem;
   font-size: 0.75rem;
-  font-weight: 600;
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-  position: relative;
-  overflow: hidden;
-}
-
-.aiIndicator::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.aiIndicator:hover::before {
-  opacity: 1;
+  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .aiIndicator svg {
-  width: 16px;
-  height: 16px;
-  position: relative;
-  z-index: 1;
+  width: 14px;
+  height: 14px;
+  opacity: 0.7;
 }
 
 .messagesContainer {
@@ -116,8 +96,8 @@
 .emptyState p {
   margin: 0 0 2rem 0;
   line-height: 1.6;
-  max-width: 320px;
-  font-size: 1rem;
+  max-width: 100%;
+  font-size: 0.9375rem;
   font-weight: 500;
 }
 
@@ -279,7 +259,11 @@
   align-items: center;
   gap: 0.5rem;
   color: #3b82f6;
-  font-weight: 700;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  background: none;
+  border: none;
+  padding: 0;
 }
 
 .webBadge,
@@ -327,39 +311,9 @@
 }
 
 .userAiMessage .messageText {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(29, 78, 216, 0.15) 100%);
-  color: white;
-  border-color: rgba(59, 130, 246, 0.3);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
-}
-
-.citations {
-  margin-top: 0.875rem;
-  padding-top: 0.875rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.citations p {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  margin: 0 0 0.5rem 0;
-}
-
-.citation {
-  display: block;
-  font-size: 0.75rem;
-  color: #3b82f6;
-  text-decoration: none;
-  margin-bottom: 0.25rem;
-  transition: all 0.2s ease;
-  padding: 0.25rem 0;
-}
-
-.citation:hover {
-  color: #1d4ed8;
-  text-decoration: underline;
-  transform: translateX(2px);
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid #3b82f6;
+  border-radius: 0.5rem 0.875rem 0.875rem 0.5rem;
 }
 
 .aiProcessing {
@@ -727,7 +681,7 @@
   }
 
   .emptyState p {
-    max-width: 280px;
+    max-width: 100%;
     font-size: 0.9375rem;
   }
 
@@ -827,20 +781,6 @@
 
 .sendButton:active {
   transform: translateY(-1px) scale(0.95);
-}
-
-/* Pulse animation for AI indicator */
-@keyframes aiPulse {
-  0%, 100% {
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-  }
-  50% {
-    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.5);
-  }
-}
-
-.aiIndicator {
-  animation: aiPulse 3s ease-in-out infinite;
 }
 
 /* Enhanced focus states */
@@ -1134,4 +1074,109 @@
   .messageText p {
     margin: 0.5rem 0;
   }
+}
+
+/* Message Actions */
+.messageActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.copyButton,
+.sourcesToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.copyButton:hover,
+.sourcesToggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+.chevron {
+  transition: transform 0.2s ease;
+}
+
+.chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.citations {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(15, 15, 15, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.citations p {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  display: none; /* Hide the "Sources:" label since we have it in the button */
+}
+
+.citation {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #60a5fa;
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  background: rgba(96, 165, 250, 0.1);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  border-radius: 0.375rem;
+  transition: all 0.2s ease;
+}
+
+.citation:hover {
+  background: rgba(96, 165, 250, 0.2);
+  border-color: rgba(96, 165, 250, 0.4);
+  color: #93c5fd;
+  transform: translateY(-1px);
+}
+
+.copyIconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--lk-fg2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+}
+
+.copyIconButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--lk-fg);
+  opacity: 1;
 } 

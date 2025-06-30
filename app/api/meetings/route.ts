@@ -125,7 +125,8 @@ export async function POST(request: NextRequest) {
       endDate, 
       frequency, 
       recurringDay, 
-      recurringTime
+      recurringTime,
+      recurringTimezone
     } = body;
 
     // Validate required fields
@@ -191,7 +192,8 @@ export async function POST(request: NextRequest) {
       endDate,
       frequency,
       recurringDay,
-      recurringTime
+      recurringTime,
+      recurringTimezone
     }, user._id);
 
     const createdRoom = await db.createMeetingRoom(roomData);
@@ -199,9 +201,44 @@ export async function POST(request: NextRequest) {
     // Get real-time meeting count for the new room (should be 0 since it's new)
     const meetingCount = await db.getRealMeetingCountByRoom(createdRoom._id);
     
+    // Send email invitations if there are participants
+    if (createdRoom.participants && createdRoom.participants.length > 1) { // More than just the host
+      try {
+        console.log('📧 Sending email invitations for room:', roomName);
+        
+        // Call the email API to send invitations
+        const emailResponse = await fetch(`${process.env.NEXTAUTH_URL || 'http://localhost:3000'}/api/emails`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'invitation',
+            roomName: roomName,
+            hostName: user.name || 'Host'
+          })
+        });
+        
+        const emailResult = await emailResponse.json();
+        
+        if (emailResult.success) {
+          console.log('✅ Email invitations sent successfully:', emailResult.message);
+        } else {
+          console.error('❌ Failed to send email invitations:', emailResult.error);
+          // Don't fail the room creation if email fails
+        }
+      } catch (emailError) {
+        console.error('❌ Error sending email invitations:', emailError);
+        // Don't fail the room creation if email fails
+      }
+    }
+    
     return NextResponse.json({ 
       success: true, 
-      data: toMeetingRoomCard(createdRoom, meetingCount) 
+      data: toMeetingRoomCard(createdRoom, meetingCount),
+      message: createdRoom.participants && createdRoom.participants.length > 1 ? 
+        'Meeting room created and invitations sent!' : 
+        'Meeting room created successfully!'
     }, { status: 201 });
   } catch (error) {
     console.error('Error creating meeting:', error);

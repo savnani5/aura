@@ -515,9 +515,23 @@ function VideoConferenceComponent(props: {
       console.error('Error during immediate disconnect:', error);
     }
 
-    // Redirect immediately to dashboard - don't wait for transcript processing
-    console.log('🏃 Redirecting immediately to dashboard...');
-    router.push(`/meetingroom/${props.roomName}`);
+    // Check if user is a guest by checking if there's no meeting ID stored
+    // Authenticated users creating meetings will have a meetingId stored in localStorage
+    // Guests joining via direct room links won't have this
+    const participantName = props.userChoices?.username || room?.localParticipant?.name || '';
+    const participantIdentity = room?.localParticipant?.identity || '';
+    
+    // Guests are users who don't have a meetingId (they joined via direct link)
+    // Or users whose username doesn't match a typical authenticated user pattern
+    const isGuest = !meetingId || (participantName && !participantName.includes('@'));
+    
+    if (isGuest) {
+      console.log('🚪 Guest user detected - redirecting to landing page...');
+      router.push('/');
+    } else {
+      console.log('🏃 Authenticated user - redirecting to dashboard...');
+      router.push(`/meetingroom/${props.roomName}`);
+    }
 
     // Process transcripts in background asynchronously (fire and forget)
     if (finalTranscripts.length > 0 && meetingId) {
@@ -534,7 +548,7 @@ function VideoConferenceComponent(props: {
     } else {
       console.log('🔍 No transcripts or meeting ID to process in background');
     }
-  }, [router, room, props.roomName]);
+  }, [router, room, props.roomName, props.userChoices]);
 
   // Background transcript processing function
   const processTranscriptsInBackground = async (transcripts: Transcript[], meetingId: string, roomName: string) => {

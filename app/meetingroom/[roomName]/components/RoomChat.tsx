@@ -21,6 +21,7 @@ export default function RoomChat({
   const [aiChatHistory, setAiChatHistory] = useState<AiChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const aiContextManager = AiContextManager.getInstance();
 
@@ -76,12 +77,31 @@ export default function RoomChat({
     return aiContextManager.formatTimestamp(timestamp);
   };
 
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // You could add a toast notification here if desired
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
+  const toggleSources = (messageId: string) => {
+    const newExpanded = new Set(expandedSources);
+    if (newExpanded.has(messageId)) {
+      newExpanded.delete(messageId);
+    } else {
+      newExpanded.add(messageId);
+    }
+    setExpandedSources(newExpanded);
+  };
+
   return (
     <div className={styles.roomChat}>
       {/* Header */}
       <div className={styles.header}>
         <h3 className={styles.title}>
-          Ask Ohm
+          Ask AI
           {isLiveMeeting && (
             <span className={styles.liveBadge}>
               🔴 Live
@@ -162,7 +182,7 @@ export default function RoomChat({
                           🤖 Ohm AI
                           {aiMsg.usedWebSearch && (
                             <span className={styles.webBadge}>
-                              🌐 web
+                              🌐 search web
                             </span>
                           )}
                           {aiMsg.usedContext && (
@@ -175,15 +195,69 @@ export default function RoomChat({
                         `${aiMsg.userName} → 🤖 AI`
                       )}
                     </span>
-                    <span className={styles.timestamp}>
-                      {formatTimestamp(aiMsg.timestamp)}
-                    </span>
+                    {aiMsg.type === 'ai' ? (
+                      <button
+                        onClick={() => copyToClipboard(aiMsg.message)}
+                        className={styles.copyIconButton}
+                        title="Copy response"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
+                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                        </svg>
+                      </button>
+                    ) : (
+                      <span className={styles.timestamp}>
+                        {formatTimestamp(aiMsg.timestamp)}
+                      </span>
+                    )}
                   </div>
                   <div className={styles.messageText}>
                     <ReactMarkdown>{aiMsg.message}</ReactMarkdown>
-                    {aiMsg.citations && aiMsg.citations.length > 0 && (
+                    
+                    {/* Copy Button and Sources for AI messages */}
+                    {aiMsg.type === 'ai' && (
+                      <div className={styles.messageActions}>
+                        <button
+                          onClick={() => copyToClipboard(aiMsg.message)}
+                          className={styles.copyButton}
+                          title="Copy response"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                          </svg>
+                          Copy
+                        </button>
+                        
+                        {aiMsg.citations && aiMsg.citations.length > 0 && (
+                          <button
+                            onClick={() => toggleSources(aiMsg.id)}
+                            className={styles.sourcesToggle}
+                            title="Toggle sources"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.72" stroke="currentColor" strokeWidth="2"/>
+                              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.72-1.72" stroke="currentColor" strokeWidth="2"/>
+                            </svg>
+                            Sources ({aiMsg.citations.length})
+                            <svg 
+                              width="12" 
+                              height="12" 
+                              viewBox="0 0 24 24" 
+                              fill="none" 
+                              className={`${styles.chevron} ${expandedSources.has(aiMsg.id) ? styles.expanded : ''}`}
+                            >
+                              <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Collapsible Sources */}
+                    {aiMsg.citations && aiMsg.citations.length > 0 && expandedSources.has(aiMsg.id) && (
                       <div className={styles.citations}>
-                        <p>Sources:</p>
                         {aiMsg.citations.map((citation, index) => (
                           <a key={index} href={citation} target="_blank" rel="noopener noreferrer" className={styles.citation}>
                             🔗 {new URL(citation).hostname}
@@ -229,9 +303,9 @@ export default function RoomChat({
               setNewMessage(aiContextManager.toggleAiPrefix(newMessage, '@web'));
             }}
             disabled={isAiProcessing}
-            title="Web Search"
+            title="Search Web"
           >
-            🌐 Web
+            🌐 search web
           </button>
         </div>
         <div className={styles.inputContainer}>
@@ -253,7 +327,10 @@ export default function RoomChat({
             {isAiProcessing ? (
               <div className={styles.spinner} />
             ) : (
-              '🤖'
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="m5 12 14 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="m12 5 7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             )}
           </button>
         </div>

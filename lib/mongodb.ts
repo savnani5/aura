@@ -182,6 +182,8 @@ const MeetingRoomSchema = new mongoose.Schema({
     frequency: { type: String }, // "weekly", "biweekly", "monthly"
     day: { type: String }, // "Monday", "Tuesday", etc.
     time: { type: String }, // "09:00", "14:30", etc.
+    duration: { type: Number }, // Meeting duration in minutes (e.g., 30, 60, 90)
+    timezone: { type: String }, // IANA timezone identifier (e.g., "America/New_York", "Europe/London")
     startDate: { type: Date },
     endDate: { type: Date }
   },
@@ -429,6 +431,8 @@ export interface IMeetingRoom {
     frequency?: string;
     day?: string;
     time?: string;
+    duration?: number;
+    timezone?: string;
     startDate?: Date;
     endDate?: Date;
   };
@@ -562,6 +566,8 @@ export function fromCreateMeetingForm(formData: {
   frequency?: string;
   recurringDay?: string;
   recurringTime?: string;
+  recurringDuration?: number;
+  recurringTimezone?: string;
 }, createdBy?: string): Partial<IMeetingRoom> {
   // Create participants array from the frontend participant objects
   const participants: Array<{
@@ -594,6 +600,8 @@ export function fromCreateMeetingForm(formData: {
       frequency: formData.frequency,
       day: formData.frequency === 'daily' ? undefined : formData.recurringDay,
       time: formData.recurringTime,
+      duration: formData.recurringDuration || 60, // Default to 60 minutes if not specified
+      timezone: formData.recurringTimezone,
       startDate: formData.startDate ? new Date(formData.startDate) : undefined,
       endDate: formData.endDate ? new Date(formData.endDate) : undefined
     } : undefined,

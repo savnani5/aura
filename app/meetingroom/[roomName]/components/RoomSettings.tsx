@@ -18,6 +18,8 @@ interface MeetingRoom {
   frequency?: string;
   recurringDay?: string;
   recurringTime?: string;
+  recurringDuration?: number;
+  recurringTimezone?: string;
   participants?: Array<{
     _id?: string;
     userId?: string;
@@ -51,6 +53,8 @@ interface RoomSettingsForm {
   frequency: string;
   recurringDay: string;
   recurringTime: string;
+  recurringDuration: number;
+  recurringTimezone: string;
 }
 
 const MEETING_TYPE_SUGGESTIONS = [
@@ -88,6 +92,31 @@ const TIME_SLOTS = [
   '15:00', '15:30', '16:00', '16:30', '17:00', '17:30'
 ];
 
+const COMMON_TIMEZONES = [
+  { value: 'America/New_York', label: 'Eastern Time (US)' },
+  { value: 'America/Chicago', label: 'Central Time (US)' },
+  { value: 'America/Denver', label: 'Mountain Time (US)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (US)' },
+  { value: 'Europe/London', label: 'London (GMT/BST)' },
+  { value: 'Europe/Paris', label: 'Paris (CET/CEST)' },
+  { value: 'Europe/Berlin', label: 'Berlin (CET/CEST)' },
+  { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
+  { value: 'Asia/Shanghai', label: 'Shanghai (CST)' },
+  { value: 'Asia/Kolkata', label: 'India (IST)' },
+  { value: 'Australia/Sydney', label: 'Sydney (AEDT/AEST)' },
+  { value: 'UTC', label: 'UTC (Coordinated Universal Time)' }
+];
+
+const DURATION_OPTIONS = [
+  { value: 15, label: '15 minutes' },
+  { value: 30, label: '30 minutes' },
+  { value: 45, label: '45 minutes' },
+  { value: 60, label: '1 hour' },
+  { value: 90, label: '1.5 hours' },
+  { value: 120, label: '2 hours' },
+  { value: 180, label: '3 hours' }
+];
+
 export function RoomSettings({ room, roomName, onRoomUpdated, onRoomDeleted }: RoomSettingsProps) {
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
@@ -99,16 +128,35 @@ export function RoomSettings({ room, roomName, onRoomUpdated, onRoomDeleted }: R
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   
+  // Detect user's timezone
+  const getUserTimezone = () => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch (error) {
+      console.warn('Unable to detect timezone, falling back to UTC:', error);
+      return 'UTC';
+    }
+  };
+
+  const defaultTimezone = getUserTimezone();
+
   const [form, setForm] = useState<RoomSettingsForm>({
-    title: '',
-    type: '',
-    description: '',
-    participants: [],
-    startDate: '',
-    endDate: '',
-    frequency: 'daily',
-    recurringDay: '',
-    recurringTime: ''
+    title: room.title || '',
+    type: room.type || '',
+    description: room.description || '',
+    participants: room.participants?.map(p => ({
+      id: p._id,
+      name: p.name,
+      email: p.email,
+      role: p.role
+    })) || [],
+    startDate: room.startDate || '',
+    endDate: room.endDate || '',
+    frequency: room.frequency || 'daily',
+    recurringDay: room.recurringDay || '',
+    recurringTime: room.recurringTime || '',
+    recurringDuration: room.recurringDuration || 60,
+    recurringTimezone: room.recurringTimezone || defaultTimezone
   });
 
   // Initialize form with room data
@@ -128,7 +176,9 @@ export function RoomSettings({ room, roomName, onRoomUpdated, onRoomDeleted }: R
         endDate: room.endDate || '',
         frequency: room.frequency || 'daily',
         recurringDay: room.recurringDay || '',
-        recurringTime: room.recurringTime || ''
+        recurringTime: room.recurringTime || '',
+        recurringDuration: room.recurringDuration || 60,
+        recurringTimezone: room.recurringTimezone || defaultTimezone
       });
     }
   }, [room]);
@@ -199,7 +249,9 @@ export function RoomSettings({ room, roomName, onRoomUpdated, onRoomDeleted }: R
           endDate: form.endDate,
           frequency: form.frequency,
           recurringDay: form.recurringDay,
-          recurringTime: form.recurringTime
+          recurringTime: form.recurringTime,
+          recurringDuration: form.recurringDuration,
+          recurringTimezone: form.recurringTimezone
         }),
       });
 
@@ -239,7 +291,9 @@ export function RoomSettings({ room, roomName, onRoomUpdated, onRoomDeleted }: R
         endDate: room.endDate || '',
         frequency: room.frequency || 'daily',
         recurringDay: room.recurringDay || '',
-        recurringTime: room.recurringTime || ''
+        recurringTime: room.recurringTime || '',
+        recurringDuration: room.recurringDuration || 60,
+        recurringTimezone: room.recurringTimezone || defaultTimezone
       });
       setHasChanges(false);
     }
@@ -582,6 +636,36 @@ export function RoomSettings({ room, roomName, onRoomUpdated, onRoomDeleted }: R
                       <option value="">Select time</option>
                       {TIME_SLOTS.map((time) => (
                         <option key={time} value={time}>{time}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className={styles.scheduleRow}>
+                  <div className={`${styles.scheduleField} ${styles.scheduleFieldFullWidth}`}>
+                    <label htmlFor="duration" className={styles.subLabel}>Duration</label>
+                    <select
+                      id="duration"
+                      value={form.recurringDuration}
+                      onChange={(e) => handleInputChange('recurringDuration', Number(e.target.value))}
+                      className={styles.select}
+                    >
+                      {DURATION_OPTIONS.map((duration) => (
+                        <option key={duration.value} value={duration.value}>{duration.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className={styles.scheduleRow}>
+                  <div className={`${styles.scheduleField} ${styles.scheduleFieldFullWidth}`}>
+                    <label htmlFor="timezone" className={styles.subLabel}>Timezone</label>
+                    <select
+                      id="timezone"
+                      value={form.recurringTimezone}
+                      onChange={(e) => handleInputChange('recurringTimezone', e.target.value)}
+                      className={styles.select}
+                    >
+                      {COMMON_TIMEZONES.map((timezone) => (
+                        <option key={timezone.value} value={timezone.value}>{timezone.label}</option>
                       ))}
                     </select>
                   </div>

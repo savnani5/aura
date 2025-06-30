@@ -201,6 +201,6 @@ export class AiContextManager {
         : "Ask AI about the room or search the web...";
     }
     
-    return "Ask Ohm anything...";
+    return "Ask AI anything...";
   }
 } 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/mongodb';
+import { EmailService } from '@/lib/email-service';
 import { auth } from '@clerk/nextjs/server';
 
 // GET /api/meetings/[roomName] - Get specific meeting room with full details
@@ -53,13 +54,71 @@ export async function PUT(
     const updates = await request.json();
     
     const db = DatabaseService.getInstance();
+    
+    // Get the current room to compare participants
+    const currentRoom = await db.getMeetingRoomByName(roomName);
+    if (!currentRoom) {
+      return NextResponse.json({ 
+        success: false, 
+        error: 'Meeting room not found' 
+      }, { status: 404 });
+    }
+    
+    // Update the room
     const updatedRoom = await db.updateMeetingRoom(roomName, updates);
     
     if (!updatedRoom) {
       return NextResponse.json({ 
         success: false, 
-        error: 'Meeting room not found' 
-      }, { status: 404 });
+        error: 'Failed to update meeting room' 
+      }, { status: 500 });
+    }
+    
+    // Check if participants were added and send email invitations
+    if (updates.participants && Array.isArray(updates.participants)) {
+      const currentParticipantEmails = new Set(
+        (currentRoom.participants || []).map(p => p.email)
+      );
+      
+      const newParticipants = updates.participants.filter((p: any) => 
+        p.email && !currentParticipantEmails.has(p.email)
+      );
+      
+      if (newParticipants.length > 0) {
+        try {
+          // Get authenticated user to determine who's adding participants
+          const { userId } = await auth();
+          let hostName = 'A host'; // Default fallback
+          
+          if (userId) {
+            const user = await db.getUserByClerkId(userId);
+            if (user) {
+              hostName = user.name || 'A host';
+            }
+          }
+          
+          console.log(`📧 Sending invitations to ${newParticipants.length} new participants added to room: ${roomName}`);
+          
+          // Send email invitations to new participants
+          const emailService = EmailService.getInstance();
+          const emailResult = await emailService.sendNewParticipantInvitations(
+            updatedRoom, 
+            newParticipants, 
+            hostName
+          );
+          
+          console.log(`📧 Email results:`, {
+            success: emailResult.success,
+            sentTo: emailResult.sentTo,
+            failedTo: emailResult.failedTo,
+            errors: emailResult.errors
+          });
+          
+        } catch (emailError) {
+          console.error('❌ Error sending participant invitation emails:', emailError);
+          // Don't fail the room update if email sending fails
+        }
+      }
     }
     
     return NextResponse.json({ 

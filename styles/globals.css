@@ -3582,3 +3582,202 @@ h2 a {
   margin: 0;
   opacity: 0.8;
 }
+
+/* Message Actions (Copy Button and Sources) */
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.copy-button,
+.sources-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: var(--lk-fg2);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.copy-button:hover,
+.sources-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--lk-fg);
+}
+
+.chevron {
+  transition: transform 0.2s ease;
+}
+
+.chevron.expanded {
+  transform: rotate(180deg);
+}
+
+@media (max-width: 768px) {
+  .message-actions {
+    gap: 0.375rem;
+    margin-top: 0.375rem;
+    padding-top: 0.375rem;
+  }
+
+  .copy-button,
+  .sources-toggle {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .copy-button,
+  .sources-toggle {
+    padding: 0.15rem 0.3rem;
+    font-size: 0.65rem;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .copy-button,
+  .sources-toggle {
+    padding: 0.3rem 0.6rem;
+  }
+
+  .copy-button:active,
+  .sources-toggle:active {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(0.98);
+  }
+}
+
+/* Copy Icon Button Styles */
+.copy-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--lk-fg2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+}
+
+.copy-icon-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--lk-fg);
+  opacity: 1;
+}
+
+/* Copy Icon Button for RoomChat */
+.copyIconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--lk-fg2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+}
+
+.copyIconButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--lk-fg);
+  opacity: 1;
+}
+
+/* Chat Link Styles */
+.chat-link {
+  color: #60a5fa !important;
+  text-decoration: underline;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  word-break: break-all;
+}
+
+.chat-link:hover {
+  color: #93c5fd !important;
+  text-decoration: underline;
+}
+
+.chat-link:visited {
+  color: #a78bfa !important;
+}
+
+/* Transcript link styles */
+.transcript-text .chat-link {
+  color: #4ade80 !important;
+}
+
+.transcript-text .chat-link:hover {
+  color: #6ee7b7 !important;
+}
+
+/* Prevent unwanted overlays during live meetings */
+.lk-video-conference .lk-media-device-menu:not(:focus-within):not(:hover) {
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* Hide any stray modal overlays that might appear during meetings */
+.lk-video-conference [class*="overlay"]:not(.lk-focus-visible-only) {
+  display: none !important;
+}
+
+/* Video conference optimizations */
+.lk-video-conference video,
+.lk-video-conference .lk-participant-tile video,
+.lk-video-conference .lk-screen-share-track video {
+  backdrop-filter: none !important;
+  filter: none !important;
+  will-change: auto !important;
+  image-rendering: auto !important;
+  image-rendering: -webkit-optimize-contrast !important;
+}
+
+/* Ensure shared screen content is crisp */
+.lk-video-conference .lk-screen-share-track {
+  image-rendering: pixelated !important;
+  image-rendering: -moz-crisp-edges !important;
+  image-rendering: crisp-edges !important;
+}
+
+/* Local participant camera mirroring */
+:root {
+  --local-camera-transform: scaleX(-1); /* Default to mirrored */
+}
+
+/* Apply mirroring to local participant video tracks only */
+.lk-participant-tile[data-lk-local-participant] video[data-lk-track-source="camera"],
+.lk-participant-tile video[data-lk-track-source="camera"]:not([data-lk-remote]),
+.lk-participant-tile[data-lk-local] video,
+.lk-focus-layout video[data-lk-track-source="camera"]:not([data-lk-remote]) {
+  transform: var(--local-camera-transform) !important;
+}
+
+/* Ensure screen share is never mirrored regardless of local setting */
+video[data-lk-track-source="screen_share"],
+video[data-lk-source="screen_share"],
+.lk-screen-share-track video,
+.lk-focus-layout video[data-lk-track-source="screen_share"] {
+  transform: none !important;
+}

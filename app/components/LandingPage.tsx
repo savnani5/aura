@@ -113,7 +113,7 @@ export function LandingPage() {
             </div>
             <div className={styles.featureCard}>
               <div className={styles.featureIcon}>🏠</div>
-              <h3>Persistent Meeting Rooms</h3>
+              <h3>Persistent Meeting Workspaces</h3>
               <p>Create dedicated spaces for your teams with shared context and task management.</p>
             </div>
           </div>

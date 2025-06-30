@@ -67,7 +67,7 @@ export function AllMeetingRoomsView({
               </svg>
             </button>
             <div className={styles.title}>
-              <h1>All Meeting Rooms</h1>
+              <h1>All Workspaces</h1>
               <p>{meetingRooms.length} total rooms</p>
             </div>
           </div>
@@ -91,7 +91,7 @@ export function AllMeetingRoomsView({
           </svg>
           <input
             type="text"
-            placeholder="Search meeting rooms..."
+            placeholder="Search workspaces..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={styles.searchInput}
@@ -117,7 +117,7 @@ export function AllMeetingRoomsView({
         {isLoading ? (
           <div className={styles.loadingState}>
             <div className={styles.loadingSpinner}></div>
-            <p>Loading meeting rooms...</p>
+            <p>Loading workspaces...</p>
           </div>
         ) : filteredAndSortedRooms.length > 0 ? (
           <div className={styles.roomsGrid}>
@@ -133,9 +133,9 @@ export function AllMeetingRoomsView({
                 <path d="m21 21-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
-            <h3 className={styles.emptyStateTitle}>No rooms found</h3>
+            <h3 className={styles.emptyStateTitle}>No workspaces found</h3>
             <p className={styles.emptyStateDescription}>
-              No meeting rooms match your search for &quot;{searchQuery}&quot;
+              No workspaces match your search for &quot;{searchQuery}&quot;
             </p>
             <button 
               onClick={() => setSearchQuery('')}
@@ -152,9 +152,9 @@ export function AllMeetingRoomsView({
                 <polyline points="14,2 14,8 20,8" stroke="currentColor" strokeWidth="2"/>
               </svg>
             </div>
-            <h3 className={styles.emptyStateTitle}>No meeting rooms</h3>
+            <h3 className={styles.emptyStateTitle}>No workspaces</h3>
             <p className={styles.emptyStateDescription}>
-              Create your first meeting room to get started
+              Create your first workspace to get started
             </p>
           </div>
         )}

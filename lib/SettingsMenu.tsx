@@ -29,7 +29,7 @@ export function SettingsMenu(props: SettingsMenuProps) {
   const settings = React.useMemo(() => {
     return {
       media: { camera: true, microphone: true, label: 'Media Devices', speaker: true },
-      recording: recordingEndpoint ? { label: 'Recording' } : undefined,
+      // recording: recordingEndpoint ? { label: 'Recording' } : undefined,
     };
   }, [recordingEndpoint]);
 
@@ -146,7 +146,7 @@ export function SettingsMenu(props: SettingsMenuProps) {
           </>
         )}
         
-        {activeTab === 'recording' && (
+        {/* {activeTab === 'recording' && (
           <div className={styles.section}>
             <h3 className={styles.sectionTitle}>Record Meeting</h3>
             <div className={styles.sectionContent}>
@@ -176,7 +176,7 @@ export function SettingsMenu(props: SettingsMenuProps) {
               </div>
             </div>
           </div>
-        )}
+        )} */}
       </div>
 
       {/* Footer */}

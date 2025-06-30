@@ -71,6 +71,7 @@ export function UnifiedMeetingSummary({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'summary' | 'transcript'>('summary');
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
 
   useEffect(() => {
     if ((isModal && isOpen && meetingId) || (!isModal && meetingId)) {
@@ -249,27 +250,6 @@ export function UnifiedMeetingSummary({
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
-  const getMeetingIcon = (type: string) => {
-    const typeMap: { [key: string]: string } = {
-      'STANDUP': '🚀',
-      'ONE_ON_ONE': '👥',
-      'PROJECT': '📋',
-      'CLIENT': '🤝',
-      'REVIEW': '🔍',
-      'PLANNING': '📅',
-      'SYNC': '🔄',
-      'DEMO': '📺'
-    };
-    
-    const upperType = type.toUpperCase();
-    for (const key in typeMap) {
-      if (upperType.includes(key)) {
-        return typeMap[key];
-      }
-    }
-    return '📞'; // Default meeting icon
-  };
-
   const handleBack = () => {
     if (isModal && onClose) {
       onClose();
@@ -320,9 +300,6 @@ export function UnifiedMeetingSummary({
                     <path d="M19 12H5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   </svg>
                 </button>
-                <div className={styles.meetingIcon}>
-                  {getMeetingIcon(meeting.type)}
-                </div>
                 <div className={styles.titleInfo}>
                   <h1 className={styles.title}>{meeting.title}</h1>
                   <div className={styles.metadata}>
@@ -337,7 +314,12 @@ export function UnifiedMeetingSummary({
                 </div>
               </div>
               
-              <div className={styles.participantBlobs}>
+              <div 
+                className={styles.participantBlobs}
+                onClick={() => setShowParticipantsModal(true)}
+                style={{ cursor: 'pointer' }}
+                title="Click to see all participants"
+              >
                 {meeting.participants.slice(0, 4).map((participant, index) => (
                   <div 
                     key={participant.id} 
@@ -399,6 +381,47 @@ export function UnifiedMeetingSummary({
               />
             )}
           </main>
+
+          {/* Participants Modal */}
+          {showParticipantsModal && (
+            <div className={styles.participantsModalOverlay} onClick={() => setShowParticipantsModal(false)}>
+              <div className={styles.participantsModal} onClick={(e) => e.stopPropagation()}>
+                <div className={styles.participantsModalHeader}>
+                  <h3>Participants ({meeting.participants.length})</h3>
+                  <button 
+                    onClick={() => setShowParticipantsModal(false)}
+                    className={styles.participantsModalClose}
+                  >
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                      <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2"/>
+                      <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2"/>
+                    </svg>
+                  </button>
+                </div>
+                <div className={styles.participantsModalContent}>
+                  {meeting.participants.map((participant) => (
+                    <div key={participant.id} className={styles.participantModalItem}>
+                      <div className={`${styles.participantModalAvatar} ${participant.isHost ? styles.hostAvatar : ''}`}>
+                        {getInitials(participant.participantName)}
+                        {participant.isHost && (
+                          <div className={styles.hostBadgeModal}>Host</div>
+                        )}
+                      </div>
+                      <div className={styles.participantModalInfo}>
+                        <div className={styles.participantModalName}>{participant.participantName}</div>
+                        <div className={styles.participantModalTime}>
+                          Joined: {formatTimestamp(participant.joinedAt)}
+                          {participant.leftAt && (
+                            <> • Left: {formatTimestamp(participant.leftAt)}</>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
     </>
@@ -430,6 +453,32 @@ interface SummaryTabProps {
 
 function SummaryTab({ meeting, isGeneratingSummary = false }: SummaryTabProps) {
   const summary = meeting.summaries?.[0]; // Latest summary
+  const [copied, setCopied] = useState(false);
+
+  const handleCopySummary = async () => {
+    if (!summary) return;
+    
+    const summaryText = `Meeting Summary: ${meeting.title}
+
+${summary.summary}
+
+${summary.keyPoints.length > 0 ? `Key Points:
+${summary.keyPoints.map(point => `• ${point}`).join('\n')}
+
+` : ''}${summary.actionItems.length > 0 ? `Action Items:
+${summary.actionItems.map(item => `• ${item}`).join('\n')}
+
+` : ''}${summary.decisions.length > 0 ? `Decisions Made:
+${summary.decisions.map(decision => `• ${decision}`).join('\n')}` : ''}`;
+
+    try {
+      await navigator.clipboard.writeText(summaryText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy summary:', error);
+    }
+  };
 
   return (
     <div className={styles.summaryTab}>
@@ -437,10 +486,23 @@ function SummaryTab({ meeting, isGeneratingSummary = false }: SummaryTabProps) {
       {summary ? (
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
-            <h3 className={styles.sectionTitle}>AI Summary</h3>
-            {summary.aiModel && (
-              <span className={styles.aiModel}>Generated by {summary.aiModel}</span>
-            )}
+            <h3 className={styles.sectionTitle}>Meeting Summary</h3>
+            <button 
+              onClick={handleCopySummary}
+              className={styles.copyButton}
+              title="Copy summary to clipboard"
+            >
+              {copied ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <polyline points="20,6 9,17 4,12" stroke="currentColor" strokeWidth="2"/>
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
+                </svg>
+              )}
+            </button>
           </div>
           <div className={styles.summaryContent}>
             <p className={styles.summaryText}>{summary.summary}</p>
@@ -481,11 +543,11 @@ function SummaryTab({ meeting, isGeneratingSummary = false }: SummaryTabProps) {
         </div>
       ) : isGeneratingSummary ? (
         <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>AI Summary</h3>
+          <h3 className={styles.sectionTitle}>Meeting Summary</h3>
           <div className={styles.generatingSummary}>
             <div className={styles.loadingSpinner}></div>
-            <h4>🤖 Generating AI Summary...</h4>
-            <p>Our AI is analyzing the meeting transcript and creating a comprehensive summary. This usually takes 30-60 seconds.</p>
+            <h4>Generating Summary...</h4>
+            <p>Analyzing the meeting transcript and creating a comprehensive summary. This usually takes 30-60 seconds.</p>
             <div className={styles.processingSteps}>
               <div className={styles.processingStep}>
                 <span className={styles.stepIcon}>📝</span>
@@ -508,7 +570,7 @@ function SummaryTab({ meeting, isGeneratingSummary = false }: SummaryTabProps) {
         </div>
       ) : (
         <div className={styles.section}>
-          <h3 className={styles.sectionTitle}>AI Summary</h3>
+          <h3 className={styles.sectionTitle}>Meeting Summary</h3>
           <div className={styles.noSummary}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
               <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
@@ -516,8 +578,8 @@ function SummaryTab({ meeting, isGeneratingSummary = false }: SummaryTabProps) {
               <line x1="9" y1="9" x2="9.01" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               <line x1="15" y1="9" x2="15.01" y2="9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
             </svg>
-            <h4>No AI Summary Available</h4>
-            <p>AI summary will be generated after the meeting ends.</p>
+            <h4>No Summary Available</h4>
+            <p>Summary will be generated after the meeting ends.</p>
           </div>
         </div>
       )}

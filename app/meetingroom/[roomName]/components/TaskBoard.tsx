@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useUser } from '@clerk/nextjs';
-import { Ban, Clock, User, Calendar, Plus, Trash2, Edit2, Save, X, MessageSquare, Send } from 'lucide-react';
+import { Ban, Clock, User, Calendar, Plus, Trash2, Edit2, Save, X, MessageSquare, Send, Filter } from 'lucide-react';
 import styles from '@/styles/TaskBoard.module.css';
 
 interface Task {
@@ -29,6 +29,13 @@ interface TaskBoardProps {
   roomName: string;
 }
 
+interface FilterState {
+  status: 'all' | 'pending' | 'completed';
+  priority: 'all' | 'HIGH' | 'MEDIUM' | 'LOW';
+  sortBy: 'priority' | 'dueDate' | 'created';
+  sortOrder: 'asc' | 'desc';
+}
+
 export function TaskBoard({ roomName }: TaskBoardProps) {
   const { user, isLoaded: userLoaded } = useUser();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -38,6 +45,15 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [participants, setParticipants] = useState<Array<{ id: string; name: string }>>([]);
   const [roomId, setRoomId] = useState<string | null>(null);
+  
+  // Filter state
+  const [filters, setFilters] = useState<FilterState>({
+    status: 'all',
+    priority: 'all',
+    sortBy: 'priority',
+    sortOrder: 'desc'
+  });
+  const [showFilters, setShowFilters] = useState(false);
   
   // New task form state
   const [newTask, setNewTask] = useState({
@@ -367,6 +383,52 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
     return new Date(dateString) < new Date();
   };
 
+  // Filter and sort tasks
+  const getFilteredAndSortedTasks = () => {
+    let filteredTasks = [...tasks];
+
+    // Apply status filter
+    if (filters.status !== 'all') {
+      filteredTasks = filteredTasks.filter(task => {
+        if (filters.status === 'pending') return task.status === 'PENDING';
+        if (filters.status === 'completed') return task.status === 'COMPLETED';
+        return true;
+      });
+    }
+
+    // Apply priority filter
+    if (filters.priority !== 'all') {
+      filteredTasks = filteredTasks.filter(task => task.priority === filters.priority);
+    }
+
+    // Apply sorting
+    filteredTasks.sort((a, b) => {
+      let comparison = 0;
+
+      if (filters.sortBy === 'priority') {
+        const priorityOrder = { 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
+        comparison = priorityOrder[a.priority] - priorityOrder[b.priority];
+      } else if (filters.sortBy === 'dueDate') {
+        const aDate = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+        const bDate = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+        
+        // Handle tasks without due dates (put them at the end)
+        if (!a.dueDate && !b.dueDate) comparison = 0;
+        else if (!a.dueDate) comparison = 1;
+        else if (!b.dueDate) comparison = -1;
+        else comparison = aDate - bDate;
+      } else if (filters.sortBy === 'created') {
+        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      }
+
+      return filters.sortOrder === 'desc' ? -comparison : comparison;
+    });
+
+    return filteredTasks;
+  };
+
+  const filteredTasks = getFilteredAndSortedTasks();
+
   // If user is not loaded yet, show loading
   if (!userLoaded) {
     return (
@@ -400,18 +462,98 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
           <h2 className={styles.title}>Tasks</h2>
           <p className={styles.subtitle}>Track and manage team assignments</p>
         </div>
-        <button
-          onClick={handleAddTask}
-          disabled={isAddingTask}
-          className={styles.addButton}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2"/>
-            <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2"/>
-          </svg>
-          Add Task
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`${styles.filterButton} ${showFilters ? styles.active : ''}`}
+          >
+            <Filter size={16} />
+            Filter & Sort
+          </button>
+          <button
+            onClick={handleAddTask}
+            disabled={isAddingTask}
+            className={styles.addButton}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" strokeWidth="2"/>
+              <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" strokeWidth="2"/>
+            </svg>
+            Add Task
+          </button>
+        </div>
       </div>
+
+      {/* Filter Panel */}
+      {showFilters && (
+        <div className={styles.filterPanel}>
+          <div className={styles.filterRow}>
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel}>Status</label>
+              <select
+                value={filters.status}
+                onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value as FilterState['status'] }))}
+                className={styles.filterSelect}
+              >
+                <option value="all">All Tasks</option>
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+            
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel}>Priority</label>
+              <select
+                value={filters.priority}
+                onChange={(e) => setFilters(prev => ({ ...prev, priority: e.target.value as FilterState['priority'] }))}
+                className={styles.filterSelect}
+              >
+                <option value="all">All Priorities</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+            </div>
+            
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel}>Sort By</label>
+              <select
+                value={filters.sortBy}
+                onChange={(e) => setFilters(prev => ({ ...prev, sortBy: e.target.value as FilterState['sortBy'] }))}
+                className={styles.filterSelect}
+              >
+                <option value="priority">Priority</option>
+                <option value="dueDate">Due Date</option>
+                <option value="created">Created Date</option>
+              </select>
+            </div>
+            
+            <div className={styles.filterGroup}>
+              <label className={styles.filterLabel}>Order</label>
+              <select
+                value={filters.sortOrder}
+                onChange={(e) => setFilters(prev => ({ ...prev, sortOrder: e.target.value as FilterState['sortOrder'] }))}
+                className={styles.filterSelect}
+              >
+                <option value="desc">High to Low</option>
+                <option value="asc">Low to High</option>
+              </select>
+            </div>
+            
+            <button
+              onClick={() => setFilters({
+                status: 'all',
+                priority: 'all',
+                sortBy: 'priority',
+                sortOrder: 'desc'
+              })}
+              className={styles.resetButton}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Task List */}
       <div className={styles.taskList}>
@@ -499,7 +641,7 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
         )}
 
         {/* Existing Tasks */}
-        {tasks.map(task => (
+        {filteredTasks.map(task => (
           <div
             key={task.id}
             className={`${styles.taskRow} ${task.status === 'COMPLETED' ? styles.completedTask : ''}`}
@@ -558,7 +700,7 @@ export function TaskBoard({ roomName }: TaskBoardProps) {
         ))}
 
         {/* Empty State */}
-        {tasks.length === 0 && !isAddingTask && (
+        {filteredTasks.length === 0 && !isAddingTask && (
           <div className={styles.emptyState}>
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M9 11H7a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-2M9 11V9a2 2 0 1 1 4 0v2M9 11h6" stroke="currentColor" strokeWidth="2"/>

@@ -152,7 +152,7 @@ export function Dashboard() {
       <main className={styles.main}>
         <div className={styles.mainContent}>
           
-          {/* Meeting Rooms Section */}
+          {/* Workspaces Section */}
           <section className={styles.contentSection}>
             <div className={styles.sectionHeader}>
               <div className={styles.sectionHeaderContent}>
@@ -164,7 +164,7 @@ export function Dashboard() {
                     </svg>
                   </div>
                   <div>
-                    <h2 className={styles.sectionTitle}>Your Meeting Rooms</h2>
+                    <h2 className={styles.sectionTitle}>Your Workspaces</h2>
                     <p className={styles.sectionDescription}>
                       Persistent spaces for your team meetings and collaboration
                     </p>
@@ -180,7 +180,7 @@ export function Dashboard() {
                       <line x1="12" y1="8" x2="12" y2="16" stroke="currentColor" strokeWidth="2"/>
                       <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" strokeWidth="2"/>
                     </svg>
-                    Create Room
+                    Create Workspace
                   </button>
                   {hasMoreRooms && (
                     <button 
@@ -218,15 +218,15 @@ export function Dashboard() {
                     <line x1="9" y1="14" x2="15" y2="14" stroke="currentColor" strokeWidth="2"/>
                   </svg>
                 </div>
-                <h3 className={styles.emptyStateTitle}>No meeting rooms yet</h3>
+                <h3 className={styles.emptyStateTitle}>No workspaces yet</h3>
                 <p className={styles.emptyStateDescription}>
-                  Create your first meeting room to get started with persistent team collaboration
+                  Create your first workspace to get started with persistent team collaboration
                 </p>
                 <button 
                   onClick={() => setShowCreateRoomPopup(true)}
                   className={styles.emptyStateButton}
                 >
-                  Create Meeting Room
+                  Create Workspace
                 </button>
               </div>
             )}

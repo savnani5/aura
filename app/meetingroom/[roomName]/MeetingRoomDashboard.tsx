@@ -56,6 +56,9 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
   
   // Modal state for manually opening meeting details
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
+  
+  // Participants modal state
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -210,7 +213,7 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
               <h1 className={styles.roomTitle}>{room.title}</h1>
               <div className={styles.roomMeta}>
                 <span className={styles.roomType}>{room.type}</span>
-                <span className={styles.roomName}>#{roomName}</span>
+                {/* <span className={styles.roomName}>#{roomName}</span> */}
                 {isCurrentUserHost && (
                   <span className={styles.hostBadge}>Host</span>
                 )}
@@ -230,7 +233,11 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
               </div>
             ))}
             {remainingCount > 0 && (
-              <div className={styles.participantCount} title={`+${remainingCount} more participants`}>
+              <div 
+                className={styles.participantCount} 
+                title={`+${remainingCount} more participants`}
+                onClick={() => setShowParticipantsModal(true)}
+              >
                 +{remainingCount}
               </div>
             )}
@@ -327,6 +334,51 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
                 onRoomDeleted={handleBackToHome}
               />
             )}
+            
+            {/* Test Email Button for Development */}
+            {activePanel === 'settings' && room && isCurrentUserHost && process.env.NODE_ENV === 'development' && (
+              <div style={{ marginTop: '20px', padding: '16px', border: '2px dashed #e5e7eb', borderRadius: '8px' }}>
+                <h3 style={{ margin: '0 0 12px 0', color: '#374151', fontSize: '16px' }}>Development Tools</h3>
+                <button
+                  onClick={async () => {
+                    try {
+                      const response = await fetch('/api/emails', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          type: 'invitation',
+                          roomName: roomName,
+                          hostName: user?.fullName || 'Test Host'
+                        })
+                      });
+                      const result = await response.json();
+                      if (result.success) {
+                        alert(`✅ Test invitations sent! Sent to: ${result.sentTo.join(', ')}`);
+                      } else {
+                        alert(`❌ Failed to send invitations: ${result.error}`);
+                      }
+                    } catch (error) {
+                      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                    }
+                  }}
+                  style={{
+                    padding: '8px 16px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    marginRight: '8px'
+                  }}
+                >
+                  📧 Test Email Invitations
+                </button>
+                <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+                  This will send test invitation emails to all room participants
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </main>
@@ -338,6 +390,50 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
           isOpen={!!selectedMeetingId}
           onClose={() => setSelectedMeetingId(null)}
         />
+      )}
+      
+      {/* Participants Modal */}
+      {showParticipantsModal && (
+        <div className={styles.modalOverlay} onClick={() => setShowParticipantsModal(false)}>
+          <div className={styles.participantsModal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h3>Workspace Participants</h3>
+              <button 
+                onClick={() => setShowParticipantsModal(false)}
+                className={styles.closeButton}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2"/>
+                  <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2"/>
+                </svg>
+              </button>
+            </div>
+            <div className={styles.modalContent}>
+              <div className={styles.participantsList}>
+                {participants.map((participant) => (
+                  <div key={participant.id} className={styles.participantItem}>
+                    <div className={`${styles.participantAvatar} ${participant.isHost ? styles.hostAvatar : ''}`}>
+                      {getInitials(participant.name)}
+                    </div>
+                    <div className={styles.participantInfo}>
+                      <div className={styles.participantName}>
+                        {participant.name}
+                        {participant.isHost && (
+                          <span className={styles.hostBadge}>Host</span>
+                        )}
+                      </div>
+                      <div className={styles.participantEmail}>{participant.email}</div>
+                      <div className={styles.participantStatus}>
+                        <div className={styles.statusIndicator}></div>
+                        Online
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

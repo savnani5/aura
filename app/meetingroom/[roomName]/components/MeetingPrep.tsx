@@ -36,10 +36,12 @@ export function MeetingPrep({ roomName }: MeetingPrepProps) {
     if (!user) return;
     
     const timeoutId = setTimeout(() => {
+      // Always save, even empty notes (which removes the key)
+      const storageKey = getNotesStorageKey();
       if (notes.trim()) {
-        localStorage.setItem(getNotesStorageKey(), notes);
+        localStorage.setItem(storageKey, notes);
       } else {
-        localStorage.removeItem(getNotesStorageKey());
+        localStorage.removeItem(storageKey);
       }
     }, 1000);
 
@@ -113,26 +115,40 @@ export function MeetingPrep({ roomName }: MeetingPrepProps) {
     <div className={styles.container}>
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <h2 className={styles.title}>Meeting Prep</h2>
-          <p className={styles.subtitle}>Jot down your thoughts and agenda before the meeting</p>
+          <h2 className={styles.title}>Your Notepad</h2>
+          {/* <p className={styles.subtitle}></p> */}
         </div>
-        {notes.trim() && (
+        <div className={styles.headerRight}>
           <button
-            onClick={clearNotes}
-            className={styles.clearButton}
-            title="Clear notes"
+            onClick={handleStartMeeting}
+            disabled={isLoading || !user}
+            className={styles.joinMeetingButton}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 6h18M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Clear
+            {isLoading ? (
+              <>
+                <div className={styles.spinner} />
+                Starting...
+              </>
+            ) : (
+              <>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M15 10l4.553-2.276A1 1 0 0 1 21 8.618v6.764a1 1 0 0 1-1.447.894L15 14M5 18h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Join Meeting
+              </>
+            )}
           </button>
-        )}
+        </div>
       </div>
 
       <div className={styles.notesSection}>
         <div className={styles.notesHeader}>
-          {/* <label className={styles.notesLabel}>Pre-meeting Notes</label> */}
+          <div className={styles.transferNote}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Your notes will transfer to the live meeting
+          </div>
         </div>
         
         <textarea
@@ -155,32 +171,7 @@ export function MeetingPrep({ roomName }: MeetingPrepProps) {
             </svg>
             Auto-saved locally
           </div>
-          <div className={styles.characterCount}>
-            {notes.length} characters
-          </div>
         </div>
-      </div>
-
-      <div className={styles.actions}>
-        <button
-          onClick={handleStartMeeting}
-          disabled={isLoading || !user}
-          className={styles.startMeetingButton}
-        >
-          {isLoading ? (
-            <>
-              <div className={styles.spinner} />
-              Starting...
-            </>
-          ) : (
-            <>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M15 10l4.553-2.276A1 1 0 0 1 21 8.618v6.764a1 1 0 0 1-1.447.894L15 14M5 18h8a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              Join Meeting
-            </>
-          )}
-        </button>
       </div>
     </div>
   );

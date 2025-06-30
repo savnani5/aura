@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/mongodb';
 import { RAGService } from '@/lib/rag-service';
+import { EmailService } from '@/lib/email-service';
 import Anthropic from '@anthropic-ai/sdk';
 
 const anthropic = new Anthropic({
@@ -337,6 +338,7 @@ export async function POST(
 
       // Generate summary if we have transcripts (background process)
       let summaryGenerated = false;
+      let emailsSent = false;
       if (transcriptsStored > 0) {
         try {
           console.log(`🤖 Generating AI summary...`);
@@ -356,6 +358,68 @@ export async function POST(
             await dbService.updateMeeting(meetingId, { summary });
             summaryGenerated = true;
             console.log(`✅ Generated and stored AI summary`);
+
+            // Send summary emails to participants if summary was generated successfully
+            if (summaryGenerated && participants.length > 0) {
+              try {
+                console.log(`📧 Sending summary emails to ${participants.length} participants...`);
+                
+                // Get the final updated meeting with summary
+                const meetingWithSummary = await dbService.getMeetingById(meetingId);
+                
+                if (meetingWithSummary && meetingWithSummary.summary) {
+                  // Get room info for email context
+                  const room = await dbService.getMeetingRoomByName(roomName);
+                  const roomTitle = room?.title || meeting.type || roomName;
+                  
+                  // Format participants for email service - Get emails from room participants
+                  let emailParticipants: Array<{name: string, email: string}> = [];
+                  
+                  if (room && room.participants && room.participants.length > 0) {
+                    // Use participants from the room database with proper email addresses
+                    emailParticipants = room.participants
+                      .filter((p: any) => p.email && p.email.includes('@'))
+                      .map((p: any) => ({
+                        name: p.name || 'Participant',
+                        email: p.email
+                      }));
+                  } else {
+                    // Fallback: Try to use participants from the request, but they likely won't have emails
+                    emailParticipants = participants
+                      .filter((p: any) => p.name && typeof p.name === 'string')
+                      .map((p: any) => ({
+                        name: p.name,
+                        email: p.email || `${p.name.toLowerCase().replace(/\s+/g, '.')}@example.com`
+                      }))
+                      .filter((p: {name: string, email: string}) => p.email && p.email.includes('@') && !p.email.includes('@example.com')); // Only real emails
+                  }
+                  
+                  if (emailParticipants.length > 0) {
+                    const emailService = EmailService.getInstance();
+                    const emailResult = await emailService.sendMeetingSummary(
+                      meetingWithSummary,
+                      roomTitle,
+                      emailParticipants
+                    );
+                    
+                    if (emailResult.success) {
+                      emailsSent = true;
+                      console.log(`✅ Summary emails sent to: ${emailResult.sentTo.join(', ')}`);
+                    } else {
+                      console.log(`⚠️ Some summary emails failed. Sent to: ${emailResult.sentTo.join(', ')}, Failed: ${emailResult.failedTo.join(', ')}`);
+                      console.log(`📧 Email errors: ${emailResult.errors.join(', ')}`);
+                    }
+                  } else {
+                    console.log(`⚠️ No valid email addresses found for participants, skipping email sending`);
+                  }
+                } else {
+                  console.log(`⚠️ Summary not found after storage, skipping email sending`);
+                }
+              } catch (emailError) {
+                console.error('Error sending summary emails:', emailError);
+                // Don't fail the whole request if email sending fails
+              }
+            }
           }
         } catch (summaryError) {
           console.error('Error generating summary:', summaryError);
@@ -375,6 +439,7 @@ export async function POST(
           duration: calculatedDuration,
           transcriptsStored,
           summaryGenerated,
+          emailsSent,
           redirectUrl: meeting.roomId 
             ? `/meetingroom/${roomName}` 
             : '/'
