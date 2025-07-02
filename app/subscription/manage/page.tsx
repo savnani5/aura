@@ -93,7 +93,7 @@ export default function ManageSubscriptionPage() {
                 </div>
               ) : (
                 <div className={styles.inactiveMessage}>
-                  <p>You don't have an active subscription. Subscribe to access Ohm Pro features.</p>
+                  <p>You don&apos;t have an active subscription. Subscribe to access Ohm Pro features.</p>
                 </div>
               )}
             </div>

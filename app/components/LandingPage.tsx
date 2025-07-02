@@ -64,7 +64,7 @@ export function LandingPage() {
               <iframe
                 width="560"
                 height="315"
-                src="https://www.youtube.com/embed/lAkS0F3CZFQ"
+                src="https://www.youtube.com/embed/zTxVDaxxTmg"
                 title="Ohm AI Product Demo"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"

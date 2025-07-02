@@ -79,7 +79,7 @@ export default function SubscriptionCanceledPage() {
             <h1>Payment Canceled</h1>
             <p>
               No worries! Your payment was canceled and no charges were made. 
-              You can still try Ohm Pro when you're ready.
+              You can still try Ohm Pro when you&apos;re ready.
             </p>
 
             <div className={styles.nextSteps}>
@@ -106,7 +106,7 @@ export default function SubscriptionCanceledPage() {
             </p>
 
             <p className={styles.helpText}>
-              Having issues? Contact us at support@ohm.ai - we're here to help!
+              Having issues? Contact us at support@ohm.ai - we&apos;re here to help!
             </p>
           </div>
         </div>

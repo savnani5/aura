@@ -62,14 +62,12 @@ const nextConfig = {
 
     return config;
   },
-  swcMinify: true,
   onDemandEntries: {
     maxInactiveAge: 25 * 1000,
     pagesBufferLength: 2,
   },
   experimental: {
     optimizePackageImports: ['@clerk/nextjs', 'mongoose', 'react-hot-toast'],
-    bundlePagesRouterDependencies: true,
   }
 };
 

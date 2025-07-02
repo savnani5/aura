@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { connectToDatabase } from '@/lib/mongodb';
-import { User } from '@/models/User';
+import { DatabaseService } from '@/lib/mongodb';
 import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-10-28.acacia',
+  apiVersion: '2025-06-30.basil',
 });
 
 export async function POST(req: NextRequest) {
@@ -22,9 +21,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Connect to database and find user
-    await connectToDatabase();
-    const user = await User.findOne({ clerkId: userId });
+    // Get user from database using DatabaseService
+    const dbService = DatabaseService.getInstance();
+    const user = await dbService.getUserByClerkId(userId);
     
     if (!user) {
       console.log('❌ User not found in database:', userId);

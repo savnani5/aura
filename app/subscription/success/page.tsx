@@ -136,7 +136,7 @@ export default function SubscriptionSuccessPage() {
             )}
 
             <div className={styles.nextSteps}>
-              <h3>What's Next?</h3>
+              <h3>What&apos;s Next?</h3>
               <ul>
                 <li>Start creating unlimited meeting rooms for your team</li>
                 <li>Experience real-time AI transcription and summaries</li>
