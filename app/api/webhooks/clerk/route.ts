@@ -5,11 +5,15 @@ import { Webhook } from "svix";
 import { DatabaseService } from '@/lib/mongodb';
 
 // Set to nodejs runtime to ensure the raw body is preserved
+// This is critical for webhook signature verification
 export const runtime = 'nodejs';
+
+// Force dynamic rendering to ensure webhooks are processed fresh each time
 export const dynamic = 'force-dynamic';
+
+// Specify 'auto' region to optimize latency for webhook handling
 export const preferredRegion = 'auto';
 
-// Ensure we're handling the specific methods we need
 export async function POST(req: Request) {
   // Log the webhook receipt - this helps with debugging
   console.log('⚡ Clerk webhook received');
@@ -31,10 +35,11 @@ export async function POST(req: Request) {
   }
 
   try {
-    // Get the raw body as text for signature verification
+    // IMPORTANT: Get the raw body as text for signature verification
+    // This exact raw body is needed for signature verification
     const rawBody = await req.text();
     
-    // Get the headers - in Next.js 15.2.4, headers() returns a Promise that must be awaited
+    // Get the headers (in Next.js 15, we need to await headers())
     const headersList = await headers();
     
     // Extract the Svix headers for verification
@@ -52,13 +57,13 @@ export async function POST(req: Request) {
     // Debug log the size of the body
     console.log(`📦 Webhook body size: ${rawBody.length} bytes`);
 
-    // If there are no headers, error out
+    // If there are no headers, error out - required for signature verification
     if (!svix_id || !svix_timestamp || !svix_signature) {
       console.error('❌ Missing required Svix headers');
       return new Response("Error occurred -- missing required Svix headers", { status: 400 });
     }
 
-    // Skip signature verification in development mode if needed
+    // Skip signature verification in development mode if configured
     let evt: WebhookEvent;
     
     if (isDevelopment && process.env.CLERK_SKIP_VERIFICATION === 'true') {
@@ -77,6 +82,7 @@ export async function POST(req: Request) {
         const wh = new Webhook(WEBHOOK_SECRET);
         
         // Verify the payload with the headers
+        // This verifies that the request is actually from Clerk
         evt = wh.verify(rawBody, {
           "svix-id": svix_id,
           "svix-timestamp": svix_timestamp,
@@ -87,7 +93,7 @@ export async function POST(req: Request) {
       } catch (err) {
         console.error("❌ Webhook signature verification failed:", err);
         
-        // More detailed error logging
+        // More detailed error logging for debugging signature issues
         if (err instanceof Error) {
           console.error({
             message: err.message,
@@ -96,11 +102,12 @@ export async function POST(req: Request) {
           });
         }
         
+        // Return 4xx status to indicate client error (not 5xx which would trigger retries)
         return new Response("Error occurred - webhook verification failed", { status: 400 });
       }
     }
 
-    // Get the ID and type
+    // Get the ID and type from the verified event
     const { id } = evt.data;
     const eventType = evt.type;
 
@@ -108,7 +115,7 @@ export async function POST(req: Request) {
 
     const db = DatabaseService.getInstance();
 
-    // CREATE
+    // CREATE USER
     if (eventType === "user.created") {
       try {
         console.log('👤 Processing user.created event');
@@ -153,7 +160,7 @@ export async function POST(req: Request) {
 
         console.log('✅ User created successfully in database');
 
-        // Set public metadata
+        // Set public metadata with userId for future reference
         try {
           const clerk = await clerkClient();
           await clerk.users.updateUserMetadata(id, {
@@ -188,7 +195,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // UPDATE
+    // UPDATE USER
     if (eventType === "user.updated") {
       try {
         console.log('🔄 Processing user.updated event');
@@ -225,7 +232,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // DELETE
+    // DELETE USER
     if (eventType === "user.deleted") {
       try {
         console.log('🗑️ Processing user.deleted event');
@@ -251,7 +258,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // For any other event types
+    // For any other event types, simply acknowledge receipt
     console.log(`✓ Acknowledged event type: ${eventType}`);
     return NextResponse.json({ 
       message: "Webhook received", 
@@ -268,6 +275,7 @@ export async function POST(req: Request) {
 }
 
 // Define other HTTP methods to return 405 Method Not Allowed
+// This prevents unintended interactions with the webhook endpoint
 export async function GET() {
   return new Response('Method not allowed', { status: 405 });
 }

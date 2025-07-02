@@ -19,7 +19,8 @@ const isPublicRoute = createRouteMatcher([
   '/api/ai-chat',                      // Allow AI chat for live meetings
 ]);
 
-// Define webhook routes that should bypass Clerk auth
+// Define webhook routes to bypass Clerk auth entirely
+// This is critical for proper webhook handling
 const isWebhookRoute = createRouteMatcher([
   '/api/webhooks/clerk',
   '/api/webhooks/clerk/',
@@ -27,16 +28,21 @@ const isWebhookRoute = createRouteMatcher([
   '/api/webhooks/stripe/',
 ]);
 
+// Main Clerk middleware to protect routes
 export default clerkMiddleware((auth, req: NextRequest) => {
   const url = new URL(req.url);
   
-  // Special handling for webhook paths to prevent redirects and bypass auth
+  // Special handling for webhook paths - bypass Clerk entirely 
+  // This prevents redirects and authentication issues with webhooks
   if (isWebhookRoute(req)) {
     console.log('⚡ Webhook request detected in middleware:', url.pathname);
-    // Bypass Clerk for webhook endpoints
+    
+    // IMPORTANT: For Vercel deployments, we must prevent any redirects for webhooks
+    // as redirects break signature verification
     return NextResponse.next();
   }
   
+  // For non-webhook routes, process through normal Clerk auth
   return auth().then(({ userId }) => {
     // If user is signed in and trying to access protected routes
     if (isProtectedRoute(req) && userId) {
@@ -66,7 +72,7 @@ export const config = {
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
     // Always run for API routes
     '/(api|trpc)(.*)',
-    // Apply to all API webhook routes
+    // Apply to all API webhook routes specifically
     '/api/webhooks/:path*',
   ],
 }; 
