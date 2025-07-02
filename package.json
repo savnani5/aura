@@ -41,7 +41,7 @@
     "react-markdown": "^10.1.0",
     "resend": "^4.6.0",
     "stripe": "^18.3.0",
-    "svix": "^1.67.0",
+    "svix": "^1.68.0",
     "tavily": "^1.0.2",
     "tinykeys": "^3.0.0",
     "voyageai": "^0.0.4"

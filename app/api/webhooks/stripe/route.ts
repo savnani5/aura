@@ -4,18 +4,27 @@ import { DatabaseService, User } from '@/lib/mongodb';
 import { StripeService } from '@/lib/stripe-service';
 import Stripe from 'stripe';
 
-// Disable body parsing for webhook signature verification
+// Ensure proper webhook handling
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('⚡ Stripe webhook received');
+    
     // Get the raw body as an ArrayBuffer then convert to Buffer
     const buf = await request.arrayBuffer();
-    const body = Buffer.from(buf);
-    const signature = (await headers()).get('stripe-signature') as string;
+    const rawBody = Buffer.from(buf);
+    
+    // Get the stripe-signature header with proper async handling in Next.js 15+
+    const headersList = await headers();
+    const signature = headersList.get('stripe-signature');
+
+    console.log(`📦 Webhook body size: ${rawBody.length} bytes`);
+    console.log(`🔑 Signature: ${signature ? signature.substring(0, 15) + '...' : 'missing'}`);
 
     if (!signature) {
-      console.error('Missing stripe-signature header');
+      console.error('❌ Missing stripe-signature header');
       return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
     }
 
@@ -26,13 +35,24 @@ export async function POST(request: NextRequest) {
 
     try {
       // Pass the Buffer directly to Stripe for signature verification
-      event = stripeService.constructWebhookEvent(body, signature);
+      event = stripeService.constructWebhookEvent(rawBody, signature);
+      console.log('✅ Webhook signature verified successfully');
     } catch (err) {
-      console.error('Webhook signature verification failed:', err);
+      console.error('❌ Webhook signature verification failed:', err);
+      
+      // More detailed error logging
+      if (err instanceof Error) {
+        console.error({
+          message: err.message,
+          name: err.name,
+          stack: err.stack?.split('\n').slice(0, 3).join('\n')
+        });
+      }
+      
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
-    console.log('Received Stripe webhook:', event.type);
+    console.log(`🔔 Processing Stripe webhook: ${event.type}`);
 
     // Handle the event
     switch (event.type) {
@@ -58,13 +78,16 @@ export async function POST(request: NextRequest) {
         break;
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        console.log(`ℹ️ Unhandled event type: ${event.type}`);
     }
 
-    return NextResponse.json({ received: true });
+    return NextResponse.json({ 
+      received: true,
+      type: event.type
+    });
 
   } catch (error) {
-    console.error('Error processing webhook:', error);
+    console.error('❌ Error processing webhook:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
