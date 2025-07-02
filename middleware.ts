@@ -19,60 +19,34 @@ const isPublicRoute = createRouteMatcher([
   '/api/ai-chat',                      // Allow AI chat for live meetings
 ]);
 
-// Define webhook routes to bypass Clerk auth entirely
-// This is critical for proper webhook handling
-const isWebhookRoute = createRouteMatcher([
-  '/api/webhooks/clerk',
-  '/api/webhooks/clerk/',
-  '/api/webhooks/stripe',
-  '/api/webhooks/stripe/',
-]);
-
-// Main Clerk middleware to protect routes
-export default clerkMiddleware((auth, req: NextRequest) => {
-  const url = new URL(req.url);
+export default clerkMiddleware(async (auth, req: NextRequest) => {
+  const { userId } = await auth();
   
-  // Special handling for webhook paths - bypass Clerk entirely 
-  // This prevents redirects and authentication issues with webhooks
-  if (isWebhookRoute(req)) {
-    console.log('⚡ Webhook request detected in middleware:', url.pathname);
-    
-    // IMPORTANT: For Vercel deployments, we must prevent any redirects for webhooks
-    // as redirects break signature verification
-    return NextResponse.next();
-  }
-  
-  // For non-webhook routes, process through normal Clerk auth
-  return auth().then(({ userId }) => {
-    // If user is signed in and trying to access protected routes
-    if (isProtectedRoute(req) && userId) {
-      // Skip subscription check for subscription-related pages
-      if (req.nextUrl.pathname.startsWith('/subscription')) {
-        return NextResponse.next();
-      }
-
-      try {
-        // For now, let's use a simpler approach and check subscription client-side
-        // The subscription page itself will handle the redirect logic
-        return NextResponse.next();
-      } catch (error) {
-        console.error('Error in middleware:', error);
-        return NextResponse.next();
-      }
+  // If user is signed in and trying to access protected routes
+  if (isProtectedRoute(req) && userId) {
+    // Skip subscription check for subscription-related pages
+    if (req.nextUrl.pathname.startsWith('/subscription')) {
+      return NextResponse.next();
     }
 
-    return NextResponse.next();
-  });
+    try {
+      // For now, let's use a simpler approach and check subscription client-side
+      // The subscription page itself will handle the redirect logic
+      return NextResponse.next();
+    } catch (error) {
+      console.error('Error in middleware:', error);
+      return NextResponse.next();
+    }
+  }
+
+  return NextResponse.next();
 });
 
-// Configure to match specific paths only
 export const config = {
   matcher: [
     // Skip Next.js internals and all static files, unless found in search params
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
     // Always run for API routes
     '/(api|trpc)(.*)',
-    // Apply to all API webhook routes specifically
-    '/api/webhooks/:path*',
   ],
 }; 
