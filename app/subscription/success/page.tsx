@@ -71,7 +71,7 @@ export default function SubscriptionSuccessPage() {
     return (
       <div className={styles.container}>
         <AppHeader 
-          title="Ohm Pro" 
+          title="Ohm Subscription" 
           subtitle="Payment processing..." 
           showActions={false}
         />
@@ -92,7 +92,7 @@ export default function SubscriptionSuccessPage() {
   return (
     <div className={styles.container}>
       <AppHeader 
-        title="Ohm Pro" 
+        title="Ohm Subscription" 
         subtitle="Welcome to your upgraded experience" 
         showActions={false}
       />
@@ -106,7 +106,7 @@ export default function SubscriptionSuccessPage() {
               </svg>
             </div>
 
-            <h1>Welcome to Ohm Pro!</h1>
+            <h1>Welcome to Ohm!</h1>
             <p>
               Your subscription has been successfully activated. You now have access to all premium features 
               including unlimited meeting rooms, AI transcription, smart summaries, and advanced task management.

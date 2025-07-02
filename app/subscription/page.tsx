@@ -101,7 +101,7 @@ export default function SubscriptionPage() {
                 </div>
                 <div className={styles.detailItem}>
                   <span className={styles.detailLabel}>Plan</span>
-                  <span className={styles.detailValue}>Ohm Pro - $25/month</span>
+                  <span className={styles.detailValue}>Ohm Subscription - $25/month</span>
                 </div>
               </div>
 
@@ -125,7 +125,7 @@ export default function SubscriptionPage() {
             /* Subscription Signup View */
             <div className={styles.pricingCard}>
               <div className={styles.planHeader}>
-                <h3>Ohm Pro</h3>
+                <h3>Ohm Subscription</h3>
                 <div className={styles.price}>
                   <span className={styles.amount}>$25</span>
                   <span className={styles.period}>/month</span>

@@ -90,8 +90,8 @@ export async function POST(request: NextRequest) {
     const session = await stripeService.createCheckoutSession(
       customerId,
       process.env.STRIPE_PRICE_ID!,
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/subscription/success`,
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/subscription/canceled`
+      `${process.env.NEXT_PUBLIC_APP_URL}/subscription/success`,
+      `${process.env.NEXT_PUBLIC_APP_URL}/subscription/canceled`
     );
 
     console.log('✅ Created checkout session:', session.id);

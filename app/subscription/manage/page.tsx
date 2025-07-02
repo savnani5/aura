@@ -93,14 +93,14 @@ export default function ManageSubscriptionPage() {
                 </div>
               ) : (
                 <div className={styles.inactiveMessage}>
-                  <p>You don&apos;t have an active subscription. Subscribe to access Ohm Pro features.</p>
+                  <p>You don&apos;t have an active subscription. Subscribe to access Ohm features.</p>
                 </div>
               )}
             </div>
 
             {/* Features */}
             <div className={styles.featuresSection}>
-              <h3>Ohm Pro Features</h3>
+              <h3>Ohm Features</h3>
               <div className={styles.featuresList}>
                 <div className={styles.featureItem}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none">

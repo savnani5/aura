@@ -39,7 +39,7 @@ export default function SubscriptionCanceledPage() {
     return (
       <div className={styles.container}>
         <AppHeader 
-          title="Ohm Pro" 
+          title="Ohm Subscription" 
           subtitle="Payment processing..." 
           showActions={false}
         />
@@ -60,7 +60,7 @@ export default function SubscriptionCanceledPage() {
   return (
     <div className={styles.container}>
       <AppHeader 
-        title="Ohm Pro" 
+        title="Ohm Subscription" 
         subtitle="Payment was canceled" 
         showActions={false}
       />
@@ -79,7 +79,7 @@ export default function SubscriptionCanceledPage() {
             <h1>Payment Canceled</h1>
             <p>
               No worries! Your payment was canceled and no charges were made. 
-              You can still try Ohm Pro when you&apos;re ready.
+              You can still try Ohm when you&apos;re ready.
             </p>
 
             <div className={styles.nextSteps}>
@@ -88,13 +88,13 @@ export default function SubscriptionCanceledPage() {
                 <li>Continue using Ohm with basic features</li>
                 <li>Try the subscription again anytime</li>
                 <li>Contact support if you had technical issues</li>
-                <li>Learn more about Ohm Pro features</li>
+                <li>Learn more about Ohm features</li>
               </ul>
             </div>
 
             <div className={styles.actions}>
               <Link href="/subscription" className={styles.primaryButton}>
-                Try Ohm Pro Again
+                Try Ohm Subscription Again
               </Link>
               <Link href="/" className={styles.secondaryButton}>
                 Continue with Basic
