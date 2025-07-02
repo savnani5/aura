@@ -5,6 +5,7 @@ import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'react-hot-toast';
 import { ClerkProvider } from '@clerk/nextjs';
 import { dark } from '@clerk/themes';
+import { SubscriptionProvider } from './contexts/SubscriptionContext';
 
 export const metadata: Metadata = {
   title: 'Ohm',
@@ -38,8 +39,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
     <html lang="en">
       <body data-lk-theme="default">
-        <Toaster />
-        {children}
+        <SubscriptionProvider>
+          <Toaster />
+          {children}
+        </SubscriptionProvider>
       </body>
     </html>
     </ClerkProvider>

@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
-import { useUser, UserButton } from '@clerk/nextjs';
+import { useUser } from '@clerk/nextjs';
 import { CreateMeetingPopup } from './CreateMeetingPopup';
 import { MeetingRoomCard } from './MeetingRoomCard';
 import { AllMeetingRoomsView } from './AllMeetingRoomsView';
+import { AppHeader } from './AppHeader';
+import { useSubscriptionGuard } from '@/app/hooks/useSubscriptionGuard';
 import styles from '@/styles/HomePage.module.css';
 
 // TypeScript interfaces for API data
@@ -22,12 +23,13 @@ interface MeetingRoom {
 
 export function Dashboard() {
   const { user } = useUser();
+  const { isLoading: subscriptionLoading, hasAccess } = useSubscriptionGuard();
   const [showCreateRoomPopup, setShowCreateRoomPopup] = useState(false);
   const [showAllRooms, setShowAllRooms] = useState(false);
   const [meetingRooms, setMeetingRooms] = useState<MeetingRoom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Fetch real data from API endpoints
+  // Fetch real data from API endpoints - moved before early returns
   const fetchData = async () => {
     setIsLoading(true);
     console.log('🔄 Starting fetchData...');
@@ -93,9 +95,12 @@ export function Dashboard() {
     console.log('✅ Data refreshed, meeting rooms count:', meetingRooms.length);
   };
 
+  // All hooks must be called before any early returns
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (hasAccess) {
+      fetchData();
+    }
+  }, [hasAccess]);
 
   const meetingRoomsPreview = meetingRooms.slice(0, 6);
   const hasMoreRooms = meetingRooms.length > 6;
@@ -103,6 +108,37 @@ export function Dashboard() {
   const handleViewAllRooms = () => {
     setShowAllRooms(true);
   };
+
+  // Now we can do early returns after all hooks are called
+  // Show loading while checking subscription
+  if (subscriptionLoading) {
+    return (
+      <div className={styles.container}>
+        <AppHeader />
+        <main className={styles.main}>
+          <div className={styles.loadingState}>
+            <div className={styles.loadingSpinner}></div>
+            <p>Loading...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  // If no access, the hook will redirect, but show loading in the meantime
+  if (!hasAccess) {
+    return (
+      <div className={styles.container}>
+        <AppHeader />
+        <main className={styles.main}>
+          <div className={styles.loadingState}>
+            <div className={styles.loadingSpinner}></div>
+            <p>Redirecting...</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   // If showing all rooms, render the respective component
   if (showAllRooms) {
@@ -118,85 +154,61 @@ export function Dashboard() {
 
   return (
     <div className={styles.container}>
-      {/* Header */}
-      <header className={styles.header}>
-        <div className={styles.headerContent}>
-          <div className={styles.headerLeft}>
-            <Image 
-              src="/images/ohm-icon.svg" 
-              alt="Ohm" 
-              width={32} 
-              height={32} 
-              className={styles.logo}
-            />
-            <h1 className={styles.appName}>Ohm</h1>
-          </div>
-          <div className={styles.headerRight}>
-            <span className={styles.welcomeText}>
-              Welcome back, {user?.firstName || user?.fullName || 'User'}!
-            </span>
-            <UserButton 
-              appearance={{
-                elements: {
-                  avatarBox: "w-8 h-8",
-                  userButtonPopoverCard: "bg-gray-900 border border-gray-700",
-                  userButtonPopoverActionButton: "text-gray-300 hover:text-white hover:bg-gray-800",
-                }
-              }}
-            />
-          </div>
-        </div>
-      </header>
+      {/* New App Header */}
+      <AppHeader 
+        showActions={false}
+      />
 
       {/* Main Content */}
       <main className={styles.main}>
         <div className={styles.mainContent}>
           
-          {/* Workspaces Section */}
-          <section className={styles.contentSection}>
-            <div className={styles.sectionHeader}>
-              <div className={styles.sectionHeaderContent}>
-                <div className={styles.sectionTitleGroup}>
-                  <div className={styles.sectionIcon}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" strokeWidth="2"/>
-                      <polyline points="9,22 9,12 15,12 15,22" stroke="currentColor" strokeWidth="2"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <h2 className={styles.sectionTitle}>Your Workspaces</h2>
-                    <p className={styles.sectionDescription}>
-                      Persistent spaces for your team meetings and collaboration
-                    </p>
-                  </div>
+          {/* Page Header */}
+          <div className={styles.pageHeader}>
+            <div className={styles.pageHeaderContent}>
+              <div className={styles.pageTitleSection}>
+                <div className={styles.pageBadge}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke="currentColor" strokeWidth="2"/>
+                    <polyline points="9,22 9,12 15,12 15,22" stroke="currentColor" strokeWidth="2"/>
+                  </svg>
                 </div>
-                <div className={styles.headerActions}>
-                  <button 
-                    onClick={() => setShowCreateRoomPopup(true)}
-                    className={styles.createButton}
-                  >
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                      <line x1="12" y1="8" x2="12" y2="16" stroke="currentColor" strokeWidth="2"/>
-                      <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" strokeWidth="2"/>
-                    </svg>
-                    Create Workspace
-                  </button>
-                  {hasMoreRooms && (
-                    <button 
-                      onClick={handleViewAllRooms}
-                      className={styles.viewAllButton}
-                    >
-                      <span>View All ({meetingRooms.length})</span>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-                        <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
-                  )}
+                <div>
+                  <h1 className={styles.pageTitle}>Your Workspaces</h1>
+                  <p className={styles.pageDescription}>
+                    Persistent spaces for your team meetings and collaboration
+                  </p>
                 </div>
               </div>
+              <div className={styles.pageActions}>
+                <button 
+                  onClick={() => setShowCreateRoomPopup(true)}
+                  className={styles.createButton}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                    <line x1="12" y1="8" x2="12" y2="16" stroke="currentColor" strokeWidth="2"/>
+                    <line x1="8" y1="12" x2="16" y2="12" stroke="currentColor" strokeWidth="2"/>
+                  </svg>
+                  Create Workspace
+                </button>
+                {hasMoreRooms && (
+                  <button 
+                    onClick={handleViewAllRooms}
+                    className={styles.viewAllButton}
+                  >
+                    <span>View All ({meetingRooms.length})</span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                      <path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
+          </div>
 
+          {/* Workspaces Section */}
+          <section className={styles.contentSection}>
             {isLoading ? (
               <div className={styles.loadingState}>
                 <div className={styles.loadingSpinner}></div>

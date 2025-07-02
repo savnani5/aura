@@ -164,7 +164,19 @@ const UserSchema = new mongoose.Schema({
   email: { type: String }, // Optional for now
   avatar: { type: String },
   joinedAt: { type: Date, default: Date.now },
-  lastActive: { type: Date, default: Date.now }
+  lastActive: { type: Date, default: Date.now },
+  
+  // Stripe subscription fields
+  stripeCustomerId: { type: String },
+  stripeSubscriptionId: { type: String },
+  subscriptionStatus: { 
+    type: String, 
+    enum: ['active', 'incomplete', 'incomplete_expired', 'trialing', 'past_due', 'canceled', 'unpaid', null],
+    default: null 
+  },
+  subscriptionCurrentPeriodEnd: { type: Date },
+  subscriptionCreatedAt: { type: Date },
+  trialEndsAt: { type: Date }
 }, {
   timestamps: true
 });
@@ -307,11 +319,11 @@ const TaskSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Create indexes for better performance
+// Create indexes for better performance (remove duplicates)
 UserSchema.index({ email: 1 });
-UserSchema.index({ clerkId: 1 });
+// Remove clerkId index since it's already created by unique: true
 MeetingRoomSchema.index({ createdBy: 1 });
-MeetingRoomSchema.index({ roomName: 1 }); // Critical for room lookups
+// Remove roomName index since it's already created by unique: true
 MeetingRoomSchema.index({ isActive: 1, lastMeetingAt: -1 });
 MeetingSchema.index({ roomId: 1, startedAt: -1 });
 MeetingSchema.index({ roomName: 1, startedAt: -1 });
@@ -418,6 +430,13 @@ export interface IUser {
   avatar?: string;
   joinedAt: Date;
   lastActive: Date;
+  // Stripe subscription fields
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  subscriptionStatus?: 'active' | 'incomplete' | 'incomplete_expired' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | null;
+  subscriptionCurrentPeriodEnd?: Date;
+  subscriptionCreatedAt?: Date;
+  trialEndsAt?: Date;
 }
 
 export interface IMeetingRoom {
@@ -1520,5 +1539,117 @@ export class DatabaseService {
     }
     
     return { updated, totalCleaned };
+  }
+
+  // ============= SUBSCRIPTION MANAGEMENT METHODS =============
+
+  /**
+   * Update user's subscription information from Stripe
+   */
+  async updateUserSubscription(clerkId: string, subscriptionData: {
+    stripeCustomerId?: string;
+    stripeSubscriptionId?: string;
+    subscriptionStatus?: 'active' | 'incomplete' | 'incomplete_expired' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | null;
+    subscriptionCurrentPeriodEnd?: Date;
+    subscriptionCreatedAt?: Date;
+    trialEndsAt?: Date;
+  }): Promise<IUser | null> {
+    await this.ensureConnection();
+
+    const updateData: any = { ...subscriptionData };
+    
+    const updatedUser = await User.findOneAndUpdate(
+      { clerkId },
+      { $set: updateData },
+      { new: true }
+    ).lean() as unknown as IUser;
+
+    console.log(`📋 Updated subscription for user ${clerkId}:`, subscriptionData);
+    return updatedUser;
+  }
+
+  /**
+   * Check if user has active subscription
+   */
+  async hasActiveSubscription(clerkId: string): Promise<boolean> {
+    await this.ensureConnection();
+
+    const user = await User.findOne({ clerkId }).lean() as unknown as IUser;
+    
+    if (!user) return false;
+
+    // Check if subscription is active or trialing
+    const isActive = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
+    
+    // For trialing, also check if trial hasn't expired
+    if (user.subscriptionStatus === 'trialing' && user.trialEndsAt) {
+      return isActive && new Date() < user.trialEndsAt;
+    }
+
+    // For active, check if current period hasn't ended
+    if (user.subscriptionStatus === 'active' && user.subscriptionCurrentPeriodEnd) {
+      return isActive && new Date() < user.subscriptionCurrentPeriodEnd;
+    }
+
+    return isActive;
+  }
+
+  /**
+   * Get user's subscription details
+   */
+  async getUserSubscription(clerkId: string): Promise<{
+    hasActiveSubscription: boolean;
+    subscriptionStatus?: string;
+    trialEndsAt?: Date;
+    subscriptionCurrentPeriodEnd?: Date;
+    stripeCustomerId?: string;
+  } | null> {
+    await this.ensureConnection();
+
+    const user = await User.findOne({ clerkId }).lean() as unknown as IUser;
+    
+    if (!user) return null;
+
+    const hasActiveSubscription = await this.hasActiveSubscription(clerkId);
+
+    return {
+      hasActiveSubscription,
+      subscriptionStatus: user.subscriptionStatus || undefined,
+      trialEndsAt: user.trialEndsAt,
+      subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd,
+      stripeCustomerId: user.stripeCustomerId,
+    };
+  }
+
+  /**
+   * Get user by Stripe customer ID - for webhook processing
+   */
+  async getUserByStripeCustomerId(customerId: string): Promise<IUser | null> {
+    return await withDatabaseConnection(async () => {
+      await this.ensureConnection();
+      const user = await User.findOne({ stripeCustomerId: customerId }).lean();
+      return user as IUser | null;
+    }, 'getUserByStripeCustomerId');
+  }
+
+  /**
+   * Update user subscription by Stripe customer ID - for webhook processing
+   */
+  async updateUserSubscriptionByCustomerId(customerId: string, subscriptionData: {
+    stripeSubscriptionId?: string;
+    subscriptionStatus?: 'active' | 'incomplete' | 'incomplete_expired' | 'trialing' | 'past_due' | 'canceled' | 'unpaid' | null;
+    subscriptionCurrentPeriodEnd?: Date;
+    subscriptionCreatedAt?: Date;
+    trialEndsAt?: Date;
+  }): Promise<IUser | null> {
+    return await withDatabaseConnection(async () => {
+      await this.ensureConnection();
+      const user = await User.findOneAndUpdate(
+        { stripeCustomerId: customerId },
+        { $set: subscriptionData },
+        { new: true }
+      ).lean();
+      return user as IUser | null;
+    }, 'updateUserSubscriptionByCustomerId');
   }
 } 
