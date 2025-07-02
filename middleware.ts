@@ -42,11 +42,29 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
   return NextResponse.next();
 });
 
+export function middleware(request: NextRequest) {
+  const url = new URL(request.url);
+  
+  // Special handling for webhook paths to prevent redirects
+  if (url.pathname.startsWith('/api/webhooks/')) {
+    console.log('⚡ Webhook request detected in middleware:', url.pathname);
+    
+    // Ensure we don't redirect webhook requests - just pass them through
+    return NextResponse.next();
+  }
+  
+  // Continue with normal processing for all other requests
+  return NextResponse.next();
+}
+
+// Configure to match specific paths only
 export const config = {
   matcher: [
     // Skip Next.js internals and all static files, unless found in search params
     '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
     // Always run for API routes
     '/(api|trpc)(.*)',
+    // Apply to all API webhook routes
+    '/api/webhooks/:path*',
   ],
 }; 

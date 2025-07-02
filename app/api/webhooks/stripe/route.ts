@@ -7,94 +7,9 @@ import Stripe from 'stripe';
 // Ensure proper webhook handling
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const preferredRegion = 'auto';
 
-export async function POST(request: NextRequest) {
-  try {
-    console.log('⚡ Stripe webhook received');
-    
-    // Get the raw body as an ArrayBuffer then convert to Buffer
-    const buf = await request.arrayBuffer();
-    const rawBody = Buffer.from(buf);
-    
-    // Get the stripe-signature header with proper async handling in Next.js 15+
-    const headersList = await headers();
-    const signature = headersList.get('stripe-signature');
-
-    console.log(`📦 Webhook body size: ${rawBody.length} bytes`);
-    console.log(`🔑 Signature: ${signature ? signature.substring(0, 15) + '...' : 'missing'}`);
-
-    if (!signature) {
-      console.error('❌ Missing stripe-signature header');
-      return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
-    }
-
-    const stripeService = StripeService.getInstance();
-    const dbService = DatabaseService.getInstance();
-
-    let event: Stripe.Event;
-
-    try {
-      // Pass the Buffer directly to Stripe for signature verification
-      event = stripeService.constructWebhookEvent(rawBody, signature);
-      console.log('✅ Webhook signature verified successfully');
-    } catch (err) {
-      console.error('❌ Webhook signature verification failed:', err);
-      
-      // More detailed error logging
-      if (err instanceof Error) {
-        console.error({
-          message: err.message,
-          name: err.name,
-          stack: err.stack?.split('\n').slice(0, 3).join('\n')
-        });
-      }
-      
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
-    }
-
-    console.log(`🔔 Processing Stripe webhook: ${event.type}`);
-
-    // Handle the event
-    switch (event.type) {
-      case 'checkout.session.completed':
-        await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session, dbService);
-        break;
-        
-      case 'customer.subscription.created':
-      case 'customer.subscription.updated':
-        await handleSubscriptionChange(event.data.object as Stripe.Subscription, dbService);
-        break;
-      
-      case 'customer.subscription.deleted':
-        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription, dbService);
-        break;
-      
-      case 'invoice.payment_succeeded':
-        await handlePaymentSucceeded(event.data.object as Stripe.Invoice, dbService);
-        break;
-      
-      case 'invoice.payment_failed':
-        await handlePaymentFailed(event.data.object as Stripe.Invoice, dbService);
-        break;
-
-      default:
-        console.log(`ℹ️ Unhandled event type: ${event.type}`);
-    }
-
-    return NextResponse.json({ 
-      received: true,
-      type: event.type
-    });
-
-  } catch (error) {
-    console.error('❌ Error processing webhook:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
+// Helper functions for handling different webhook events
 async function handleSubscriptionChange(subscription: Stripe.Subscription, dbService: DatabaseService) {
   try {
     console.log('Processing subscription change:', subscription.id);
@@ -263,4 +178,110 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session, dbServi
   } catch (error) {
     console.error('Error handling checkout completion:', error);
   }
+}
+
+// Main webhook handler
+export async function POST(request: NextRequest) {
+  try {
+    console.log('⚡ Stripe webhook received');
+    console.log('🔍 Request URL:', request.url);
+    
+    // Get the raw body as an ArrayBuffer then convert to Buffer
+    const buf = await request.arrayBuffer();
+    const rawBody = Buffer.from(buf);
+    
+    // Get the stripe-signature header with proper async handling in Next.js 15+
+    const headersList = await headers();
+    const signature = headersList.get('stripe-signature');
+
+    console.log(`📦 Webhook body size: ${rawBody.length} bytes`);
+    console.log(`🔑 Signature: ${signature ? signature.substring(0, 15) + '...' : 'missing'}`);
+
+    if (!signature) {
+      console.error('❌ Missing stripe-signature header');
+      return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
+    }
+
+    const stripeService = StripeService.getInstance();
+    const dbService = DatabaseService.getInstance();
+
+    let event: Stripe.Event;
+
+    try {
+      // Pass the Buffer directly to Stripe for signature verification
+      event = stripeService.constructWebhookEvent(rawBody, signature);
+      console.log('✅ Webhook signature verified successfully');
+    } catch (err) {
+      console.error('❌ Webhook signature verification failed:', err);
+      
+      // More detailed error logging
+      if (err instanceof Error) {
+        console.error({
+          message: err.message,
+          name: err.name,
+          stack: err.stack?.split('\n').slice(0, 3).join('\n')
+        });
+      }
+      
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+    }
+
+    console.log(`🔔 Processing Stripe webhook: ${event.type}`);
+
+    // Handle the event
+    switch (event.type) {
+      case 'checkout.session.completed':
+        await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session, dbService);
+        break;
+        
+      case 'customer.subscription.created':
+      case 'customer.subscription.updated':
+        await handleSubscriptionChange(event.data.object as Stripe.Subscription, dbService);
+        break;
+      
+      case 'customer.subscription.deleted':
+        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription, dbService);
+        break;
+      
+      case 'invoice.payment_succeeded':
+        await handlePaymentSucceeded(event.data.object as Stripe.Invoice, dbService);
+        break;
+      
+      case 'invoice.payment_failed':
+        await handlePaymentFailed(event.data.object as Stripe.Invoice, dbService);
+        break;
+
+      default:
+        console.log(`ℹ️ Unhandled event type: ${event.type}`);
+    }
+
+    return NextResponse.json({ 
+      received: true,
+      type: event.type
+    });
+
+  } catch (error) {
+    console.error('❌ Error processing webhook:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+// Define other HTTP methods to return 405 Method Not Allowed
+export async function GET() {
+  return new Response('Method not allowed', { status: 405 });
+}
+
+export async function PUT() {
+  return new Response('Method not allowed', { status: 405 });
+}
+
+export async function DELETE() {
+  return new Response('Method not allowed', { status: 405 });
+}
+
+export async function PATCH() {
+  return new Response('Method not allowed', { status: 405 });
 } 

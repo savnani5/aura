@@ -26,7 +26,6 @@
     "@types/mongoose": "^5.11.96",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
-    "dotenv": "^16.5.0",
     "ics": "^3.8.1",
     "livekit-client": "2.13.3",
     "livekit-server-sdk": "2.13.0",
@@ -50,8 +49,10 @@
     "@types/node": "22.15.19",
     "@types/react": "18.3.21",
     "@types/react-dom": "18.3.7",
+    "dotenv": "^17.0.1",
     "eslint": "9.27.0",
     "eslint-config-next": "15.3.2",
+    "node-fetch": "^2.7.0",
     "source-map-loader": "^5.0.0",
     "typescript": "5.8.3"
   },
