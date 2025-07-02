@@ -15,21 +15,26 @@ export async function POST(req: Request) {
   console.log('⚡ Clerk webhook received');
   console.log('🔍 Request URL:', req.url);
   
+  // Get webhook secret from environment variable
   const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
+  
+  // Check if in development mode - useful for debugging
+  const isDevelopment = process.env.NODE_ENV === 'development' || 
+                       process.env.VERCEL_ENV === 'development' ||
+                       process.env.CLERK_DEV_MODE === 'true';
+  
+  console.log('🔧 Environment:', isDevelopment ? 'Development' : 'Production');
 
   if (!WEBHOOK_SECRET) {
     console.error('❌ Missing CLERK_WEBHOOK_SECRET');
-    return new Response("Missing CLERK_WEBHOOK_SECRET", {
-      status: 500,
-    });
+    return new Response("Missing CLERK_WEBHOOK_SECRET", { status: 500 });
   }
 
   try {
     // Get the raw body as text for signature verification
-    // THIS IS CRITICAL - must use text() to get the exact body bytes
     const rawBody = await req.text();
     
-    // Get the headers with proper async handling in Next.js 15+
+    // Get the headers - in Next.js 15.2.4, headers() returns a Promise that must be awaited
     const headersList = await headers();
     
     // Extract the Svix headers for verification
@@ -37,7 +42,7 @@ export async function POST(req: Request) {
     const svix_timestamp = headersList.get("svix-timestamp");
     const svix_signature = headersList.get("svix-signature");
     
-    // Log full headers for debugging
+    // Log header info for debugging
     console.log('📋 Webhook headers:', {
       'svix-id': svix_id,
       'svix-timestamp': svix_timestamp,
@@ -50,40 +55,49 @@ export async function POST(req: Request) {
     // If there are no headers, error out
     if (!svix_id || !svix_timestamp || !svix_signature) {
       console.error('❌ Missing required Svix headers');
-      return new Response("Error occurred -- missing required Svix headers", {
-        status: 400,
-      });
+      return new Response("Error occurred -- missing required Svix headers", { status: 400 });
     }
 
-    // Create a new Svix instance with your secret
-    const wh = new Webhook(WEBHOOK_SECRET);
-
+    // Skip signature verification in development mode if needed
     let evt: WebhookEvent;
-
-    // Verify the payload with the headers
-    try {
-      evt = wh.verify(rawBody, {
-        "svix-id": svix_id,
-        "svix-timestamp": svix_timestamp,
-        "svix-signature": svix_signature,
-      }) as WebhookEvent;
-      
-      console.log('✅ Webhook signature verified successfully');
-    } catch (err) {
-      console.error("❌ Webhook signature verification failed:", err);
-      
-      // More detailed error logging
-      if (err instanceof Error) {
-        console.error({
-          message: err.message,
-          name: err.name,
-          stack: err.stack?.split('\n').slice(0, 3).join('\n')
-        });
+    
+    if (isDevelopment && process.env.CLERK_SKIP_VERIFICATION === 'true') {
+      // In development mode, optionally skip verification
+      console.log('⚠️ Development mode: Skipping signature verification');
+      try {
+        evt = JSON.parse(rawBody) as WebhookEvent;
+      } catch (err) {
+        console.error('❌ Failed to parse webhook body:', err);
+        return new Response("Error parsing webhook body", { status: 400 });
       }
-      
-      return new Response("Error occurred - webhook verification failed", {
-        status: 400,
-      });
+    } else {
+      // In production mode, always verify the signature
+      try {
+        // Create a new Svix instance with your secret
+        const wh = new Webhook(WEBHOOK_SECRET);
+        
+        // Verify the payload with the headers
+        evt = wh.verify(rawBody, {
+          "svix-id": svix_id,
+          "svix-timestamp": svix_timestamp,
+          "svix-signature": svix_signature,
+        }) as WebhookEvent;
+        
+        console.log('✅ Webhook signature verified successfully');
+      } catch (err) {
+        console.error("❌ Webhook signature verification failed:", err);
+        
+        // More detailed error logging
+        if (err instanceof Error) {
+          console.error({
+            message: err.message,
+            name: err.name,
+            stack: err.stack?.split('\n').slice(0, 3).join('\n')
+          });
+        }
+        
+        return new Response("Error occurred - webhook verification failed", { status: 400 });
+      }
     }
 
     // Get the ID and type

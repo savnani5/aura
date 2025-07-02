@@ -19,43 +19,45 @@ const isPublicRoute = createRouteMatcher([
   '/api/ai-chat',                      // Allow AI chat for live meetings
 ]);
 
-export default clerkMiddleware(async (auth, req: NextRequest) => {
-  const { userId } = await auth();
+// Define webhook routes that should bypass Clerk auth
+const isWebhookRoute = createRouteMatcher([
+  '/api/webhooks/clerk',
+  '/api/webhooks/clerk/',
+  '/api/webhooks/stripe',
+  '/api/webhooks/stripe/',
+]);
+
+export default clerkMiddleware((auth, req: NextRequest) => {
+  const url = new URL(req.url);
   
-  // If user is signed in and trying to access protected routes
-  if (isProtectedRoute(req) && userId) {
-    // Skip subscription check for subscription-related pages
-    if (req.nextUrl.pathname.startsWith('/subscription')) {
-      return NextResponse.next();
-    }
-
-    try {
-      // For now, let's use a simpler approach and check subscription client-side
-      // The subscription page itself will handle the redirect logic
-      return NextResponse.next();
-    } catch (error) {
-      console.error('Error in middleware:', error);
-      return NextResponse.next();
-    }
-  }
-
-  return NextResponse.next();
-});
-
-export function middleware(request: NextRequest) {
-  const url = new URL(request.url);
-  
-  // Special handling for webhook paths to prevent redirects
-  if (url.pathname.startsWith('/api/webhooks/')) {
+  // Special handling for webhook paths to prevent redirects and bypass auth
+  if (isWebhookRoute(req)) {
     console.log('⚡ Webhook request detected in middleware:', url.pathname);
-    
-    // Ensure we don't redirect webhook requests - just pass them through
+    // Bypass Clerk for webhook endpoints
     return NextResponse.next();
   }
   
-  // Continue with normal processing for all other requests
-  return NextResponse.next();
-}
+  return auth().then(({ userId }) => {
+    // If user is signed in and trying to access protected routes
+    if (isProtectedRoute(req) && userId) {
+      // Skip subscription check for subscription-related pages
+      if (req.nextUrl.pathname.startsWith('/subscription')) {
+        return NextResponse.next();
+      }
+
+      try {
+        // For now, let's use a simpler approach and check subscription client-side
+        // The subscription page itself will handle the redirect logic
+        return NextResponse.next();
+      } catch (error) {
+        console.error('Error in middleware:', error);
+        return NextResponse.next();
+      }
+    }
+
+    return NextResponse.next();
+  });
+});
 
 // Configure to match specific paths only
 export const config = {
