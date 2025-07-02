@@ -17,9 +17,20 @@ const isPublicRoute = createRouteMatcher([
   '/api/meetings/(.*)/end',            // Allow guests to end meetings
   '/api/meetings/(.*)/history',        // Allow access to meeting history (for AI context)
   '/api/ai-chat',                      // Allow AI chat for live meetings
+  '/api/webhooks/(.*)',                // Exclude all webhook routes from Clerk middleware
+]);
+
+// Define webhook routes that should bypass all middleware processing
+const isWebhookRoute = createRouteMatcher([
+  '/api/webhooks/(.*)',
 ]);
 
 export default clerkMiddleware(async (auth, req: NextRequest) => {
+  // Skip all processing for webhook routes to prevent redirects
+  if (isWebhookRoute(req)) {
+    return NextResponse.next();
+  }
+
   const { userId } = await auth();
   
   // If user is signed in and trying to access protected routes

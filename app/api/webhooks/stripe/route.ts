@@ -6,8 +6,20 @@ import Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🎯 Stripe webhook received');
+    
     const body = await request.text();
     const signature = (await headers()).get('stripe-signature') as string;
+
+    console.log('📋 Stripe webhook headers:', {
+      signature: signature ? 'present' : 'missing',
+      bodyLength: body.length
+    });
+
+    if (!signature) {
+      console.error('❌ Missing stripe-signature header');
+      return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
+    }
 
     const stripeService = StripeService.getInstance();
     const dbService = DatabaseService.getInstance();
@@ -16,12 +28,13 @@ export async function POST(request: NextRequest) {
 
     try {
       event = stripeService.constructWebhookEvent(body, signature);
+      console.log('✅ Stripe webhook signature verified');
     } catch (err) {
-      console.error('Webhook signature verification failed:', err);
+      console.error('❌ Webhook signature verification failed:', err);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
     }
 
-    console.log('Received Stripe webhook:', event.type);
+    console.log('🎯 Processing Stripe webhook:', event.type);
 
     // Handle the event
     switch (event.type) {
@@ -47,13 +60,14 @@ export async function POST(request: NextRequest) {
         break;
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        console.log(`⚠️ Unhandled Stripe event type: ${event.type}`);
     }
 
+    console.log('✅ Stripe webhook processed successfully');
     return NextResponse.json({ received: true });
 
   } catch (error) {
-    console.error('Error processing webhook:', error);
+    console.error('❌ Error processing Stripe webhook:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
