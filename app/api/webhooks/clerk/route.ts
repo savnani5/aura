@@ -4,6 +4,9 @@ import { NextResponse } from "next/server";
 import { Webhook } from "svix";
 import { DatabaseService } from '@/lib/mongodb';
 
+// Ensure proper runtime for webhook handling
+export const runtime = 'nodejs';
+
 export async function POST(req: Request) {
   console.log('Clerk webhook received');
   
@@ -30,9 +33,8 @@ export async function POST(req: Request) {
     });
   }
 
-  // Get the body
-  const payload = await req.json();
-  const body = JSON.stringify(payload);
+  // Get the raw body for signature verification
+  const body = await req.text();
 
   // Create a new Svix instance with your secret.
   const wh = new Webhook(WEBHOOK_SECRET);

@@ -4,10 +4,20 @@ import { DatabaseService, User } from '@/lib/mongodb';
 import { StripeService } from '@/lib/stripe-service';
 import Stripe from 'stripe';
 
+// Disable body parsing for webhook signature verification
+export const runtime = 'nodejs';
+
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.text();
+    // Get the raw body as an ArrayBuffer then convert to Buffer
+    const buf = await request.arrayBuffer();
+    const body = Buffer.from(buf);
     const signature = (await headers()).get('stripe-signature') as string;
+
+    if (!signature) {
+      console.error('Missing stripe-signature header');
+      return NextResponse.json({ error: 'Missing signature' }, { status: 400 });
+    }
 
     const stripeService = StripeService.getInstance();
     const dbService = DatabaseService.getInstance();
@@ -15,6 +25,7 @@ export async function POST(request: NextRequest) {
     let event: Stripe.Event;
 
     try {
+      // Pass the Buffer directly to Stripe for signature verification
       event = stripeService.constructWebhookEvent(body, signature);
     } catch (err) {
       console.error('Webhook signature verification failed:', err);
