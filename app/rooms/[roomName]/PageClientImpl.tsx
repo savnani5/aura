@@ -40,7 +40,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { TranscriptTab } from '@/app/components/MeetingAssitant';
-import { TranscriptionService, Transcript } from '@/lib/transcription-service';
+import { Transcript } from '@/lib/transcription-service';
 import { isEqualTrackRef, isTrackReference, isWeb } from '@livekit/components-core';
 
 const CONN_DETAILS_ENDPOINT =
@@ -220,7 +220,6 @@ function VideoConferenceComponent(props: {
   }, [props.userChoices, props.options.hq, props.options.codec]);
 
   const room = React.useMemo(() => new Room(roomOptions), [roomOptions]);
-  const transcriptionService = React.useMemo(() => new TranscriptionService(room), [room]);
 
   React.useEffect(() => {
     if (e2eeEnabled) {
@@ -366,10 +365,9 @@ function VideoConferenceComponent(props: {
       
       if (!meetingId) {
         console.warn('No meetingId found for room:', props.roomName);
-        // If we have transcripts, try to generate local summary as fallback
+        // If we have transcripts, log them
         if (transcripts.length > 0) {
-          const summary = await transcriptionService.summarizeTranscripts(transcripts);
-          console.log('Meeting Summary (local):', summary);
+          console.log('Meeting Summary (local): Transcripts available but no meetingId');
         }
         // Still redirect to home
         router.push('/');
@@ -489,6 +487,20 @@ function VideoConferenceComponent(props: {
       return;
     }
     
+    // Count total participants (local + remote)
+    const totalParticipants = 1 + room.remoteParticipants.size;
+    console.log(`👥 Total participants: ${totalParticipants} (1 local + ${room.remoteParticipants.size} remote)`);
+    
+    // Only trigger meeting end if this is the last person leaving
+    let shouldEndMeeting = false;
+    if (totalParticipants === 1) {
+      // This is the last participant leaving
+      shouldEndMeeting = true;
+      console.log('👤 Last participant leaving - triggering meeting end');
+    } else {
+      console.log('👥 Other participants still in room - not ending meeting');
+    }
+    
     // Set flag immediately to prevent concurrent calls
     meetingEndTriggeredRef.current = true;
     
@@ -501,11 +513,8 @@ function VideoConferenceComponent(props: {
     
     // Immediately disconnect and redirect - don't wait for transcript processing
     try {
-      // Stop transcription service immediately to prevent new data
-      if (transcriptionService && room.state === 'connected') {
-        console.log('🛑 Stopping transcription service immediately...');
-        transcriptionService.stopTranscription();
-      }
+      // Transcription service is handled by MeetingAssistant component
+      console.log('🛑 Room is disconnecting...');
       
       if (room.state === 'connected') {
         console.log('🔌 Disconnecting from room immediately...');
@@ -533,9 +542,9 @@ function VideoConferenceComponent(props: {
       router.push(`/meetingroom/${props.roomName}`);
     }
 
-    // Process transcripts in background asynchronously (fire and forget)
-    if (finalTranscripts.length > 0 && meetingId) {
-      console.log('🔄 Starting background transcript processing...');
+    // Only process transcripts and end meeting if this is the last person leaving
+    if (shouldEndMeeting && finalTranscripts.length > 0 && meetingId) {
+      console.log('🔄 Starting background transcript processing for meeting end...');
       
       // Process meeting end in background without blocking the UI
       processTranscriptsInBackground(finalTranscripts, meetingId, props.roomName)
@@ -546,7 +555,7 @@ function VideoConferenceComponent(props: {
           console.error('❌ Background transcript processing failed:', error);
         });
     } else {
-      console.log('🔍 No transcripts or meeting ID to process in background');
+      console.log('🔍 Not the last person leaving or no transcripts/meeting ID to process');
     }
   }, [router, room, props.roomName, props.userChoices]);
 

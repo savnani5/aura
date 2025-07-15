@@ -6,6 +6,7 @@ import { Track } from 'livekit-client';
 import { Transcript, TranscriptionService } from '@/lib/transcription-service';
 import ReactMarkdown from 'react-markdown';
 import { useUser } from '@clerk/nextjs';
+import { DataPacket_Kind } from 'livekit-client';
 
 interface TranscriptTabProps {
   onTranscriptsChange?: (transcripts: Transcript[]) => void;
@@ -70,6 +71,14 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
   // Use ref to track current shared transcripts to avoid stale closures
   const sharedTranscriptsRef = React.useRef<DisplayTranscript[]>([]);
   
+  // Browser compatibility check
+  React.useEffect(() => {
+    const browserSupport = TranscriptionService.getBrowserSupport();
+    if (!browserSupport.supported) {
+      alert(`⚠️ Browser Not Supported\n\nTranscription is not supported in ${browserSupport.browser}.\n\nPlease use one of these supported browsers:\n• Chrome (recommended)\n• Safari 14.1+\n• Edge (Chromium-based)\n\nYou can still join the meeting, but transcription will not be available.`);
+    }
+  }, []);
+
   // Update ref whenever sharedTranscripts changes
   React.useEffect(() => {
     sharedTranscriptsRef.current = sharedTranscripts;
@@ -437,105 +446,70 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
     }
   };
 
-  const transcriptionService = React.useMemo(() => new TranscriptionService(room), [room]);
-
-  // Share transcript with other participants via data channel
-  const shareTranscript = useCallback((transcript: Transcript) => {
-    // Filter out low confidence transcripts (30% or less) to prevent incorrect speaker attribution
-    if (transcript.speakerConfidence !== undefined && transcript.speakerConfidence <= 0.3) {
-      console.log('🔍 TRANSCRIPT SHARE: Skipping low confidence transcript:', {
-        speaker: transcript.speaker,
-        confidence: transcript.speakerConfidence,
-        text: transcript.text.substring(0, 50) + '...',
-        reason: 'Speaker confidence too low (≤30%)'
+  const transcriptionService = React.useMemo(() => 
+    new TranscriptionService(room, (transcript: Transcript) => {
+      // Add to local transcripts
+      setTranscripts(prev => {
+        const updated = [...prev, transcript];
+        return updated;
       });
-      return;
-    }
-    
-    // Check if room and connection are still active before sharing
-    if (!room?.localParticipant || !sendData || room.state !== 'connected') {
-      console.log('🔍 TRANSCRIPT SHARE: Skipping share - room not connected or missing dependencies:', {
-        hasRoom: !!room,
-        hasLocalParticipant: !!room?.localParticipant,
-        hasSendData: !!sendData,
-        roomState: room?.state
-      });
-      return;
-    }
 
-    const participantId = transcript.participantId || room.localParticipant.identity;
-    const speaker = transcript.speaker || room.localParticipant.name || participantId;
-    
-    console.log('🔍 TRANSCRIPT SHARE DEBUG: Sharing transcript:', {
-      speaker,
-      text: transcript.text.substring(0, 50) + '...',
-      participantId,
-      timestamp: new Date(transcript.timestamp).toLocaleTimeString()
-    });
-    
-    // Create new transcript entry - no concatenation to avoid duplication
-    const newTranscript: DisplayTranscript = {
-      speaker: speaker,
-      text: transcript.text,
-      participantId: participantId,
-      timestamp: transcript.timestamp,
-      entryId: `${participantId}-${Date.now()}-${Math.random()}`,
-      isLocal: true,
-      speakerConfidence: transcript.speakerConfidence,
-      deepgramSpeaker: transcript.deepgramSpeaker
-    };
-    
-    console.log('🔍 TRANSCRIPT NEW ENTRY: Created new entry:', {
-      speaker,
-      text: transcript.text.substring(0, 50) + '...',
-      participantId,
-      entryId: newTranscript.entryId
-    });
-    
-    // Add to shared transcripts
-    setSharedTranscripts(prev => [...prev, newTranscript]);
-    
-    // Send the transcript to other participants with additional safety checks
-    setTimeout(() => {
-      // Double-check connection state before sending
-      if (!room || room.state !== 'connected' || !sendData) {
-        console.log('🔍 TRANSCRIPT SHARE: Connection closed before sending, skipping');
-        return;
-      }
-
-      const sharedData: SharedTranscript = {
-        id: `${participantId}-${Date.now()}`,
-        speaker: speaker,
-        text: newTranscript.text,
-        participantId: participantId,
-        timestamp: newTranscript.timestamp,
-        entryId: newTranscript.entryId,
+      // Share transcript with other participants via data channel
+      const shareMessage = {
         type: 'transcript',
-        isLocal: false,
-        speakerConfidence: newTranscript.speakerConfidence,
-        deepgramSpeaker: newTranscript.deepgramSpeaker
+        speaker: transcript.speaker,
+        text: transcript.text,
+        timestamp: transcript.timestamp,
+        participantId: transcript.participantId || 'unknown',
+        speakerConfidence: transcript.speakerConfidence,
+        entryId: `${transcript.participantId || 'unknown'}-${transcript.timestamp}`,
+        isLocal: false
       };
-
-      const encoder = new TextEncoder();
-      const data = encoder.encode(JSON.stringify(sharedData));
       
       try {
-        // Final check before sending
-        if (room.state === 'connected') {
-          sendData(data, { reliable: true });
-          console.log('🔍 TRANSCRIPT SENT: Shared via data channel:', {
-            speaker,
-            text: sharedData.text.substring(0, 50) + '...',
-            entryId: sharedData.entryId
-          });
-        } else {
-          console.log('🔍 TRANSCRIPT SHARE: Room disconnected, skipping send');
-        }
+        room.localParticipant.publishData(
+          new TextEncoder().encode(JSON.stringify(shareMessage)),
+          { reliable: true }
+        );
+        console.log('Shared transcript via data channel');
       } catch (error) {
-        console.error('Error sending transcript data (connection may be closed):', error);
+        console.error('Failed to share transcript:', error);
       }
-    }, 0);
-  }, [room, sendData]);
+
+      // Also add to local shared transcripts for immediate display
+      const localDisplayTranscript: DisplayTranscript = {
+        speaker: transcript.speaker,
+        text: transcript.text,
+        participantId: transcript.participantId || 'unknown',
+        timestamp: transcript.timestamp,
+        entryId: `${transcript.participantId || 'unknown'}-${transcript.timestamp}`,
+        isLocal: true,
+        speakerConfidence: transcript.speakerConfidence
+      };
+
+      setSharedTranscripts(prev => {
+        // Check if this transcript already exists to avoid duplicates
+        const existingIndex = prev.findIndex(t => t.entryId === localDisplayTranscript.entryId);
+        if (existingIndex >= 0) {
+          // Update existing
+          const updated = [...prev];
+          updated[existingIndex] = localDisplayTranscript;
+          return updated;
+        } else {
+          // Add new transcript in chronological order
+          const insertIndex = prev.findIndex(t => t.timestamp > localDisplayTranscript.timestamp);
+          if (insertIndex === -1) {
+            return [...prev, localDisplayTranscript];
+          } else {
+            const updated = [...prev];
+            updated.splice(insertIndex, 0, localDisplayTranscript);
+            return updated;
+          }
+        }
+      });
+    }), [room]);
+
+
 
   // Listen for shared transcript data from other participants
   React.useEffect(() => {
@@ -646,34 +620,18 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
         return;
       }
 
-      console.log('🔍 TRANSCRIPTION DEBUG: Starting transcription service...');
       const audioTrack = track.mediaStreamTrack;
-      await transcriptionService.startTranscription(audioTrack, (transcript: Transcript) => {
-        console.log('🔍 TRANSCRIPTION DEBUG: Received transcript from service:', {
-          speaker: transcript.speaker,
-          text: transcript.text,
-          timestamp: new Date(transcript.timestamp).toLocaleTimeString(),
-          timestampRaw: transcript.timestamp
-        });
-        
-        setTranscripts(prev => {
-          const updated = [...prev, transcript];
-          console.log('🔍 TRANSCRIPTION DEBUG: Updated local transcripts count:', updated.length);
-          return updated;
-        });
-        
-        shareTranscript(transcript); // Share with other participants
-      });
-      console.log('🔍 TRANSCRIPTION DEBUG: Transcription service started successfully');
+      await transcriptionService.startTranscription();
     } catch (error) {
       console.error('Failed to start transcription:', error);
       setIsRecording(false);
     }
-  }, [transcriptionService, isRecording, tracks, shareTranscript]);
+  }, [transcriptionService, isRecording, tracks]);
 
   // Auto-start transcription when tracks become available
   useEffect(() => {
     const audioTracks = tracks.filter(track => track.publication.source === Track.Source.Microphone);
+    
     if (audioTracks.length > 0 && !isRecording) {
       startTranscription();
     }
@@ -750,7 +708,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
   // Cleanup transcription service on unmount or room disconnect
   useEffect(() => {
     return () => {
-      console.log('🔄 Cleaning up transcription service...');
+      console.log('Cleaning up transcription service...');
       if (transcriptionService) {
         try {
           transcriptionService.stopTranscription();
@@ -766,7 +724,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
     if (!room) return;
 
     const handleDisconnected = () => {
-      console.log('🔌 Room disconnected, stopping transcription...');
+      console.log('Room disconnected, stopping transcription...');
       if (transcriptionService && isRecording) {
         try {
           transcriptionService.stopTranscription();
@@ -776,8 +734,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
         }
       }
       
-      // Handle meeting end when user disconnects
-      handleMeetingEnd();
+      // Meeting end is now handled by PageClientImpl when last person leaves
     };
 
     room.on('disconnected', handleDisconnected);
@@ -787,105 +744,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
     };
   }, [room, transcriptionService, isRecording]);
 
-  // Function to handle meeting end and send summary emails
-  const handleMeetingEnd = async () => {
-    if (!room?.name) return;
-    
-    try {
-      console.log('🔚 Handling meeting end for room:', room.name);
-      
-      // Get current room participants (from LiveKit) - handle types properly
-      const allParticipants = [];
-      
-      // Add remote participants
-      room.remoteParticipants.forEach(participant => {
-        allParticipants.push(participant);
-      });
-      
-      // Add local participant if exists
-      if (room.localParticipant) {
-        allParticipants.push(room.localParticipant);
-      }
-      
-      // Combine all transcripts for the meeting
-      const allTranscripts = [
-        ...transcripts,
-        ...sharedTranscripts.map(st => ({
-          speaker: st.speaker,
-          text: st.text,
-          timestamp: st.timestamp,
-          speakerConfidence: st.speakerConfidence,
-          deepgramSpeaker: st.deepgramSpeaker,
-          participantId: st.participantId
-        }))
-      ];
-      
-      // Sort by timestamp
-      allTranscripts.sort((a, b) => a.timestamp - b.timestamp);
-      
-      // Format transcripts for the API (convert timestamp to Date object)
-      const formattedTranscripts = allTranscripts.map(t => ({
-        speaker: t.speaker,
-        text: t.text,
-        timestamp: new Date(t.timestamp),
-        speakerConfidence: t.speakerConfidence,
-        deepgramSpeaker: t.deepgramSpeaker,
-        participantId: t.participantId
-      }));
-      
-      // Extract participant information with proper structure for the /end endpoint
-      const participantsData = allParticipants.map(p => ({
-        name: p.name || p.identity || 'Unknown Participant',
-        identity: p.identity,
-        isHost: false // You may want to determine host status differently
-      })).filter(p => p.identity); // Filter out invalid participants
-      
-      // Calculate approximate meeting duration (in minutes)
-      const startTime = allTranscripts.length > 0 ? allTranscripts[0].timestamp : Date.now();
-      const endTime = Date.now();
-      const duration = Math.max(1, Math.round((endTime - startTime) / (1000 * 60))); // At least 1 minute
-      
-      console.log('📊 Meeting end data:', {
-        roomName: room.name,
-        participantCount: participantsData.length,
-        transcriptCount: formattedTranscripts.length,
-        duration: duration
-      });
-      
-      // Only process meeting end if there are participants and transcript content
-      if (participantsData.length > 0 && formattedTranscripts.length > 0) {
-        // Generate a meeting ID for this session
-        const meetingId = `meeting-${room.name}-${Date.now()}`;
-        
-        // Call the comprehensive /end API endpoint
-        const response = await fetch(`/api/meetings/${room.name}/end`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            meetingId: meetingId,
-            transcripts: formattedTranscripts,
-            participants: participantsData,
-            endedAt: new Date().toISOString(),
-            duration: duration
-          })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-          console.log('✅ Meeting ended successfully, summary generated and emails sent');
-        } else {
-          console.error('❌ Failed to end meeting:', result.error);
-        }
-      } else {
-        console.log('⏭️ Skipping meeting end - no participants or transcript content');
-      }
-    } catch (error) {
-      console.error('❌ Error handling meeting end:', error);
-    }
-  };
+
 
   const exportNotes = () => {
     const timestamp = new Date().toISOString().split('T')[0];
@@ -1075,7 +934,7 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
                       onClick={() => {
                         if (transcriptionService) {
                           transcriptionService.resetSpeakerMappings();
-                          console.log('🔄 Speaker mappings reset via debug button');
+                          console.log('Speaker mappings reset via debug button');
                         }
                       }}
                       className="debug-button"
