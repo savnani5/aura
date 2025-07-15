@@ -40,14 +40,13 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
       return NextResponse.next();
     }
 
-    try {
-      // For now, let's use a simpler approach and check subscription client-side
-      // The subscription page itself will handle the redirect logic
-      return NextResponse.next();
-    } catch (error) {
-      console.error('Error in middleware:', error);
-      return NextResponse.next();
-    }
+    // For subscription checking, redirect to subscription page
+    // The subscription page will handle checking subscription status and redirecting back if they have one
+    const subscriptionUrl = new URL('/subscription', req.url);
+    // Add the original URL as a redirect parameter so we can send them back
+    subscriptionUrl.searchParams.set('redirect', req.nextUrl.pathname);
+    
+    return NextResponse.redirect(subscriptionUrl);
   }
 
   return NextResponse.next();

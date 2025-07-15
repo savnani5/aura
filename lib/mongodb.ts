@@ -166,6 +166,9 @@ const UserSchema = new mongoose.Schema({
   joinedAt: { type: Date, default: Date.now },
   lastActive: { type: Date, default: Date.now },
   
+  // Affiliate tracking
+  referredBy: { type: String }, // Referrer identifier (simple string)
+  
   // Stripe subscription fields
   stripeCustomerId: { type: String },
   stripeSubscriptionId: { type: String },
@@ -430,6 +433,8 @@ export interface IUser {
   avatar?: string;
   joinedAt: Date;
   lastActive: Date;
+  // Affiliate tracking
+  referredBy?: string;
   // Stripe subscription fields
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;
@@ -1132,6 +1137,7 @@ export class DatabaseService {
     avatar?: string;
     joinedAt: Date;
     lastActive: Date;
+    referredBy?: string;
   }): Promise<IUser> {
     return withDatabaseConnection(async () => {
       try {
@@ -1651,5 +1657,97 @@ export class DatabaseService {
       ).lean();
       return user as IUser | null;
     }, 'updateUserSubscriptionByCustomerId');
+  }
+
+  // ============= AFFILIATE TRACKING METHODS =============
+
+  /**
+   * Get all users referred by a specific affiliate code
+   */
+  async getUsersByReferralCode(referralCode: string): Promise<Array<{
+    _id: string;
+    name: string;
+    email?: string;
+    joinedAt: Date;
+    subscriptionStatus?: string;
+    hasActiveSubscription: boolean;
+  }>> {
+    await this.ensureConnection();
+
+    const users = await User.find({ referredBy: referralCode })
+      .sort({ joinedAt: -1 })
+      .lean() as unknown as IUser[];
+
+    return users.map(user => ({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      joinedAt: user.joinedAt,
+      subscriptionStatus: user.subscriptionStatus || 'none',
+      hasActiveSubscription: user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing'
+    }));
+  }
+
+  /**
+   * Get affiliate statistics - summary of referrals and conversions
+   */
+  async getAffiliateStats(referralCode?: string): Promise<Array<{
+    referralCode: string;
+    totalReferrals: number;
+    subscribedReferrals: number;
+    conversionRate: number;
+    latestReferral?: Date;
+  }>> {
+    await this.ensureConnection();
+
+    const pipeline: any[] = [
+      {
+        $match: referralCode 
+          ? { referredBy: referralCode }
+          : { referredBy: { $exists: true, $ne: null } }
+      },
+      {
+        $group: {
+          _id: '$referredBy',
+          totalReferrals: { $sum: 1 },
+          subscribedReferrals: {
+            $sum: {
+              $cond: [
+                { $in: ['$subscriptionStatus', ['active', 'trialing']] },
+                1,
+                0
+              ]
+            }
+          },
+          latestReferral: { $max: '$joinedAt' }
+        }
+      },
+      {
+        $project: {
+          referralCode: '$_id',
+          totalReferrals: 1,
+          subscribedReferrals: 1,
+          conversionRate: {
+            $round: [
+              {
+                $multiply: [
+                  { $divide: ['$subscribedReferrals', '$totalReferrals'] },
+                  100
+                ]
+              },
+              2
+            ]
+          },
+          latestReferral: 1,
+          _id: 0
+        }
+      },
+      {
+        $sort: { totalReferrals: -1 }
+      }
+    ];
+
+    const stats = await User.aggregate(pipeline);
+    return stats;
   }
 } 

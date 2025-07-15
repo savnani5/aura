@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { loadStripe } from '@stripe/stripe-js';
 import { AppHeader } from '@/app/components/AppHeader';
 import { useSubscription } from '@/app/hooks/useSubscription';
@@ -13,15 +13,71 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 export default function SubscriptionPage() {
   const { user, isLoaded } = useUser();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const { subscriptionStatus, loading: statusLoading, hasActiveSubscription, openCustomerPortal } = useSubscription();
 
   useEffect(() => {
     if (isLoaded && user && hasActiveSubscription) {
-      // If user already has active subscription, redirect to dashboard
-      router.push('/');
+      // If user already has active subscription, redirect to intended page or dashboard
+      const redirectTo = searchParams.get('redirect') || '/';
+      router.push(redirectTo);
     }
-  }, [isLoaded, user, hasActiveSubscription, router]);
+  }, [isLoaded, user, hasActiveSubscription, router, searchParams]);
+
+  // Handle referral tracking for new users
+  useEffect(() => {
+    const handleReferralTracking = async () => {
+      if (!isLoaded || !user) return;
+
+      // Check for stored referral code
+      const referralCode = localStorage.getItem('ohm_referral');
+      if (referralCode) {
+        // Retry logic for development environment where API might not be compiled yet
+        const maxRetries = 3;
+        let retryCount = 0;
+        
+        while (retryCount < maxRetries) {
+          try {
+            const response = await fetch('/api/store-referral', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ referralCode }),
+            });
+
+            if (response.ok) {
+              console.log('✅ Referral code stored successfully');
+              // Clear from localStorage after successful storage
+              localStorage.removeItem('ohm_referral');
+              return; // Success, exit the retry loop
+            } else if (response.status === 404 && retryCount < maxRetries - 1) {
+              // API might not be compiled yet in dev mode, retry after a delay
+              console.log(`🔄 Retrying referral storage (attempt ${retryCount + 2}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              retryCount++;
+              continue;
+            } else {
+              console.error('❌ Failed to store referral code:', response.status, response.statusText);
+              break;
+            }
+          } catch (error) {
+            if (retryCount < maxRetries - 1) {
+              console.log(`🔄 Retrying referral storage due to error (attempt ${retryCount + 2}/${maxRetries})`);
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              retryCount++;
+            } else {
+              console.error('❌ Error storing referral code after retries:', error);
+              break;
+            }
+          }
+        }
+      }
+    };
+
+    handleReferralTracking();
+  }, [isLoaded, user]);
 
   const handleSubscribe = async () => {
     try {
@@ -140,31 +196,37 @@ export default function SubscriptionPage() {
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                       <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    Unlimited meeting rooms and participants
+                    Real-time transcription
                   </li>
                   <li>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                       <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    Real-time transcription and meeting summaries
+                    Smart AI meeting assistant
                   </li>
                   <li>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                       <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    AI chat with meeting context and history
+                    AI-powered meeting summaries
                   </li>
                   <li>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                       <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    Smart task management and tracking
+                    Task tracking and management
                   </li>
                   <li>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                       <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     </svg>
-                    Persistent context across recurring meetings
+                    Slack & Email integrations
+                  </li>
+                  <li>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                      <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    Priority support
                   </li>
                 </ul>
               </div>

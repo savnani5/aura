@@ -94,6 +94,9 @@ export async function POST(req: Request) {
         created_at,
       } = evt.data;
 
+      // Check for referral data in user metadata
+      const referredBy = evt.data.private_metadata?.referredBy || evt.data.public_metadata?.referredBy;
+
       const userData = {
         clerkId: id,
         name: `${first_name || ''} ${last_name || ''}`.trim() || 'Anonymous User',
@@ -101,6 +104,7 @@ export async function POST(req: Request) {
         avatar: image_url || '',
         joinedAt: new Date(created_at),
         lastActive: new Date(),
+        referredBy: referredBy || undefined,
       };
 
       console.log('👤 Creating user:', userData.name, userData.email);
