@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { loadStripe } from '@stripe/stripe-js';
@@ -10,7 +10,7 @@ import styles from '@/styles/subscription.module.css';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
-export default function SubscriptionPage() {
+function SubscriptionContent() {
   const { user, isLoaded } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -260,5 +260,23 @@ export default function SubscriptionPage() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function SubscriptionPage() {
+  return (
+    <Suspense fallback={
+      <div className={styles.container}>
+        <AppHeader showActions={false} />
+        <main className={styles.main}>
+          <div className={styles.loadingContainer}>
+            <div className={styles.spinner}></div>
+            <p>Loading...</p>
+          </div>
+        </main>
+      </div>
+    }>
+      <SubscriptionContent />
+    </Suspense>
   );
 } 

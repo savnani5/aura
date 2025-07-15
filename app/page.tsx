@@ -1,14 +1,13 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useSearchParams } from 'next/navigation';
 import { LandingPage } from './components/LandingPage';
 import { Dashboard } from './components/Dashboard';
 import styles from '@/styles/HomePage.module.css';
 
-export default function HomePage() {
-  const { isSignedIn, isLoaded } = useUser();
+function ReferralTracker() {
   const searchParams = useSearchParams();
 
   // Handle referral tracking on landing page
@@ -26,18 +25,31 @@ export default function HomePage() {
     }
   }, [searchParams]);
 
+  return null; // This component doesn't render anything
+}
+
+export default function HomePage() {
+  const { isSignedIn, isLoaded } = useUser();
+
   // Show loading while Clerk is initializing
   if (!isLoaded) {
   return (
     <div className={styles.container}>
-              <div className={styles.loadingState}>
-                <div className={styles.loadingSpinner}></div>
-          <p>Loading...</p>
-        </div>
+      <div className={styles.loadingState}>
+        <div className={styles.loadingSpinner}></div>
+        <p>Loading...</p>
+      </div>
     </div>
   );
   }
 
   // Show appropriate component based on authentication status
-  return isSignedIn ? <Dashboard /> : <LandingPage />;
+  return (
+    <>
+      <Suspense fallback={null}>
+        <ReferralTracker />
+      </Suspense>
+      {isSignedIn ? <Dashboard /> : <LandingPage />}
+    </>
+  );
 }
