@@ -42,6 +42,7 @@ import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { TranscriptTab } from '@/app/components/MeetingAssitant';
 import { Transcript } from '@/lib/transcription-service';
 import { isEqualTrackRef, isTrackReference, isWeb } from '@livekit/components-core';
+import { MeetingStorageUtils, useMeetingStore } from '@/lib/state';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -302,8 +303,8 @@ function VideoConferenceComponent(props: {
             const meetingId = data.data.meetingId;
             console.log('✅ Meeting started with ID:', meetingId);
             
-            // Store meeting ID for later use
-            localStorage.setItem(`meeting-id-${props.roomName}`, meetingId);
+            // Store meeting ID in Zustand store (replaces localStorage)
+            MeetingStorageUtils.setMeetingId(props.roomName, meetingId);
           } else {
             console.error('❌ Failed to start meeting record:', await response.text());
           }
@@ -316,6 +317,30 @@ function VideoConferenceComponent(props: {
     };
     
     room.on(RoomEvent.Connected, handleConnected);
+
+    // Add participant tracking to Zustand store
+    const handleParticipantConnected = (participant: any) => {
+      console.log('👥 Participant connected:', participant.identity);
+      useMeetingStore.getState().addParticipant({
+        id: participant.sid,
+        name: participant.identity,
+        email: participant.metadata ? JSON.parse(participant.metadata).email : '',
+        isOnline: true,
+        isHost: participant === room.localParticipant,
+        joinedAt: new Date()
+      });
+    };
+
+    const handleParticipantDisconnected = (participant: any) => {
+      console.log('👥 Participant disconnected:', participant.identity);
+      useMeetingStore.getState().updateParticipant(participant.sid, {
+        isOnline: false,
+        leftAt: new Date()
+      });
+    };
+
+    room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
+    room.on(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
     
     if (e2eeSetupComplete) {
       room
@@ -343,6 +368,8 @@ function VideoConferenceComponent(props: {
       room.off(RoomEvent.EncryptionError, handleEncryptionError);
       room.off(RoomEvent.MediaDevicesError, handleError);
       room.off(RoomEvent.Connected, handleConnected);
+      room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
+      room.off(RoomEvent.ParticipantDisconnected, handleParticipantDisconnected);
     };
   }, [e2eeSetupComplete, room, props.connectionDetails, props.userChoices]);
 
@@ -360,8 +387,8 @@ function VideoConferenceComponent(props: {
         }))
       });
 
-      // Get the meetingId from localStorage
-      const meetingId = localStorage.getItem(`meeting-id-${props.roomName}`);
+      // Get the meetingId from Zustand store (replaces localStorage)
+      const meetingId = MeetingStorageUtils.getMeetingId(props.roomName);
       
       if (!meetingId) {
         console.warn('No meetingId found for room:', props.roomName);
@@ -414,8 +441,8 @@ function VideoConferenceComponent(props: {
         const data = await response.json();
         console.log('✅ Meeting ended successfully:', data);
         
-        // Clean up localStorage
-        localStorage.removeItem(`meeting-id-${props.roomName}`);
+        // Clean up meeting ID from Zustand store (replaces localStorage)
+        MeetingStorageUtils.removeMeetingId(props.roomName);
         
         // Disconnect from the room before redirecting
         if (room.state === 'connected') {
@@ -508,8 +535,8 @@ function VideoConferenceComponent(props: {
     const finalTranscripts = transcriptsRef.current;
     console.log('🔍 TRANSCRIPT DEBUG: Final transcript count:', finalTranscripts.length);
     
-    // Get meeting ID for background processing
-    const meetingId = localStorage.getItem(`meeting-id-${props.roomName}`);
+    // Get meeting ID for background processing from Zustand store (replaces localStorage)
+    const meetingId = MeetingStorageUtils.getMeetingId(props.roomName);
     
     // Immediately disconnect and redirect - don't wait for transcript processing
     try {
@@ -597,8 +624,8 @@ function VideoConferenceComponent(props: {
       const data = await response.json();
       console.log('✅ Background processing: Meeting ended successfully:', data);
       
-      // Clean up localStorage
-      localStorage.removeItem(`meeting-id-${roomName}`);
+      // Clean up meeting ID from Zustand store (replaces localStorage)
+      MeetingStorageUtils.removeMeetingId(roomName);
       
       return data;
     } else {

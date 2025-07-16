@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, Suspense } from 'react';
 import { useUser } from '@clerk/nextjs';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { loadStripe } from '@stripe/stripe-js';
 import { AppHeader } from '@/app/components/AppHeader';
 import { useSubscription } from '@/app/hooks/useSubscription';
@@ -13,17 +13,10 @@ const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 function SubscriptionContent() {
   const { user, isLoaded } = useUser();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const { subscriptionStatus, loading: statusLoading, hasActiveSubscription, openCustomerPortal } = useSubscription();
 
-  useEffect(() => {
-    if (isLoaded && user && hasActiveSubscription) {
-      // If user already has active subscription, redirect to intended page or dashboard
-      const redirectTo = searchParams.get('redirect') || '/';
-      router.push(redirectTo);
-    }
-  }, [isLoaded, user, hasActiveSubscription, router, searchParams]);
+  // Note: Removed automatic redirect logic - users come here intentionally now
 
   // Handle referral tracking for new users
   useEffect(() => {

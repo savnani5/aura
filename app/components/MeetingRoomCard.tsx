@@ -3,6 +3,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import styles from '@/styles/MeetingRoomCard.module.css';
+import { MeetingStorageUtils } from '@/lib/state';
 
 interface MeetingRoom {
   id: string;
@@ -47,9 +48,9 @@ export function MeetingRoomCard({ room }: MeetingRoomCardProps) {
         const data = await response.json();
         console.log('Quick joined meeting:', data);
         
-        // Store meetingId in localStorage for later use during meeting end
+        // Store meetingId in Zustand store (replaces localStorage)
         if (data.success && data.data?.meetingId) {
-          localStorage.setItem(`meeting-id-${room.id}`, data.data.meetingId);
+          MeetingStorageUtils.setMeetingId(room.id, data.data.meetingId);
         }
       } else {
         console.warn('Failed to create meeting record, proceeding anyway');

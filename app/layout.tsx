@@ -24,8 +24,8 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider
-      afterSignInUrl="/subscription"
-      afterSignUpUrl="/subscription"
+      afterSignInUrl="/"
+      afterSignUpUrl="/"
       afterSignOutUrl="/"
       appearance={{
         baseTheme: dark,

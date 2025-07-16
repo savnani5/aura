@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import styles from '@/styles/MeetingPrep.module.css';
+import { MeetingStorageUtils } from '@/lib/state';
 
 interface MeetingPrepProps {
   roomName: string;
@@ -21,10 +22,10 @@ export function MeetingPrep({ roomName }: MeetingPrepProps) {
     return `meeting-prep-notes-${roomName}-${userId}`;
   };
 
-  // Load saved notes on component mount
+  // Load saved notes on component mount from Zustand store (replaces localStorage)
   useEffect(() => {
     if (user) {
-      const savedNotes = localStorage.getItem(getNotesStorageKey());
+      const savedNotes = MeetingStorageUtils.getUserMeetingNotes(`prep-${roomName}`, user.id);
       if (savedNotes) {
         setNotes(savedNotes);
       }
@@ -36,12 +37,11 @@ export function MeetingPrep({ roomName }: MeetingPrepProps) {
     if (!user) return;
     
     const timeoutId = setTimeout(() => {
-      // Always save, even empty notes (which removes the key)
-      const storageKey = getNotesStorageKey();
+      // Save notes to Zustand store (replaces localStorage)
       if (notes.trim()) {
-        localStorage.setItem(storageKey, notes);
+        MeetingStorageUtils.setUserMeetingNotes(`prep-${roomName}`, user.id, notes);
       } else {
-        localStorage.removeItem(storageKey);
+        MeetingStorageUtils.clearUserMeetingNotes(`prep-${roomName}`, user.id);
       }
     }, 1000);
 
@@ -59,11 +59,10 @@ export function MeetingPrep({ roomName }: MeetingPrepProps) {
     try {
       // Save prep notes and transfer to live meeting notes format
       if (notes.trim()) {
-        localStorage.setItem(getNotesStorageKey(), notes);
+        MeetingStorageUtils.setUserMeetingNotes(`prep-${roomName}`, user.id, notes);
         
         // Transfer notes to live meeting format (what MeetingAssistant expects)
-        const liveMeetingNotesKey = `meeting-notes-${roomName}-${user.id}`;
-        localStorage.setItem(liveMeetingNotesKey, notes);
+        MeetingStorageUtils.setUserMeetingNotes(roomName, user.id, notes);
       }
       
       // Create meeting record in database
@@ -83,9 +82,9 @@ export function MeetingPrep({ roomName }: MeetingPrepProps) {
         const data = await response.json();
         console.log('Meeting started:', data);
         
-        // Store meetingId in localStorage for later use during meeting end
+        // Store meetingId in Zustand store (replaces localStorage)
         if (data.success && data.data?.meetingId) {
-          localStorage.setItem(`meeting-id-${roomName}`, data.data.meetingId);
+          MeetingStorageUtils.setMeetingId(roomName, data.data.meetingId);
         }
       } else {
         console.warn('Failed to create meeting record, proceeding anyway');
@@ -106,7 +105,7 @@ export function MeetingPrep({ roomName }: MeetingPrepProps) {
     if (confirm('Are you sure you want to clear all notes?')) {
       setNotes('');
       if (user) {
-        localStorage.removeItem(getNotesStorageKey());
+        MeetingStorageUtils.clearUserMeetingNotes(`prep-${roomName}`, user.id);
       }
     }
   };

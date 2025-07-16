@@ -7,6 +7,7 @@ import { Transcript, TranscriptionService } from '@/lib/transcription-service';
 import ReactMarkdown from 'react-markdown';
 import { useUser } from '@clerk/nextjs';
 import { DataPacket_Kind } from 'livekit-client';
+import { MeetingStorageUtils, useMeetingStore } from '@/lib/state';
 
 interface TranscriptTabProps {
   onTranscriptsChange?: (transcripts: Transcript[]) => void;
@@ -454,6 +455,17 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
         return updated;
       });
 
+      // Add transcript to Zustand store for global state management
+      useMeetingStore.getState().addTranscript({
+        id: `transcript-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        speaker: transcript.speaker,
+        text: transcript.text,
+        timestamp: transcript.timestamp,
+        participantId: transcript.participantId,
+        isLocal: transcript.participantId === room?.localParticipant?.identity,
+        speakerConfidence: transcript.speakerConfidence
+      });
+
       // Share transcript with other participants via data channel
       const shareMessage = {
         type: 'transcript',
@@ -637,14 +649,13 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
     }
   }, [tracks, startTranscription, isRecording]);
 
-  // Load notes on mount
+  // Load notes on mount from Zustand store (replaces localStorage)
   useEffect(() => {
     if (!room?.name) return;
     
     // Use participant identity or user ID for storage key
     const userId = user?.id || room.localParticipant?.identity || 'guest';
-    const storageKey = `meeting-notes-${room.name}-${userId}`;
-    const savedNotes = localStorage.getItem(storageKey);
+    const savedNotes = MeetingStorageUtils.getUserMeetingNotes(room.name, userId);
     if (savedNotes) {
       setNotes(savedNotes);
     }
@@ -691,13 +702,12 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
     const timeoutId = setTimeout(() => {
       // Use participant identity or user ID for storage key
       const userId = user?.id || room.localParticipant?.identity || 'guest';
-      const storageKey = `meeting-notes-${room.name}-${userId}`;
       
-      // Always save, even empty notes (which removes the key)
+      // Save notes to Zustand store (replaces localStorage)
       if (notes.trim()) {
-        localStorage.setItem(storageKey, notes);
+        MeetingStorageUtils.setUserMeetingNotes(room.name, userId, notes);
       } else {
-        localStorage.removeItem(storageKey);
+        MeetingStorageUtils.clearUserMeetingNotes(room.name, userId);
       }
       setSaveStatus('saved');
     }, 1000);
@@ -765,8 +775,8 @@ export function TranscriptTab({ onTranscriptsChange }: TranscriptTabProps) {
       if (room?.name) {
         // Use participant identity or user ID for storage key
         const userId = user?.id || room.localParticipant?.identity || 'guest';
-        const storageKey = `meeting-notes-${room.name}-${userId}`;
-        localStorage.removeItem(storageKey);
+        // Clean up notes from Zustand store (replaces localStorage)
+        MeetingStorageUtils.clearUserMeetingNotes(room.name, userId);
       }
     }
   };

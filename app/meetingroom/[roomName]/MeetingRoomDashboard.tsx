@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
+import { useSubscriptionGuard } from '@/app/hooks/useSubscriptionGuard';
 import { MeetingHistoryPanel } from './components/MeetingHistoryPanel';
 import { TaskBoard } from './components/TaskBoard';
 import RoomChat from './components/RoomChat';
@@ -47,6 +48,7 @@ interface MeetingRoomDashboardProps {
 export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
   const router = useRouter();
   const { user, isLoaded } = useUser();
+  const { isLoading: subscriptionLoading, hasAccess } = useSubscriptionGuard();
   const [room, setRoom] = useState<MeetingRoom | null>(null);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,7 +107,7 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
 
   // Fetch room data and participants
   useEffect(() => {
-    if (!isLoaded || !user) return;
+    if (!isLoaded || !user || !hasAccess) return;
 
     const fetchData = async () => {
       try {
@@ -149,11 +151,35 @@ export function MeetingRoomDashboard({ roomName }: MeetingRoomDashboardProps) {
     };
 
     fetchData();
-  }, [roomName, user, isLoaded]);
+  }, [roomName, user, isLoaded, hasAccess]);
 
   const handleBackToHome = () => {
     router.push('/');
   };
+
+  // Show loading while checking subscription
+  if (subscriptionLoading) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.loadingState}>
+          <div className={styles.loadingSpinner}></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If no access, the hook will redirect, but show loading in the meantime
+  if (!hasAccess) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.loadingState}>
+          <div className={styles.loadingSpinner}></div>
+          <p>Redirecting...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show loading while Clerk is loading
   if (!isLoaded || loading) {

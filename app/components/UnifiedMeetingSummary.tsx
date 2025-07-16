@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from '@/styles/UnifiedMeetingSummary.module.css';
+import { UIStorageUtils } from '@/lib/state';
 
 interface Transcript {
   speaker: string;
@@ -95,18 +96,18 @@ export function UnifiedMeetingSummary({
       }
     };
 
-    // Check for immediate processing completion signals in localStorage
+    // Check for immediate processing completion signals in Zustand store (replaces localStorage)
     const checkProcessingStatus = () => {
-      const completedSignal = localStorage.getItem('transcript-processing-complete');
-      const failedSignal = localStorage.getItem('transcript-processing-failed');
+      const hasCompleted = UIStorageUtils.getProcessingComplete('transcript');
+      const hasFailed = UIStorageUtils.getProcessingFailed('transcript');
       
-      if (completedSignal === meetingId) {
-        console.log('🔍 Found completed processing signal in localStorage');
-        localStorage.removeItem('transcript-processing-complete');
+      if (hasCompleted) {
+        console.log('🔍 Found completed processing signal in store');
+        UIStorageUtils.clearProcessingSignal('transcript', 'complete');
         fetchMeetingDetails();
-      } else if (failedSignal === meetingId) {
-        console.log('⚠️ Found failed processing signal in localStorage');
-        localStorage.removeItem('transcript-processing-failed');
+      } else if (hasFailed) {
+        console.log('⚠️ Found failed processing signal in store');
+        UIStorageUtils.clearProcessingSignal('transcript', 'failed');
         fetchMeetingDetails();
       }
     };

@@ -11,6 +11,7 @@ const isPublicRoute = createRouteMatcher([
   '/',
   '/sign-in(.*)',
   '/sign-up(.*)',
+  '/test-zustand',                     // Allow access to Zustand test page
   '/rooms/(.*)',                       // Allow guest access to live meeting rooms
   '/api/connection-details(.*)',       // LiveKit connection details
   '/api/meetings/start',               // Allow guests to start/join meetings
@@ -31,22 +32,18 @@ export default clerkMiddleware(async (auth, req: NextRequest) => {
     return NextResponse.next();
   }
 
+  // Allow public routes without any checks
+  if (isPublicRoute(req)) {
+    return NextResponse.next();
+  }
+
   const { userId } = await auth();
   
   // If user is signed in and trying to access protected routes
   if (isProtectedRoute(req) && userId) {
-    // Skip subscription check for subscription-related pages
-    if (req.nextUrl.pathname.startsWith('/subscription')) {
-      return NextResponse.next();
-    }
-
-    // For subscription checking, redirect to subscription page
-    // The subscription page will handle checking subscription status and redirecting back if they have one
-    const subscriptionUrl = new URL('/subscription', req.url);
-    // Add the original URL as a redirect parameter so we can send them back
-    subscriptionUrl.searchParams.set('redirect', req.nextUrl.pathname);
-    
-    return NextResponse.redirect(subscriptionUrl);
+    // Allow access to protected routes for signed-in users
+    // Individual pages will handle their own subscription checks using useSubscriptionGuard
+    return NextResponse.next();
   }
 
   return NextResponse.next();
