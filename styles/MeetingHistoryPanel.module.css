@@ -333,18 +333,7 @@
   font-size: 0.8125rem;
 }
 
-.meetingDuration {
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 0.8125rem;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
 
-.meetingDuration::before {
-  content: '•';
-  color: rgba(255, 255, 255, 0.3);
-}
 
 .participantCount {
   display: flex;

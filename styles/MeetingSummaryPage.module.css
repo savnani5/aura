@@ -108,8 +108,7 @@
   letter-spacing: 0.025em;
 }
 
-.date,
-.duration {
+.date {
   color: rgba(255, 255, 255, 0.6);
   font-size: 0.875rem;
 }
