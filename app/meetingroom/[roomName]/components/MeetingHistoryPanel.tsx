@@ -185,14 +185,7 @@ export function MeetingHistoryPanel({ roomName, onMeetingSelect }: MeetingHistor
     }
   };
 
-  const formatDuration = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours > 0) {
-      return `${hours}h ${mins}m`;
-    }
-    return `${mins}m`;
-  };
+
 
   const formatDate = (dateString: string, isUpcoming: boolean = false) => {
     const date = new Date(dateString);
@@ -222,16 +215,20 @@ export function MeetingHistoryPanel({ roomName, onMeetingSelect }: MeetingHistor
       return `${dayName}, ${dateStr} at ${timeStr}`;
     }
     
-    // Existing logic for past meetings
-    const diffTime = Math.abs(now.getTime() - date.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    // Fixed logic for past meetings - use proper date comparison
+    const meetingDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffTime = todayDate.getTime() - meetingDate.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
+    if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
     
     return date.toLocaleDateString('en-US', {
-      month: 'short',
+      weekday: 'long',
+      month: 'long',
       day: 'numeric',
       year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
     });
@@ -378,11 +375,6 @@ export function MeetingHistoryPanel({ roomName, onMeetingSelect }: MeetingHistor
                     <span className={`${styles.meetingDate} ${meeting.isUpcoming ? styles.upcomingDate : ''}`}>
                       {formatDate(meeting.startTime, meeting.isUpcoming)}
                     </span>
-                    {meeting.duration && !meeting.isUpcoming && (
-                      <span className={styles.meetingDuration}>
-                        {formatDuration(meeting.duration)}
-                      </span>
-                    )}
                     {meeting.isUpcoming && meeting.recurringPattern && (
                       <span className={styles.recurringInfo}>
                         {meeting.recurringPattern.frequency} • {meeting.recurringPattern.day}s

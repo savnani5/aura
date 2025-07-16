@@ -229,14 +229,7 @@ export function UnifiedMeetingSummary({
     return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const formatDuration = (minutes: number) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours > 0) {
-      return `${hours}h ${mins}m`;
-    }
-    return `${mins}m`;
-  };
+
 
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('en-US', {
@@ -307,9 +300,6 @@ export function UnifiedMeetingSummary({
                     <span className={styles.type}>{meeting.type}</span>
                     {meeting.startedAt && (
                       <span className={styles.date}>{formatDate(meeting.startedAt)}</span>
-                    )}
-                    {meeting.duration && (
-                      <span className={styles.duration}>{formatDuration(meeting.duration)}</span>
                     )}
                   </div>
                 </div>
