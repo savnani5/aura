@@ -1,11 +1,12 @@
 import '../styles/globals.css';
+import '../styles/meeting-components.css';
 import '@livekit/components-styles';
 import '@livekit/components-styles/prefabs';
 import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'react-hot-toast';
 import { ClerkProvider } from '@clerk/nextjs';
 import { dark } from '@clerk/themes';
-import { SubscriptionProvider } from './contexts/SubscriptionContext';
+import { SubscriptionProvider } from './shared/contexts/SubscriptionContext';
 
 export const metadata: Metadata = {
   title: 'Ohm',

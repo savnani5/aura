@@ -1,0 +1,1082 @@
+/* Unified Meeting Components Styles */
+
+/* Main Layout - Resize main content when right panel is open */
+.lk-video-conference {
+  width: 100% !important;
+  height: 100% !important;
+  position: relative !important;
+  transition: width 0.3s ease !important;
+}
+
+.lk-video-conference-inner {
+  width: 100% !important;
+  height: 100% !important;
+  transition: width 0.3s ease !important;
+}
+
+.lk-main-content {
+  width: 100% !important;
+  height: 100% !important;
+  transition: width 0.3s ease !important;
+}
+
+/* When right panel is open, resize main content */
+.lk-video-conference.panel-open {
+  width: calc(100% - 400px) !important;
+}
+
+.lk-video-conference.panel-open .lk-video-conference-inner {
+  width: 100% !important;
+}
+
+/* Custom Control Bar - Replicate LiveKit styling */
+.custom-control-bar {
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px !important;
+  padding: 16px 24px !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+  transition: right 0.3s ease !important;
+}
+
+/* When right panel is open, adjust control bar width */
+.lk-video-conference.panel-open .custom-control-bar {
+  right: 400px !important;
+}
+
+.control-bar-button {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 8px 16px !important;
+  height: 48px !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  white-space: nowrap !important;
+}
+
+/* Default state - consistent appearance for all buttons */
+.control-bar-button {
+  background: rgba(0, 0, 0, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+}
+
+.control-bar-button:hover {
+  background: rgba(0, 0, 0, 0.8) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: white !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Active state - blue for all buttons when active */
+.custom-control-bar .control-bar-button.active {
+  background: rgba(59, 130, 246, 0.8) !important;
+  border-color: rgba(59, 130, 246, 0.6) !important;
+  color: white !important;
+}
+
+.custom-control-bar .control-bar-button.active:hover {
+  background: rgba(59, 130, 246, 0.9) !important;
+  border-color: rgba(59, 130, 246, 0.7) !important;
+  color: white !important;
+}
+
+/* Keep enabled for backward compatibility */
+.control-bar-button.enabled {
+  background: rgba(59, 130, 246, 0.8) !important;
+  border-color: rgba(59, 130, 246, 0.6) !important;
+  color: white !important;
+}
+
+.control-bar-button.enabled:hover {
+  background: rgba(59, 130, 246, 0.9) !important;
+  border-color: rgba(59, 130, 246, 0.7) !important;
+}
+
+/* Disabled state - only for truly disabled buttons */
+.control-bar-button:disabled {
+  background: rgba(0, 0, 0, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  cursor: not-allowed !important;
+}
+
+.control-bar-button:disabled:hover {
+  background: rgba(0, 0, 0, 0.4) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  transform: none !important;
+}
+
+/* Leave button special styling */
+.control-bar-button.leave-button {
+  background: rgba(239, 68, 68, 0.8) !important;
+  border-color: rgba(239, 68, 68, 0.6) !important;
+  color: white !important;
+}
+
+.control-bar-button.leave-button:hover {
+  background: rgba(239, 68, 68, 0.9) !important;
+  border-color: rgba(239, 68, 68, 0.7) !important;
+}
+
+.control-bar-button svg {
+  flex-shrink: 0 !important;
+}
+
+.control-bar-button span {
+  flex-shrink: 0 !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  font-family: inherit !important;
+}
+
+/* Right Side Panel - Match meeting room color scheme */
+.right-side-panel {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  width: 400px !important;
+  height: 100vh !important;
+  background: #1a1a1a !important;
+  border-left: 1px solid #333 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  z-index: 1000 !important;
+  transform: translateX(100%) !important;
+  transition: transform 0.3s ease !important;
+}
+
+.right-side-panel.open {
+  transform: translateX(0) !important;
+}
+
+/* Panel Header */
+.panel-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 16px 20px !important;
+  border-bottom: 1px solid #333 !important;
+  background: #1a1a1a !important;
+}
+
+.panel-header-content {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+.panel-icon {
+  width: 24px !important;
+  height: 24px !important;
+  background: #333 !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #999 !important;
+}
+
+.panel-title {
+  color: #fff !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  margin: 0 !important;
+}
+
+.message-count {
+  background: #3b82f6 !important;
+  color: white !important;
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+  border-radius: 12px !important;
+  font-weight: 500 !important;
+}
+
+.transcript-toggle {
+  background: #333 !important;
+  border: 1px solid #555 !important;
+  border-radius: 6px !important;
+  padding: 6px 12px !important;
+  color: #ccc !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.transcript-toggle:hover {
+  background: #555 !important;
+  color: #fff !important;
+}
+
+.transcript-toggle.active {
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  color: white !important;
+}
+
+.close-button {
+  background: none !important;
+  border: none !important;
+  color: #999 !important;
+  cursor: pointer !important;
+  padding: 8px !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.close-button:hover {
+  color: #fff !important;
+  background: #333 !important;
+}
+
+/* Panel Content */
+.panel-content {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  background: #1a1a1a !important;
+  /* Safari compatibility */
+  -webkit-flex: 1 !important;
+  -webkit-flex-direction: column !important;
+  position: relative !important;
+}
+
+/* Panel Messages */
+.panel-messages {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 16px 20px !important;
+  scroll-behavior: smooth !important;
+  background: #1a1a1a !important;
+}
+
+.panel-messages::-webkit-scrollbar {
+  width: 6px !important;
+}
+
+.panel-messages::-webkit-scrollbar-track {
+  background: #1a1a1a !important;
+}
+
+.panel-messages::-webkit-scrollbar-thumb {
+  background: #333 !important;
+  border-radius: 3px !important;
+}
+
+.panel-messages::-webkit-scrollbar-thumb:hover {
+  background: #555 !important;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center !important;
+  padding: 40px 20px !important;
+  color: #999 !important;
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 200px !important;
+}
+
+.empty-icon {
+  width: 48px !important;
+  height: 48px !important;
+  margin: 0 auto 16px !important;
+  background: #333 !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #666 !important;
+}
+
+.empty-state p {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  margin: 0 !important;
+}
+
+/* Messages List */
+.messages-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 16px !important;
+}
+
+.message-group {
+  background: #222 !important;
+  border: 1px solid #333 !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+  transition: all 0.2s ease !important;
+}
+
+.message-group:hover {
+  border-color: #555 !important;
+}
+
+.message-group.ai-message {
+  background: #222 !important;
+  border-color: #333 !important;
+}
+
+.message-group.user-message {
+  background: #1e3a8a !important;
+  border-color: #3b82f6 !important;
+}
+
+.message-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 12px !important;
+}
+
+.message-sender {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.sender-name {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #fff !important;
+}
+
+.message-time {
+  font-size: 12px !important;
+  color: #999 !important;
+}
+
+.message-badges {
+  display: flex !important;
+  gap: 4px !important;
+}
+
+.badge {
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  font-weight: 500 !important;
+}
+
+.web-badge {
+  background: #059669 !important;
+  color: white !important;
+}
+
+.context-badge {
+  background: #3b82f6 !important;
+  color: white !important;
+}
+
+.processing-indicator {
+  font-size: 12px !important;
+  color: #999 !important;
+  font-style: italic !important;
+}
+
+.message-content {
+  color: #ddd !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+.message-content p {
+  margin: 0 0 8px 0 !important;
+}
+
+.message-content p:last-child {
+  margin-bottom: 0 !important;
+}
+
+.message-content strong {
+  color: #fff !important;
+}
+
+.message-content code {
+  background: #333 !important;
+  color: #fff !important;
+  padding: 2px 4px !important;
+  border-radius: 4px !important;
+  font-size: 13px !important;
+}
+
+.message-content pre {
+  background: #333 !important;
+  color: #fff !important;
+  padding: 12px !important;
+  border-radius: 8px !important;
+  overflow-x: auto !important;
+  margin: 8px 0 !important;
+}
+
+.message-content pre code {
+  background: none !important;
+  padding: 0 !important;
+}
+
+.message-text {
+  color: #ddd !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  margin-bottom: 4px !important;
+}
+
+.message-text:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Copy Button */
+.copy-button {
+  background: none !important;
+  border: none !important;
+  color: #999 !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  border-radius: 4px !important;
+  transition: all 0.2s ease !important;
+}
+
+.copy-button:hover {
+  color: #fff !important;
+  background: #333 !important;
+}
+
+/* Citations */
+.message-citations {
+  margin-top: 12px !important;
+  padding-top: 12px !important;
+  border-top: 1px solid #333 !important;
+}
+
+.citations-toggle {
+  background: none !important;
+  border: none !important;
+  color: #999 !important;
+  cursor: pointer !important;
+  font-size: 12px !important;
+  padding: 4px 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.citations-toggle:hover {
+  color: #fff !important;
+}
+
+.citations-list {
+  margin-top: 8px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+
+.citation-link {
+  color: #60a5fa !important;
+  text-decoration: none !important;
+  font-size: 12px !important;
+  display: block !important;
+}
+
+.citation-link:hover {
+  color: #93c5fd !important;
+  text-decoration: underline !important;
+}
+
+/* Old typing indicator removed - using better version below */
+
+/* Thinking Container */
+.thinking-container {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 12px 0 !important;
+}
+
+.thinking-text {
+  font-size: 14px !important;
+  color: #888 !important;
+  font-style: italic !important;
+  animation: thinking-pulse 2s infinite ease-in-out !important;
+}
+
+@keyframes thinking-pulse {
+  0%, 100% {
+    opacity: 0.8 !important;
+  }
+  50% {
+    opacity: 1 !important;
+  }
+}
+
+/* Animated Typing Indicator */
+.typing-indicator {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+/* Ensure typing indicator works in AI assistant */
+.thinking-container .typing-indicator {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+}
+
+.typing-dot {
+  width: 8px !important;
+  height: 8px !important;
+  background: #3b82f6 !important;
+  border-radius: 50% !important;
+  animation: typing-bounce 1.4s infinite ease-in-out !important;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.3) !important;
+}
+
+.typing-dot:nth-child(1) {
+  animation-delay: 0s !important;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.2s !important;
+}
+
+.typing-dot:nth-child(3) {
+  animation-delay: 0.4s !important;
+}
+
+/* Ensure animation works in thinking container */
+.thinking-container .typing-dot {
+  width: 8px !important;
+  height: 8px !important;
+  background: #3b82f6 !important;
+  border-radius: 50% !important;
+  animation: typing-bounce 1.4s infinite ease-in-out !important;
+  box-shadow: 0 0 4px rgba(59, 130, 246, 0.3) !important;
+}
+
+.thinking-container .typing-dot:nth-child(1) {
+  animation-delay: 0s !important;
+}
+
+.thinking-container .typing-dot:nth-child(2) {
+  animation-delay: 0.2s !important;
+}
+
+.thinking-container .typing-dot:nth-child(3) {
+  animation-delay: 0.4s !important;
+}
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: translateY(0) scale(1) !important;
+    opacity: 0.6 !important;
+  }
+  40% {
+    transform: translateY(-8px) scale(1.2) !important;
+    opacity: 1 !important;
+  }
+}
+
+/* Panel Input */
+.panel-input {
+  padding: 16px 20px !important;
+  border-top: 1px solid #333 !important;
+  background: #1a1a1a !important;
+}
+
+.input-form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+
+.input-controls {
+  display: flex !important;
+  gap: 8px !important;
+}
+
+.control-button {
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  border-radius: 6px !important;
+  border: 1px solid #555 !important;
+  background: #333 !important;
+  color: #ddd !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  font-weight: 500 !important;
+}
+
+.control-button:hover {
+  background: #555 !important;
+  color: #fff !important;
+}
+
+.control-button.active {
+  background: #059669 !important;
+  border-color: #059669 !important;
+  color: white !important;
+}
+
+.control-button:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.input-row {
+  display: flex !important;
+  gap: 8px !important;
+}
+
+.message-input {
+  flex: 1 !important;
+  background: #333 !important;
+  border: 1px solid #555 !important;
+  border-radius: 8px !important;
+  padding: 12px 16px !important;
+  color: #fff !important;
+  font-size: 14px !important;
+  transition: all 0.2s ease !important;
+}
+
+.message-input::placeholder {
+  color: #999 !important;
+}
+
+.message-input:focus {
+  outline: none !important;
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+.send-button {
+  background: #3b82f6 !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 12px 16px !important;
+  color: white !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.send-button:hover:not(:disabled) {
+  background: #2563eb !important;
+}
+
+.send-button:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+.spinner {
+  width: 16px !important;
+  height: 16px !important;
+  border: 2px solid white !important;
+  border-top: 2px solid transparent !important;
+  border-radius: 50% !important;
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg) !important; }
+  100% { transform: rotate(360deg) !important; }
+}
+
+/* Transcript Section - Fix layout issues */
+.transcript-section {
+  border-bottom: 1px solid #333 !important;
+  background: #1a1a1a !important;
+  padding: 16px 20px !important;
+  flex-shrink: 0 !important;
+}
+
+/* Override globals.css constraint that limits transcript height */
+.transcript-section.full-panel .transcript-messages {
+  max-height: none !important;
+  height: auto !important;
+  flex: 1 !important;
+}
+
+.transcript-section.full-panel .transcript-list {
+  max-height: none !important;
+  height: auto !important;
+  flex: 1 !important;
+}
+
+.transcript-section.full-panel .empty-state {
+  max-height: none !important;
+  height: auto !important;
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* High specificity override for full-panel transcript display */
+.right-side-panel .panel-content .transcript-section.full-panel .transcript-messages.full-height {
+  max-height: none !important;
+  height: auto !important;
+  flex: 1 !important;
+  overflow-y: auto !important;
+  /* Safari compatibility */
+  -webkit-flex: 1 !important;
+  -webkit-overflow-scrolling: touch !important;
+  padding-bottom: 24px !important;
+}
+
+.right-side-panel .panel-content .transcript-section.full-panel .transcript-messages.full-height .transcript-list {
+  max-height: none !important;
+  height: auto !important;
+  flex: 1 !important;
+  /* Safari compatibility */
+  -webkit-flex: 1 !important;
+  padding-bottom: 16px !important;
+}
+
+.transcript-section.full-panel {
+  min-height: 0 !important;
+  padding: 0 !important;
+  border-bottom: none !important;
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  /* Safari compatibility */
+  -webkit-flex: 1 !important;
+  -webkit-flex-direction: column !important;
+  position: relative !important;
+}
+
+.transcript-messages.full-height {
+  flex: 1 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  padding: 16px 20px 24px 20px !important;
+  overflow-y: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  /* Safari compatibility */
+  -webkit-overflow-scrolling: touch !important;
+  will-change: scroll-position !important;
+}
+
+.transcript-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 12px !important;
+}
+
+.transcript-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: #fff !important;
+}
+
+.recording-indicator {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  font-size: 12px !important;
+  color: #ef4444 !important;
+}
+
+.recording-dot {
+  width: 8px !important;
+  height: 8px !important;
+  background: #ef4444 !important;
+  border-radius: 50% !important;
+  animation: pulse 2s infinite !important;
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1) !important;
+    opacity: 1 !important;
+  }
+  50% {
+    transform: scale(1.2) !important;
+    opacity: 0.7 !important;
+  }
+  100% {
+    transform: scale(1) !important;
+    opacity: 1 !important;
+  }
+}
+
+.transcript-messages {
+  max-height: 120px !important;
+  overflow-y: auto !important;
+  background: #1a1a1a !important;
+}
+
+.transcript-messages::-webkit-scrollbar {
+  width: 4px !important;
+  height: 4px !important;
+}
+
+.transcript-messages::-webkit-scrollbar-track {
+  background: #1a1a1a !important;
+  border-radius: 2px !important;
+}
+
+.transcript-messages::-webkit-scrollbar-thumb {
+  background: #333 !important;
+  border-radius: 2px !important;
+  /* Safari specific */
+  -webkit-border-radius: 2px !important;
+}
+
+.transcript-messages::-webkit-scrollbar-thumb:hover {
+  background: #555 !important;
+}
+
+/* Safari-specific scrollbar for full-height transcript */
+.transcript-messages.full-height::-webkit-scrollbar {
+  width: 6px !important;
+}
+
+.transcript-messages.full-height::-webkit-scrollbar-thumb {
+  background: #444 !important;
+  border-radius: 3px !important;
+}
+
+.transcript-messages.full-height::-webkit-scrollbar-thumb:hover {
+  background: #666 !important;
+}
+
+.transcript-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  padding-bottom: 16px !important;
+  /* Safari flex compatibility */
+  -webkit-flex: 1 !important;
+  -webkit-flex-direction: column !important;
+}
+
+.transcript-item {
+  font-size: 12px !important;
+}
+
+.transcript-item-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-bottom: 4px !important;
+}
+
+.speaker-badge {
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  background: #333 !important;
+  color: #ddd !important;
+  border: 1px solid #555 !important;
+}
+
+.transcript-time {
+  font-size: 10px !important;
+  color: #999 !important;
+}
+
+.transcript-text {
+  color: #ddd !important;
+  padding-left: 8px !important;
+  border-left: 2px solid #555 !important;
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+
+.ai-chat-section {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  background: #1a1a1a !important;
+}
+
+/* Suggestion System */
+.suggestion-list {
+  margin-top: 16px !important;
+}
+
+.suggestion-title {
+  font-size: 14px !important;
+  color: #999 !important;
+  margin-bottom: 20px !important;
+  display: block !important;
+  line-height: 1.4 !important;
+}
+
+/* Specific override for AI assistant suggestions */
+.ai-chat-section .suggestion-title,
+.panel-content .suggestion-title {
+  font-size: 14px !important;
+  color: #999 !important;
+  margin-bottom: 24px !important;
+  margin-top: 8px !important;
+  display: block !important;
+  line-height: 1.4 !important;
+}
+
+.suggestion-buttons {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+  margin-top: 4px !important;
+}
+
+/* Specific spacing for AI assistant suggestion buttons */
+.ai-chat-section .suggestion-buttons,
+.panel-content .suggestion-buttons {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  margin-top: 0 !important;
+}
+
+.suggestion-button {
+  width: 100% !important;
+  text-align: left !important;
+  padding: 8px 12px !important;
+  font-size: 12px !important;
+  background: #333 !important;
+  border: 1px solid #555 !important;
+  border-radius: 6px !important;
+  color: #ddd !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.suggestion-button:hover:not(:disabled) {
+  background: #555 !important;
+  color: #fff !important;
+}
+
+.suggestion-button:disabled {
+  opacity: 0.5 !important;
+  cursor: not-allowed !important;
+}
+
+/* Settings Panel */
+.settings-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-section {
+  padding: 20px;
+  border-bottom: 1px solid #333;
+}
+
+.settings-section:last-child {
+  border-bottom: none;
+}
+
+.settings-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 16px 0;
+}
+
+.settings-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.settings-item:last-child {
+  margin-bottom: 0;
+}
+
+.settings-item label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ddd;
+}
+
+.settings-select,
+.settings-input {
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.settings-select:focus,
+.settings-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.settings-input[readonly] {
+  background: #2a2a2a;
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .right-side-panel {
+    width: 100vw !important;
+  }
+  
+  .lk-main-content {
+    width: 100% !important;
+  }
+  
+  .custom-control-bar {
+    padding: 12px 16px !important;
+    gap: 8px !important;
+  }
+  
+
+  
+  .panel-header {
+    padding: 12px 16px !important;
+  }
+  
+  .panel-messages {
+    padding: 12px 16px !important;
+  }
+  
+  .panel-input {
+    padding: 12px 16px !important;
+  }
+} 

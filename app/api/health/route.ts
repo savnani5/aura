@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { isDatabaseConnected, connectToDatabase } from '@/lib/mongodb';
+import { isDatabaseConnected, connectToDatabase } from '@/lib/database/mongodb';
 
 // GET /api/health - Health check for database and services
 export async function GET() {

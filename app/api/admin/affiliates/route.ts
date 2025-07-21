@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { DatabaseService } from '@/lib/mongodb';
+import { DatabaseService } from '@/lib/database/mongodb';
 
 export async function GET(req: Request) {
   try {

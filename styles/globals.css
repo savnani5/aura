@@ -2542,7 +2542,7 @@ h2 a {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--lk-fg-2);
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
   text-align: center;
 }
 
@@ -2589,7 +2589,7 @@ h2 a {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--lk-accent-fg);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
   text-align: center;
 }
 

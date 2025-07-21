@@ -9,7 +9,11 @@
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
-    "format:write": "prettier --write \"**/*.{ts,tsx,md,json}\""
+    "format:write": "prettier --write \"**/*.{ts,tsx,md,json}\"",
+    "migrate-pinecone": "tsx scripts/migrate-to-pinecone.ts",
+    "test-pinecone": "tsx scripts/test-pinecone.ts",
+    "test-pinecone-simple": "tsx scripts/test-pinecone-simple.ts",
+    "check-data": "tsx scripts/check-existing-data.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
@@ -75,6 +79,7 @@
     "eslint-config-next": "15.3.2",
     "node-fetch": "^2.7.0",
     "source-map-loader": "^5.0.0",
+    "tsx": "^4.20.3",
     "typescript": "5.8.3"
   },
   "engines": {

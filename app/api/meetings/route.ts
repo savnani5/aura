@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { DatabaseService, fromCreateMeetingForm, toMeetingRoomCard } from '@/lib/mongodb';
+import { DatabaseService, fromCreateMeetingForm, toMeetingRoomCard } from '@/lib/database/mongodb';
 
 // GET /api/meetings - Get meeting rooms for the authenticated user
 export async function GET(request: NextRequest) {

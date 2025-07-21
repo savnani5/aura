@@ -1,4 +1,4 @@
-import { randomString } from '@/lib/client-utils';
+import { randomString } from '@/lib/utils/client-utils';
 import { ConnectionDetails } from '@/lib/types';
 import { AccessToken, AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';

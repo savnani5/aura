@@ -3,8 +3,8 @@
 import React, { useEffect, Suspense } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useSearchParams } from 'next/navigation';
-import { LandingPage } from './components/LandingPage';
-import { Dashboard } from './components/Dashboard';
+import { LandingPage } from '@/components/landing';
+import { Dashboard } from '@/components/dashboard';
 import styles from '@/styles/HomePage.module.css';
 
 function ReferralTracker() {

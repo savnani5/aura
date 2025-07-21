@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DatabaseService } from '@/lib/mongodb';
+import { DatabaseService } from '@/lib/database/mongodb';
 
 // GET /api/meetings/[roomName]/history - Get meeting history and upcoming meetings for a room
 export async function GET(

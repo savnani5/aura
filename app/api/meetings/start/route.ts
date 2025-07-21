@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DatabaseService } from '@/lib/mongodb';
+import { DatabaseService } from '@/lib/database/mongodb';
 
 // Simple in-memory lock to prevent race conditions during meeting creation
 const meetingStartLocks = new Map<string, Promise<any>>();

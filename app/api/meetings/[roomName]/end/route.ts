@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DatabaseService } from '@/lib/mongodb';
-import { RAGService } from '@/lib/rag-service';
-import { EmailService } from '@/lib/email-service';
+import { DatabaseService } from '@/lib/database/mongodb';
+import { HybridRAGService } from '@/lib/ai/hybrid-rag';
+import { EmailService } from '@/lib/services/email';
 import Anthropic from '@anthropic-ai/sdk';
 
 const anthropic = new Anthropic({
@@ -171,7 +171,7 @@ export async function POST(
     // Use lock mechanism to prevent race conditions
     return await withMeetingEndLock(meetingId, async () => {
       const dbService = DatabaseService.getInstance();
-      const ragService = RAGService.getInstance();
+      const ragService = HybridRAGService.getInstance();
 
       // Get the meeting to verify it exists (check again inside lock)
       const meeting = await dbService.getMeetingById(meetingId);
@@ -307,27 +307,9 @@ export async function POST(
         try {
           console.log(`📝 Storing ${processedTranscripts.length} transcripts with embeddings...`);
           
-          // Check if embeddings already exist for this meeting to prevent duplication
-          const existingEmbeddings = await dbService.getEmbeddingsByMeeting([meetingId]);
-          const alreadyHasEmbeddings = existingEmbeddings.length > 0 && existingEmbeddings[0]?.transcripts?.length > 0;
-          
-          if (alreadyHasEmbeddings) {
-            console.log(`⚠️ Meeting ${meetingId} already has ${existingEmbeddings[0].transcripts.length} embeddings - skipping embedding generation`);
-            transcriptsStored = processedTranscripts.length; // Mark as stored since they exist
-          } else {
-            // Store transcripts with embeddings using RAG service
-            await ragService.storeTranscriptEmbeddings(meetingId, processedTranscripts);
-            console.log(`✅ Stored ${transcriptsStored} transcripts with embeddings`);
-            
-            // Verify embeddings were actually stored
-            const verifyEmbeddings = await dbService.getEmbeddingsByMeeting([meetingId]);
-            if (verifyEmbeddings.length === 0 || verifyEmbeddings[0]?.transcripts?.length === 0) {
-              console.error(`❌ Embedding verification failed - no embeddings found after storage`);
-              transcriptsStored = 0;
-            } else {
-              console.log(`✅ Verified ${verifyEmbeddings[0].transcripts.length} embeddings stored successfully`);
-            }
-          }
+          // Store transcripts with embeddings using RAG service
+          await ragService.storeTranscriptEmbeddings(meetingId, processedTranscripts);
+          console.log(`✅ Stored ${transcriptsStored} transcripts with embeddings`);
         } catch (transcriptError) {
           console.error('Error storing transcripts with embeddings:', transcriptError);
           // Don't fail the whole request if transcript storage fails, but log it clearly

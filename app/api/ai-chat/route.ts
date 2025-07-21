@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { AIChatbot } from '@/lib/ai-chatbot';
+import { AIChatbot } from '@/lib/ai/chatbot';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,6 +36,13 @@ export async function POST(request: NextRequest) {
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: 'OpenAI API key not configured' },
+        { status: 500 }
+      );
+    }
+
+    if (!process.env.PINECONE_API_KEY) {
+      return NextResponse.json(
+        { error: 'Pinecone API key not configured' },
         { status: 500 }
       );
     }

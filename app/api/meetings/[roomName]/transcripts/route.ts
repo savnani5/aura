@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RAGService } from '@/lib/rag-service';
-import { DatabaseService } from '@/lib/mongodb';
+import { HybridRAGService } from '@/lib/ai/hybrid-rag';
+import { DatabaseService } from '@/lib/database/mongodb';
 
 // POST /api/meetings/[roomName]/transcripts - Store transcripts with embeddings after meeting ends
 export async function POST(
@@ -27,7 +27,7 @@ export async function POST(
       }, { status: 500 });
     }
 
-    const ragService = RAGService.getInstance();
+    const ragService = HybridRAGService.getInstance();
     const dbService = DatabaseService.getInstance();
 
     // Verify the meeting exists and belongs to the room
@@ -131,7 +131,7 @@ export async function GET(
       speaker: transcript.speaker,
       text: transcript.text,
       timestamp: transcript.timestamp,
-      hasEmbedding: transcript.embedding && transcript.embedding.length > 0,
+      hasEmbedding: !!(transcript as any).embedding && (transcript as any).embedding.length > 0,
       // Enhanced fields for consistency with live transcription
       speakerConfidence: transcript.speakerConfidence,
       deepgramSpeaker: transcript.deepgramSpeaker,

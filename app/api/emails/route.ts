@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { EmailService } from '@/lib/email-service';
-import { DatabaseService } from '@/lib/mongodb';
+import { EmailService } from '@/lib/services/email';
+import { DatabaseService } from '@/lib/database/mongodb';
 
 export async function POST(request: NextRequest) {
   try {

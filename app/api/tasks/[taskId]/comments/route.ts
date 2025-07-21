@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DatabaseService } from '@/lib/mongodb';
+import { DatabaseService } from '@/lib/database/mongodb';
 
 // POST /api/tasks/[taskId]/comments - Add a comment to a specific task
 export async function POST(

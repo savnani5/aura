@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DatabaseService } from '@/lib/mongodb';
-import { EmailService } from '@/lib/email-service';
+import { DatabaseService } from '@/lib/database/mongodb';
+import { EmailService } from '@/lib/services/email';
 import { auth } from '@clerk/nextjs/server';
 
 // GET /api/meetings/[roomName] - Get specific meeting room with full details

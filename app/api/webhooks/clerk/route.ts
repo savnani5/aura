@@ -2,7 +2,7 @@ import { clerkClient, WebhookEvent } from '@clerk/nextjs/server';
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { Webhook } from "svix";
-import { DatabaseService } from '@/lib/mongodb';
+import { DatabaseService } from '@/lib/database/mongodb';
 
 export async function POST(req: Request) {
   console.log('🎯 Clerk webhook received');
