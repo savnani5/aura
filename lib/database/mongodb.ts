@@ -495,7 +495,6 @@ export interface IMeeting {
   };
   isRecording: boolean;
   recordingUrl?: string;
-  isLive?: boolean; // Flag to indicate if meeting is currently in progress
   
   // Performance metadata
   transcriptCount?: number; // Cache transcript count

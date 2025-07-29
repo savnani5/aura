@@ -150,8 +150,7 @@ export async function POST(
           });
       }
 
-      // Update meeting with end data and remove live flag
-      updateData.isLive = false;
+      // Update meeting with end data
       await dbService.updateMeeting(meetingId, updateData);
       console.log(`✅ Meeting ended, starting background processing...`);
           

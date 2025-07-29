@@ -172,7 +172,7 @@ export async function DELETE(
     }
     
     // Check if user is the creator or host
-    const isCreator = room.createdBy.toString() === user._id.toString();
+    const isCreator = room.createdBy?.toString() === user._id.toString();
     const isHost = room.participants.some(p => 
       (p.userId?.toString() === user._id.toString() || p.email === user.email) && p.role === 'host'
     );

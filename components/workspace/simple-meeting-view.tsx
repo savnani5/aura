@@ -225,7 +225,7 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-xl font-semibold text-foreground mb-2">Meeting not found</h2>
-          <p className="text-muted-foreground mb-4">The meeting you're looking for doesn't exist.</p>
+          <p className="text-muted-foreground mb-4">The meeting you&apos;re looking for doesn&apos;t exist.</p>
           <Button onClick={handleBack} variant="outline">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Go Back
@@ -453,7 +453,7 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="h-16 w-16 mx-auto mb-4 opacity-30" />
                   <h3 className="text-lg font-medium text-foreground mb-2">No Transcripts Available</h3>
-                  <p className="text-sm">This meeting doesn't have any transcript data.</p>
+                  <p className="text-sm">This meeting doesn&apos;t have any transcript data.</p>
                 </div>
               )}
             </div>
@@ -502,7 +502,7 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
                   </span>
                 </div>
                 <blockquote className="text-sm text-foreground leading-relaxed italic border-l-4 border-primary pl-4">
-                  "{selectedContext.transcriptExcerpt}"
+                  &ldquo;{selectedContext.transcriptExcerpt}&rdquo;
                 </blockquote>
               </div>
 

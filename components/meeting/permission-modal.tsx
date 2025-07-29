@@ -22,7 +22,7 @@ export function PermissionModal({ isOpen, onClose, permissionType, error }: Perm
           title: 'Camera Permission Required',
           description: 'To use your camera in this meeting, you need to allow camera access in your browser.',
           steps: [
-            'Click the camera icon in your browser\'s address bar',
+                         'Click the camera icon in your browser&apos;s address bar',
             'Select "Allow" for camera access',
             'Refresh the page if needed',
             'Try turning on your camera again'
@@ -34,7 +34,7 @@ export function PermissionModal({ isOpen, onClose, permissionType, error }: Perm
           title: 'Microphone Permission Required',
           description: 'To use your microphone in this meeting, you need to allow microphone access in your browser.',
           steps: [
-            'Click the microphone icon in your browser\'s address bar',
+            'Click the microphone icon in your browser&apos;s address bar',
             'Select "Allow" for microphone access',
             'Refresh the page if needed',
             'Try turning on your microphone again'
@@ -58,7 +58,7 @@ export function PermissionModal({ isOpen, onClose, permissionType, error }: Perm
           title: 'Audio Permission Required',
           description: 'To use audio features, you need to allow microphone access in your browser.',
           steps: [
-            'Click the microphone icon in your browser\'s address bar',
+            'Click the microphone icon in your browser&apos;s address bar',
             'Select "Allow" for microphone access',
             'Refresh the page if needed',
             'Try again'
@@ -124,9 +124,9 @@ export function PermissionModal({ isOpen, onClose, permissionType, error }: Perm
     return {
       browser: 'Your Browser',
       instructions: [
-        'Look for permission icons in your browser\'s address bar',
+        'Look for permission icons in your browser&apos;s address bar',
         'Click on them and select "Allow"',
-        'Check your browser\'s privacy/security settings',
+        'Check your browser&apos;s privacy/security settings',
         'Look for camera/microphone permissions and allow them for this site'
       ]
     };
@@ -217,7 +217,7 @@ export function PermissionModal({ isOpen, onClose, permissionType, error }: Perm
               onClick={onClose}
               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
             >
-              I've Updated Permissions
+              I&apos;ve Updated Permissions
             </Button>
             <Button
               onClick={() => window.location.reload()}

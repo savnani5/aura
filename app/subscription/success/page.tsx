@@ -103,7 +103,7 @@ export default function SubscriptionSuccessPage() {
 
         {/* Features */}
         <div className="text-left rounded-lg p-6 mb-8 border border-gray-200" style={{ backgroundColor: '#f9fafb', color: '#111827' }}>
-          <h3 className="font-semibold mb-4" style={{ color: '#111827' }}>What's included:</h3>
+          <h3 className="font-semibold mb-4" style={{ color: '#111827' }}>What&apos;s included:</h3>
           <ul className="space-y-3">
             <li className="flex items-center gap-3">
               <CheckCircle className="w-4 h-4 text-green-600 flex-shrink-0" />

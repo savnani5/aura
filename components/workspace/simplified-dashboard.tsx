@@ -66,7 +66,6 @@ interface Meeting {
   };
   hasTranscript: boolean;
   status: 'completed' | 'upcoming' | 'in_progress';
-  isLive?: boolean;
 }
 
 export function SimplifiedDashboard() {
@@ -262,8 +261,7 @@ export function SimplifiedDashboard() {
           summary: meeting.summary, // Pass the full summary object
           hasTranscript: meeting.hasTranscripts || false,
           status: meeting.isUpcoming ? 'upcoming' : 
-                   meeting.endedAt ? 'completed' : 'in_progress',
-          isLive: meeting.isLive || false
+                   meeting.endedAt ? 'completed' : 'in_progress'
         }));
         
         setMeetings(transformedMeetings);

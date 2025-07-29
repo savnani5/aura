@@ -138,9 +138,7 @@ export class MeetingProcessor {
         await dbService.updateMeeting(meetingId, { 
           processingStatus: 'completed',
           processingCompletedAt: new Date(),
-          processingError: 'No transcripts to process',
-          isLive: false, // Remove live flag
-          title: meeting.title === 'Meeting in process' ? `${meeting.type} Session` : meeting.title
+          processingError: 'No transcripts to process'
         });
         return;
       }
@@ -161,18 +159,13 @@ export class MeetingProcessor {
         const updateData: any = {
           summary,
           processingStatus: 'summary_completed',
-          summaryGeneratedAt: new Date(),
-          isLive: false // Remove live flag after processing
+          summaryGeneratedAt: new Date()
         };
 
-        // Update meeting title from AI if available, or remove temporary title
+        // Update meeting title from AI if available
         if (summary.title && summary.title !== meeting.type) {
           updateData.title = summary.title;
           console.log(`📝 FULL BACKGROUND PROCESSING: Updating meeting title to: "${summary.title}"`);
-        } else if (meeting.title === 'Meeting in process') {
-          // If no AI title generated, use a generic completed title
-          updateData.title = `${meeting.type} Session`;
-          console.log(`📝 FULL BACKGROUND PROCESSING: Using fallback title: "${meeting.type} Session"`);
         }
 
         await dbService.updateMeeting(meetingId, updateData);

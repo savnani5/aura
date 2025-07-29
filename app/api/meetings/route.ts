@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     const allParticipants = participants || [];
     
     // Check if creator is already in participants list
-    const creatorInParticipants = allParticipants.some(p => 
+    const creatorInParticipants = allParticipants.some((p: any) => 
       p.email === user.email || p.role === 'host'
     );
     

@@ -676,7 +676,7 @@ export function TaskManagementPanel({ workspaceId, workspaceName, onClose }: Tas
                               
                               {task.meetingTitle && (
                                 <span className="text-muted-foreground">
-                                  from "{task.meetingTitle}"
+                                  from &ldquo;{task.meetingTitle}&rdquo;
                                 </span>
                               )}
                             </div>

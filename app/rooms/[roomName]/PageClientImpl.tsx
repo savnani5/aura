@@ -508,15 +508,8 @@ function VideoConferenceComponent(props: {
     }
     
     // Count total participants (local + remote)
-    const remoteParticipants = Array.from(room.remoteParticipants.values());
-    const totalParticipants = 1 + remoteParticipants.length;
-    
-    console.log(`👥 MEETING END PIPELINE: Total participants: ${totalParticipants} (1 local + ${remoteParticipants.length} remote)`);
-    console.log(`👥 MEETING END PIPELINE: Remote participants:`, remoteParticipants.map(p => ({
-      identity: p.identity,
-      name: p.name,
-      sid: p.sid
-    })));
+    const totalParticipants = 1 + room.remoteParticipants.size;
+    console.log(`👥 MEETING END PIPELINE: Total participants: ${totalParticipants} (1 local + ${room.remoteParticipants.size} remote)`);
     
     // Only trigger meeting end if this is the last person leaving
     let shouldEndMeeting = false;
@@ -526,7 +519,6 @@ function VideoConferenceComponent(props: {
       console.log('👤 MEETING END PIPELINE: Last participant leaving - triggering meeting end');
     } else {
       console.log('👥 MEETING END PIPELINE: Other participants still in room - not ending meeting');
-      console.log('👥 MEETING END PIPELINE: Remaining participants will handle meeting end when they leave');
     }
     
     // Set flag immediately to prevent concurrent calls
@@ -535,12 +527,6 @@ function VideoConferenceComponent(props: {
     // Get transcripts immediately before any disconnection
     const finalTranscripts = transcriptsRef.current;
     console.log('🔍 MEETING END PIPELINE: Final transcript count:', finalTranscripts.length);
-    console.log('🔍 MEETING END PIPELINE: Final transcripts detail:', finalTranscripts.map(t => ({
-      speaker: t.speaker,
-      text: t.text.substring(0, 50) + '...',
-      timestamp: new Date(t.timestamp).toLocaleString(),
-      participantId: t.participantId
-    })));
     
     // Get meeting ID for background processing from Zustand store (replaces localStorage)
     const meetingId = MeetingStorageUtils.getMeetingId(props.roomName);

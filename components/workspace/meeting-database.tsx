@@ -52,7 +52,6 @@ interface Meeting {
   hasTranscript: boolean;
   status: 'completed' | 'upcoming' | 'in_progress';
   startTime?: string; // Add this for proper date parsing
-  isLive?: boolean;
 }
 
 interface Participant {
@@ -631,18 +630,10 @@ export function MeetingDatabase({
                           )}
                         </div>
                         
-                        {/* Status and Time */}
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {meeting.status === 'in_progress' && (
-                            <div className="flex items-center gap-1 px-2 py-1 bg-red-500/10 border border-red-500/20 rounded-full">
-                              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                              <span className="text-xs font-medium text-red-600">LIVE</span>
-                            </div>
-                          )}
-                          <div className="text-xs text-muted-foreground font-medium">
-                            {formatTime(meeting)}
+                        {/* Time */}
+                        <div className="text-xs text-muted-foreground font-medium flex-shrink-0">
+                          {formatTime(meeting)}
                           </div>
-                        </div>
                       </div>
                     ))}
                     </div>

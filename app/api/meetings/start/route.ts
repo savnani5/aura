@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
       const meetingData = {
         roomId: meetingRoom._id,
         roomName: roomName,
-        title: 'Meeting in process', // Temporary title for live meetings
+        title: title || meetingRoom.title || 'Meeting',
         type: type || meetingRoom.type || 'Meeting',
         startedAt: new Date(),
         participants: participantName ? [{
@@ -131,8 +131,7 @@ export async function POST(request: NextRequest) {
         }] : [],
         transcripts: [], // Will be populated during/after the meeting
         summary: undefined, // Will be generated after the meeting
-        isRecording: false,
-        isLive: true // Flag to indicate this is a live meeting
+        isRecording: false
       };
 
       const createdMeeting = await db.createMeeting(meetingData);

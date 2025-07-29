@@ -63,7 +63,7 @@ export function PaywallModal({ onClose, currentCount, limit }: PaywallModalProps
               {currentCount}/{limit}
             </div>
             <p className="text-muted-foreground">
-              You've reached your monthly meeting limit on the free plan.
+              You&apos;ve reached your monthly meeting limit on the free plan.
             </p>
           </div>
 
