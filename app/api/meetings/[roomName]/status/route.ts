@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { connectToDatabase, Meeting } from '@/lib/database/mongodb';
+import { DatabaseService } from '@/lib/database/mongodb';
 
 export async function GET(
   request: NextRequest,
@@ -20,47 +20,88 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Meeting ID required' }, { status: 400 });
     }
 
-    await connectToDatabase();
+    const dbService = DatabaseService.getInstance();
     
     // Find the meeting
-    const meeting = await Meeting.findOne({
-      _id: meetingId,
-      roomName: roomName
-    });
+    const meeting = await dbService.getMeetingById(meetingId);
 
     if (!meeting) {
       return NextResponse.json({ success: false, error: 'Meeting not found' }, { status: 404 });
     }
 
-    // Check if meeting has ended and has a summary
-    if (meeting.endedAt && meeting.summary?.content) {
+    if (meeting.roomName !== roomName) {
+      return NextResponse.json({ success: false, error: 'Meeting does not belong to this room' }, { status: 400 });
+    }
+
+    // Check if meeting is still active (started but not ended)
+    if (meeting.startedAt && !meeting.endedAt) {
       return NextResponse.json({
         success: true,
         data: {
-          status: 'completed',
-          summary: meeting.summary,
-          meetingId: meeting._id
+          status: 'active',
+          message: 'Meeting is currently in progress',
+          meetingId: meeting._id,
+          startedAt: meeting.startedAt.toISOString(),
+          title: meeting.title || meeting.type,
+          participantCount: meeting.participants?.length || 0
         }
       });
     }
 
-    // Check if meeting has ended but summary is still being generated
-    if (meeting.endedAt && !meeting.summary?.content) {
-      return NextResponse.json({
-        success: true,
-        data: {
-          status: 'generating_summary',
-          message: 'Meeting has ended, summary is being generated...'
-        }
-      });
+    // Check processing status for ended meetings
+    if (meeting.endedAt) {
+      const processingStatus = meeting.processingStatus || 'pending';
+      
+      switch (processingStatus) {
+        case 'completed':
+          return NextResponse.json({
+            success: true,
+            data: {
+              status: 'completed',
+              summary: meeting.summary,
+              meetingId: meeting._id,
+              endedAt: meeting.endedAt.toISOString(),
+              duration: meeting.duration,
+              hasTranscripts: meeting.hasEmbeddings || (meeting.transcriptCount && meeting.transcriptCount > 0)
+            }
+          });
+          
+        case 'failed':
+          return NextResponse.json({
+            success: true,
+            data: {
+              status: 'failed',
+              message: 'Meeting processing failed',
+              error: meeting.processingError,
+              meetingId: meeting._id
+            }
+          });
+          
+        case 'pending':
+        case 'in_progress':
+        case 'summary_completed':
+        default:
+          return NextResponse.json({
+            success: true,
+            data: {
+              status: 'processing',
+              message: 'Meeting has ended, processing transcripts and generating summary...',
+              processingStatus: processingStatus,
+              meetingId: meeting._id,
+              endedAt: meeting.endedAt.toISOString(),
+              duration: meeting.duration
+            }
+          });
+      }
     }
 
-    // Meeting is still active
+    // Fallback for meetings without proper timestamps
     return NextResponse.json({
       success: true,
       data: {
-        status: 'active',
-        message: 'Meeting is still active'
+        status: 'unknown',
+        message: 'Meeting status could not be determined',
+        meetingId: meeting._id
       }
     });
 

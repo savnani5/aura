@@ -515,13 +515,40 @@ export class EmailService {
     const meetingDate = meeting.startedAt.toLocaleDateString();
     const meetingTime = meeting.startedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
-    const keyPointsList = summary?.keyPoints?.map(point => 
-      `<li style="margin: 8px 0; color: #4b5563; line-height: 1.5;">${point}</li>`
-    ).join('') || '';
+    // Generate sections content for new format
+    const sectionsContent = summary?.sections?.map(section => `
+      <div style="margin: 20px 0;">
+        <h4 style="margin: 0 0 12px 0; color: #1f2937; font-size: 16px; font-weight: 600;"># ${section.title}</h4>
+        <ul style="margin: 0; padding-left: 20px;">
+          ${section.points.map(point => `
+            <li style="margin: 8px 0; color: #4b5563; line-height: 1.5;">
+              ${point.text}
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    `).join('') || '';
 
-    const actionItemsList = summary?.actionItems?.map(item => 
-      `<li style="margin: 8px 0; color: #4b5563; line-height: 1.5;">${item}</li>`
-    ).join('') || '';
+    // Fallback to keyPoints for backward compatibility
+    const keyPointsList = (!sectionsContent && summary?.keyPoints) ? summary.keyPoints.map(point => 
+      `<li style="margin: 8px 0; color: #4b5563; line-height: 1.5;">${point}</li>`
+    ).join('') : '';
+
+    const actionItemsList = summary?.actionItems?.map(item => {
+      // Handle both old string format and new structured format
+      if (typeof item === 'string') {
+        return `<li style="margin: 8px 0; color: #4b5563; line-height: 1.5;">${item}</li>`;
+      } else {
+        // New structured format
+        return `<li style="margin: 8px 0; color: #4b5563; line-height: 1.5;">
+          <strong>${item.title}</strong>
+          ${item.owner && item.owner !== 'Unassigned' ? ` (Assigned to: ${item.owner})` : ''}
+          ${item.priority ? ` [${item.priority} Priority]` : ''}
+          ${item.context ? `<br><em style="color: #6b7280; font-size: 14px;">${item.context}</em>` : ''}
+          ${item.dueDate ? `<br><small style="color: #6b7280;">Due: ${item.dueDate}</small>` : ''}
+        </li>`;
+      }
+    }).join('') || '';
 
     const decisionsList = summary?.decisions?.map(decision => 
       `<li style="margin: 8px 0; color: #4b5563; line-height: 1.5;">${decision}</li>`
@@ -579,8 +606,15 @@ export class EmailService {
         </p>
       </div>
 
-      ${keyPointsList ? `
-      <!-- Key Points -->
+      ${sectionsContent ? `
+      <!-- Detailed Meeting Notes -->
+      <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px; padding: 24px; margin: 24px 0;">
+        <h3 style="margin: 0 0 16px 0; color: #1f2937; font-size: 18px; font-weight: 600;">
+          📋 Meeting Notes
+        </h3>
+        ${sectionsContent}
+      </div>` : keyPointsList ? `
+      <!-- Key Points (Fallback) -->
       <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px; padding: 24px; margin: 24px 0;">
         <h3 style="margin: 0 0 16px 0; color: #1f2937; font-size: 18px; font-weight: 600;">
           🎯 Key Points

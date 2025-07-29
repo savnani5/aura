@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { DatabaseService } from '@/lib/database/mongodb';
 
 // Simple in-memory lock to prevent race conditions during meeting creation
@@ -56,6 +57,31 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
+    // Check user authentication and usage limits
+    const { userId } = await auth();
+    if (userId) {
+      const db = DatabaseService.getInstance();
+      const user = await db.getUserByClerkId(userId);
+      
+      if (user) {
+        // Check if user has active subscription
+        const hasActiveSubscription = user.subscriptionStatus === 'active' || user.subscriptionStatus === 'trialing';
+        
+        if (!hasActiveSubscription) {
+          // Check usage limits for free users
+          const usageCheck = await db.hasExceededMeetingLimit(userId, 10);
+          
+          if (usageCheck.exceeded) {
+            return NextResponse.json({ 
+              success: false, 
+              error: 'Monthly meeting limit exceeded. Please upgrade to Pro for unlimited meetings.',
+              usageData: usageCheck
+            }, { status: 402 }); // Payment Required
+          }
+        }
+      }
+    }
+
     // Use lock mechanism to prevent race conditions during meeting creation
     return await withMeetingStartLock(roomName, async () => {
       const db = DatabaseService.getInstance();
@@ -95,7 +121,7 @@ export async function POST(request: NextRequest) {
       const meetingData = {
         roomId: meetingRoom._id,
         roomName: roomName,
-        title: title || meetingRoom.title || 'Meeting',
+        title: 'Meeting in process', // Temporary title for live meetings
         type: type || meetingRoom.type || 'Meeting',
         startedAt: new Date(),
         participants: participantName ? [{
@@ -105,7 +131,8 @@ export async function POST(request: NextRequest) {
         }] : [],
         transcripts: [], // Will be populated during/after the meeting
         summary: undefined, // Will be generated after the meeting
-        isRecording: false
+        isRecording: false,
+        isLive: true // Flag to indicate this is a live meeting
       };
 
       const createdMeeting = await db.createMeeting(meetingData);

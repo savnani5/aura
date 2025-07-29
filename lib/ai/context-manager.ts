@@ -234,19 +234,43 @@ export class AiContextManager {
   /**
    * Get question suggestions based on context
    */
-  getQuestionSuggestions(isLiveMeeting: boolean = false): string[] {
+  getQuestionSuggestions(isLiveMeeting: boolean = false): Array<{ display: string; query: string }> {
     const baseSuggestions = [
-      "Summarize our room's previous discussions!",
-      "What are the recurring topics in our meetings?",
-      "Create a summary of action items!",
-      "What decisions were made recently?"
+      {
+        display: "Previous discussions",
+        query: "Based on our meeting transcripts, summarize our room's previous discussions"
+      },
+      {
+        display: "Top customer issues",
+        query: "What are the top customer issues mentioned in our meetings?"
+      },
+      {
+        display: "Action items summary",
+        query: "From our meeting history, create a summary of action items"
+      },
+      {
+        display: "Recent decisions",
+        query: "What decisions were made in our recent meetings?"
+      }
     ];
 
     const liveSuggestions = [
-      "Summarize what's been decided so far?",
-      "What are the key topics covered in this meeting?",
-      "What questions were raised but not answered?",
-      "Who has been most active in the discussion?"
+      {
+        display: "What's decided so far",
+        query: "Based on this meeting transcript, summarize what's been decided so far"
+      },
+      {
+        display: "Key topics covered",
+        query: "From our current meeting, what are the key topics covered?"
+      },
+      {
+        display: "Unanswered questions",
+        query: "Looking at our meeting discussion, what questions were raised but not answered?"
+      },
+      {
+        display: "Most active speaker",
+        query: "Based on the transcript, who has been most active in the discussion?"
+      }
     ];
 
     // const webSuggestions = [

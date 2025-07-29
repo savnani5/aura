@@ -2,10 +2,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useChat } from '@livekit/components-react';
+import { Send, MessageSquare, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface ControlBarChatProps {
   isOpen: boolean;
   onClose: () => void;
+  onNewMessage?: () => void;
 }
 
 interface GroupedChatMessage {
@@ -20,7 +24,7 @@ interface GroupedChatMessage {
   groupId: string;
 }
 
-export function ControlBarChat({ isOpen, onClose }: ControlBarChatProps) {
+export function ControlBarChat({ isOpen, onClose, onNewMessage }: ControlBarChatProps) {
   const { chatMessages, send: sendMessage, isSending } = useChat();
   const [chatInput, setChatInput] = useState('');
   const [groupedChatMessages, setGroupedChatMessages] = useState<GroupedChatMessage[]>([]);
@@ -59,6 +63,15 @@ export function ControlBarChat({ isOpen, onClose }: ControlBarChatProps) {
     
     setGroupedChatMessages(grouped);
   }, [chatMessages]);
+
+  // Detect new messages and notify parent when chat is closed
+  const prevMessageCountRef = useRef(chatMessages.length);
+  useEffect(() => {
+    if (chatMessages.length > prevMessageCountRef.current && !isOpen && onNewMessage) {
+      onNewMessage();
+    }
+    prevMessageCountRef.current = chatMessages.length;
+  }, [chatMessages.length, isOpen, onNewMessage]);
 
   // Auto-scroll chat messages
   useEffect(() => {
@@ -104,95 +117,98 @@ export function ControlBarChat({ isOpen, onClose }: ControlBarChatProps) {
   if (!isOpen) return null;
 
   return (
-    <>
+    <div className="h-full flex flex-col bg-[#1a1a1a] text-white border-l border-[rgba(55,65,81,0.3)] shadow-lg">
       {/* Header */}
-      <div className="panel-header">
-        <div className="panel-header-content">
-          <div className="panel-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" strokeWidth="2"/>
-            </svg>
-          </div>
-          <h3 className="panel-title">Chat</h3>
-          {chatMessages.length > 0 && (
-            <span className="message-count">
-              {chatMessages.length}
-            </span>
-          )}
+      <div className="flex items-center justify-between p-4 border-b border-[rgba(55,65,81,0.3)]">
+        <div className="flex items-center gap-2">
+          <MessageSquare size={18} className="text-gray-400" />
+          <h3 className="font-medium text-white">Chat</h3>
         </div>
-        <button onClick={onClose} className="close-button">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-          </svg>
-        </button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
+        >
+          <X size={18} />
+        </Button>
       </div>
 
       {/* Messages */}
-      <div className="panel-messages" ref={chatMessagesRef}>
+      <div className="flex-1 overflow-y-auto p-4" ref={chatMessagesRef}>
         {groupedChatMessages.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" strokeWidth="2"/>
-              </svg>
+          <div className="flex flex-col items-center justify-center h-full text-center">
+            <div className="w-12 h-12 bg-[#2a2a2a] rounded-full flex items-center justify-center mb-4">
+              <MessageSquare size={24} className="text-gray-400" />
             </div>
-            <p>No messages yet. Start a conversation with other participants!</p>
+            <p className="text-gray-400 text-sm">No messages yet. Start a conversation with other participants!</p>
           </div>
         ) : (
-          <div className="messages-list">
-            {groupedChatMessages.map((group) => (
-              <div key={group.groupId} className="message-group">
-                <div className="message-header">
-                  <span className="sender-name">
-                    {group.senderName}
-                  </span>
-                  <span className="message-time">
-                    {formatTimestamp(group.latestTimestamp)}
-                  </span>
-                </div>
-                <div className="message-content">
-                  {group.messages.map((msg) => (
-                    <div key={msg.id} className="message-text">
-                      {makeLinksClickable(msg.text)}
+          <div className="space-y-3">
+            {groupedChatMessages.map((group) => {
+              const isCurrentUser = group.senderName === 'You';
+              return (
+                <div key={group.groupId} className={cn(
+                  "flex",
+                  isCurrentUser ? "justify-end" : "justify-start"
+                )}>
+                  <div className={cn(
+                    "max-w-[80%] space-y-1",
+                    isCurrentUser ? "items-end" : "items-start"
+                  )}>
+                    <div className={cn(
+                      "text-xs font-medium mb-1",
+                      isCurrentUser ? "text-right text-gray-400" : "text-left text-gray-400"
+                    )}>
+                      {group.senderName} • {formatTimestamp(group.latestTimestamp)}
                     </div>
-                  ))}
+                    <div className={cn(
+                      "rounded-lg px-4 py-2",
+                      isCurrentUser 
+                        ? "bg-blue-600 text-white" 
+                        : "bg-[#2a2a2a] text-white"
+                    )}>
+                      <div className="space-y-1">
+                        {group.messages.map((msg) => (
+                          <div key={msg.id} className="text-sm">
+                            {makeLinksClickable(msg.text)}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
       {/* Input */}
-      <div className="panel-input">
-        <form onSubmit={handleChatSubmit} className="input-form">
-          <div className="input-row">
-            <input
-              type="text"
-              className="message-input"
-              placeholder="Message to participants..."
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
+      <div className="p-4 border-t border-[rgba(55,65,81,0.3)]">
+        <form onSubmit={handleChatSubmit} className="flex gap-2">
+          <input
+            type="text"
+            className="flex-1 px-3 py-2 bg-[#2a2a2a] border border-[#374151] rounded-lg text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+            placeholder="Message to participants..."
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
               disabled={isSending}
-            />
-            <button 
-              type="submit" 
-              className="send-button"
-              disabled={isSending || !chatInput.trim()}
-            >
-              {isSending ? (
-                <div className="spinner"></div>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="m5 12 14 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="m12 5 7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </button>
-          </div>
+          />
+          <Button 
+            type="submit" 
+            size="icon"
+            disabled={isSending || !chatInput.trim()}
+            className="h-10 w-10 shrink-0 bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            {isSending ? (
+              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <Send size={16} />
+            )}
+          </Button>
         </form>
       </div>
-    </>
+    </div>
   );
 } 

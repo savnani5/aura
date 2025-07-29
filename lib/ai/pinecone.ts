@@ -185,6 +185,7 @@ export class PineconeService {
         }
       };
 
+      console.log(`🔍 Pinecone: Querying room-specific transcripts for roomId: ${roomId}`);
       const queryResponse = await this.index.query(queryRequest);
       
       // Filter by threshold and return results
@@ -200,6 +201,56 @@ export class PineconeService {
       return results;
     } catch (error) {
       console.error('❌ Error querying Pinecone:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieve all transcripts for a specific meeting from Pinecone
+   */
+  async getTranscriptsByMeeting(meetingId: string): Promise<Array<{
+    speaker: string;
+    text: string;
+    timestamp: Date;
+    transcriptIndex: number;
+  }>> {
+    try {
+      console.log(`📖 Retrieving transcripts for meeting ${meetingId} from Pinecone`);
+      
+      // Query to get all transcripts for this meeting
+      const queryResponse = await this.index.query({
+        vector: new Array(1536).fill(0), // Dummy vector for metadata-only query
+        topK: 10000, // Large number to get all transcripts
+        includeMetadata: true,
+        filter: {
+          meetingId: { $eq: meetingId }
+        }
+      });
+
+      if (queryResponse.matches.length === 0) {
+        console.log(`📖 No transcripts found for meeting ${meetingId}`);
+        return [];
+      }
+
+      // Sort by transcript index to maintain chronological order
+      const sortedMatches = queryResponse.matches.sort((a: any, b: any) => {
+        const indexA = a.metadata?.transcriptIndex || 0;
+        const indexB = b.metadata?.transcriptIndex || 0;
+        return indexA - indexB;
+      });
+
+      // Extract transcript data from metadata
+      const transcripts = sortedMatches.map((match: any) => ({
+        speaker: match.metadata?.speaker || 'Unknown',
+        text: match.metadata?.text || '',
+        timestamp: new Date(match.metadata?.timestamp || Date.now()),
+        transcriptIndex: match.metadata?.transcriptIndex || 0
+      }));
+
+      console.log(`📖 Retrieved ${transcripts.length} transcripts for meeting ${meetingId}`);
+      return transcripts;
+    } catch (error) {
+      console.error('❌ Error retrieving transcripts from Pinecone:', error);
       throw error;
     }
   }

@@ -1,1054 +1,650 @@
-/* Unified Meeting Components Styles */
+/* Essential LiveKit Overrides for Dark Meeting Theme */
 
-/* Main Layout - Resize main content when right panel is open */
+/* Force pure black theme on meeting pages - no blue tints */
+body[data-theme="meeting"],
+html[data-theme="meeting"],
+[data-theme="meeting"] {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+/* Override main video conference background to pure black */
+.lk-video-conference,
+.lk-video-conference-inner {
+  background: #000000 !important;
+}
+
+/* Force all LiveKit components to use pure black theme */
+[data-lk-theme="default"] {
+  background: #000000 !important;
+}
+
+/* Override LiveKit's default blue theme with pure black + grey theme */
+:root,
+[data-lk-theme="default"],
+[data-theme="meeting"] {
+  /* Main theme colors - pure grey, no blue tints */
+  --lk-accent: #6b7280 !important;
+  --lk-primary: #6b7280 !important;
+  --lk-bg: #000000 !important;
+  --lk-fg: #ffffff !important;
+  
+  /* Background layers - pure black and grey only */
+  --lk-bg2: #1a1a1a !important;
+  --lk-bg3: #2a2a2a !important;
+  --lk-bg4: #374151 !important;
+  
+  /* Remove any blue tints - use pure grey */
+  --lk-brand: #6b7280 !important;
+  --lk-focus: #6b7280 !important;
+}
+
+/* Remove all manual participant tile overrides - let LiveKit handle defaults */
+
+/* Local participant video mirroring */
+[data-lk-local-participant="true"] video,
+.lk-participant-tile[data-lk-local-participant="true"] video {
+  transform: var(--local-camera-transform, scaleX(1)) !important;
+}
+
+/* Main Layout - Panel resize support with proper aspect ratio */
 .lk-video-conference {
   width: 100% !important;
   height: 100% !important;
   position: relative !important;
   transition: width 0.3s ease !important;
+  background: #000000 !important;
 }
 
 .lk-video-conference-inner {
   width: 100% !important;
   height: 100% !important;
   transition: width 0.3s ease !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: #000000 !important;
 }
 
-.lk-main-content {
+.lk-grid-layout-wrapper,
+.lk-focus-layout-wrapper {
+  flex: 1 !important;
+  min-height: 0 !important;
+  background: #000000 !important;
+}
+
+/* Fix video stream aspect ratio and responsiveness */
+.lk-participant-tile video {
   width: 100% !important;
   height: 100% !important;
-  transition: width 0.3s ease !important;
+  object-fit: cover !important;
+  background: #1a1a1a !important;
 }
 
-/* When right panel is open, resize main content */
+/* Panel resize behavior */
 .lk-video-conference.panel-open {
-  width: calc(100% - 400px) !important;
+  width: calc(100vw - var(--panel-width, 450px)) !important;
+  min-width: 300px !important;
 }
 
-.lk-video-conference.panel-open .lk-video-conference-inner {
-  width: 100% !important;
-}
-
-/* Custom Control Bar - Replicate LiveKit styling */
+/* Control bar positioning - center within video component */
 .custom-control-bar {
   position: fixed !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
+  bottom: 20px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
   z-index: 1000 !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 12px !important;
-  padding: 16px 24px !important;
+  gap: 8px !important;
+  padding: 12px 16px !important;
+  background: rgba(0, 0, 0, 0.9) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 50px !important;
+  transition: all 0.3s ease !important;
+  width: auto !important;
+  min-width: fit-content !important;
+}
+
+/* Settings Menu Modal - Ensure it appears above control bar */
+.lk-modal-backdrop {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
   background: rgba(0, 0, 0, 0.8) !important;
   backdrop-filter: blur(10px) !important;
-  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
-  transition: right 0.3s ease !important;
+  z-index: 3000 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 2rem !important;
 }
 
-/* When right panel is open, adjust control bar width */
+.lk-settings-menu-modal {
+  position: fixed !important;
+  top: 40% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 3100 !important;
+  max-width: 90vw !important;
+  max-height: 80vh !important;
+}
+
+/* Right side panels styling - sleek, modern, grey theme */
+.fixed.right-0.top-0.h-full {
+  background: #1a1a1a !important;
+  border-left: 1px solid rgba(55, 65, 81, 0.3) !important;
+  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* AI Chat Message Styling */
+.ai-chat-messages {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 1rem !important;
+  padding: 1rem !important;
+  overflow-y: auto !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+
+.ai-message-bubble {
+  max-width: 85% !important;
+  padding: 0.75rem 1rem !important;
+  border-radius: 0.75rem !important;
+  word-wrap: break-word !important;
+}
+
+.user-message {
+  align-self: flex-end !important;
+  background: #374151 !important;
+  color: #ffffff !important;
+  border-bottom-right-radius: 0.25rem !important;
+}
+
+.assistant-message {
+  align-self: flex-start !important;
+  background: #2a2a2a !important;
+  color: #ffffff !important;
+  border: 1px solid #374151 !important;
+  border-bottom-left-radius: 0.25rem !important;
+}
+
+/* Markdown styling for AI responses */
+.assistant-message h1,
+.assistant-message h2,
+.assistant-message h3 {
+  font-weight: 700 !important;
+  margin-top: 1rem !important;
+  margin-bottom: 0.5rem !important;
+  color: #ffffff !important;
+}
+
+.assistant-message p {
+  margin-bottom: 0.75rem !important;
+  line-height: 1.6 !important;
+}
+
+.assistant-message strong {
+  font-weight: 700 !important;
+  color: #ffffff !important;
+}
+
+.assistant-message em {
+  font-style: italic !important;
+  color: #e5e7eb !important;
+}
+
+.assistant-message ul,
+.assistant-message ol {
+  margin-left: 1.5rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.assistant-message li {
+  margin-bottom: 0.25rem !important;
+}
+
+.assistant-message code {
+  background: #374151 !important;
+  padding: 0.125rem 0.375rem !important;
+  border-radius: 0.25rem !important;
+  font-family: monospace !important;
+  font-size: 0.875rem !important;
+}
+
+.assistant-message pre {
+  background: #000000 !important;
+  padding: 1rem !important;
+  border-radius: 0.5rem !important;
+  overflow-x: auto !important;
+  margin-bottom: 0.75rem !important;
+}
+
+/* Control bar active button styling */
+.control-bar-button.settings-active {
+  background: rgba(59, 130, 246, 0.8) !important;
+  border-color: rgba(59, 130, 246, 0.6) !important;
+  color: white !important;
+}
+
+/* Fast tooltips for control bar buttons */
+.custom-control-bar button[title]:hover::after {
+  content: attr(title) !important;
+  position: absolute !important;
+  bottom: 100% !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  background: rgba(0, 0, 0, 0.9) !important;
+  color: white !important;
+  padding: 0.5rem 0.75rem !important;
+  border-radius: 0.375rem !important;
+  font-size: 0.75rem !important;
+  white-space: nowrap !important;
+  margin-bottom: 0.5rem !important;
+  z-index: 1000 !important;
+  animation: fadeIn 0.1s ease-in !important;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(5px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* When panel is open, keep control bar centered within video area */
 .lk-video-conference.panel-open .custom-control-bar {
-  right: 400px !important;
+  /* Calculate center position within the video area (not full window) */
+  left: calc((100vw - var(--panel-width, 450px)) / 2) !important;
+  transform: translateX(-50%) !important;
+  right: auto !important;
+  width: auto !important;
 }
 
+/* Control Bar Buttons - Pure grey theme */
 .control-bar-button {
   display: flex !important;
   align-items: center !important;
-  gap: 8px !important;
-  padding: 8px 16px !important;
-  height: 48px !important;
-  border-radius: 8px !important;
-  font-size: 14px !important;
+  gap: 6px !important;
+  padding: 6px 14px !important;
+  height: 40px !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
   font-weight: 500 !important;
   cursor: pointer !important;
   transition: all 0.2s ease !important;
   white-space: nowrap !important;
-}
-
-/* Default state - consistent appearance for all buttons */
-.control-bar-button {
-  background: rgba(0, 0, 0, 0.6) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  background: rgba(42, 42, 42, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   color: rgba(255, 255, 255, 0.95) !important;
+  outline: none !important;
 }
 
 .control-bar-button:hover {
-  background: rgba(0, 0, 0, 0.8) !important;
+  background: rgba(55, 65, 81, 1) !important;
   border-color: rgba(255, 255, 255, 0.3) !important;
   color: white !important;
   transform: translateY(-1px) !important;
 }
 
-/* Active state - blue for all buttons when active */
-.custom-control-bar .control-bar-button.active {
-  background: rgba(59, 130, 246, 0.8) !important;
-  border-color: rgba(59, 130, 246, 0.6) !important;
+.control-bar-button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.control-bar-button.active {
+  background: rgba(107, 114, 128, 0.8) !important;
+  border-color: rgba(107, 114, 128, 0.6) !important;
   color: white !important;
 }
 
-.custom-control-bar .control-bar-button.active:hover {
-  background: rgba(59, 130, 246, 0.9) !important;
-  border-color: rgba(59, 130, 246, 0.7) !important;
-  color: white !important;
-}
-
-/* Keep enabled for backward compatibility */
-.control-bar-button.enabled {
-  background: rgba(59, 130, 246, 0.8) !important;
-  border-color: rgba(59, 130, 246, 0.6) !important;
-  color: white !important;
-}
-
-.control-bar-button.enabled:hover {
-  background: rgba(59, 130, 246, 0.9) !important;
-  border-color: rgba(59, 130, 246, 0.7) !important;
-}
-
-/* Disabled state - only for truly disabled buttons */
-.control-bar-button:disabled {
-  background: rgba(0, 0, 0, 0.4) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  color: rgba(255, 255, 255, 0.3) !important;
-  cursor: not-allowed !important;
-}
-
-.control-bar-button:disabled:hover {
-  background: rgba(0, 0, 0, 0.4) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  color: rgba(255, 255, 255, 0.3) !important;
-  transform: none !important;
-}
-
-/* Leave button special styling */
 .control-bar-button.leave-button {
   background: rgba(239, 68, 68, 0.8) !important;
   border-color: rgba(239, 68, 68, 0.6) !important;
   color: white !important;
 }
 
-.control-bar-button.leave-button:hover {
-  background: rgba(239, 68, 68, 0.9) !important;
-  border-color: rgba(239, 68, 68, 0.7) !important;
+/* Force all meeting panels to use proper theme colors */
+.fixed.right-0.top-0.h-full.bg-gray-900,
+.bg-gray-900,
+.bg-slate-800,
+[class*="bg-gray-"],
+[class*="bg-slate-"],
+[data-theme="meeting"] .bg-gray-900,
+[data-theme="meeting"] .bg-slate-800 {
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+  border-color: rgba(55, 65, 81, 0.3) !important;
 }
 
-.control-bar-button svg {
-  flex-shrink: 0 !important;
+/* Override any LiveKit panel backgrounds */
+.lk-chat,
+.lk-participant-list,
+[data-lk-theme] .lk-chat,
+[data-lk-theme] .lk-participant-list,
+[data-theme="meeting"] .lk-chat,
+[data-theme="meeting"] .lk-participant-list {
+  background: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
 }
 
-.control-bar-button span {
-  flex-shrink: 0 !important;
-  font-size: 14px !important;
-  font-weight: 500 !important;
-  font-family: inherit !important;
+/* Fix right panel components to use proper theme */
+[data-theme="meeting"] .fixed.right-0.top-0.h-full,
+[data-theme="meeting"] .fixed.right-0 {
+  background-color: #1a1a1a !important;
+  border-left: 1px solid rgba(55, 65, 81, 0.3) !important;
+  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* Right Side Panel - Match meeting room color scheme */
-.right-side-panel {
+/* Share Modal Styling - Match Control Bar/Lobby Theme */
+.share-modal-overlay {
   position: fixed !important;
   top: 0 !important;
+  left: 0 !important;
   right: 0 !important;
-  width: 400px !important;
-  height: 100vh !important;
-  background: #1a1a1a !important;
-  border-left: 1px solid #333 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  z-index: 1000 !important;
-  transform: translateX(100%) !important;
-  transition: transform 0.3s ease !important;
-}
-
-.right-side-panel.open {
-  transform: translateX(0) !important;
-}
-
-/* Panel Header */
-.panel-header {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  padding: 16px 20px !important;
-  border-bottom: 1px solid #333 !important;
-  background: #1a1a1a !important;
-}
-
-.panel-header-content {
-  display: flex !important;
-  align-items: center !important;
-  gap: 12px !important;
-}
-
-.panel-icon {
-  width: 24px !important;
-  height: 24px !important;
-  background: #333 !important;
-  border-radius: 6px !important;
+  bottom: 0 !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  backdrop-filter: blur(10px) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  color: #999 !important;
+  z-index: 2000 !important;
+  padding: 2rem !important;
 }
 
-.panel-title {
-  color: #fff !important;
-  font-size: 16px !important;
-  font-weight: 600 !important;
-  margin: 0 !important;
+.share-modal {
+  background: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 16px !important;
+  padding: 32px !important;
+  width: 100% !important;
+  max-width: 450px !important;
+  color: #ffffff !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
 }
 
-.message-count {
-  background: #3b82f6 !important;
-  color: white !important;
-  font-size: 12px !important;
-  padding: 2px 8px !important;
-  border-radius: 12px !important;
-  font-weight: 500 !important;
-}
-
-.transcript-toggle {
-  background: #333 !important;
-  border: 1px solid #555 !important;
-  border-radius: 6px !important;
-  padding: 6px 12px !important;
-  color: #ccc !important;
-  font-size: 12px !important;
-  cursor: pointer !important;
-  transition: all 0.2s ease !important;
-}
-
-.transcript-toggle:hover {
-  background: #555 !important;
-  color: #fff !important;
-}
-
-.transcript-toggle.active {
-  background: #3b82f6 !important;
-  border-color: #3b82f6 !important;
-  color: white !important;
-}
-
-.close-button {
-  background: none !important;
-  border: none !important;
-  color: #999 !important;
-  cursor: pointer !important;
-  padding: 8px !important;
-  border-radius: 6px !important;
-  transition: all 0.2s ease !important;
-}
-
-.close-button:hover {
-  color: #fff !important;
-  background: #333 !important;
-}
-
-/* Panel Content */
-.panel-content {
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-  background: #1a1a1a !important;
-  /* Safari compatibility */
-  -webkit-flex: 1 !important;
-  -webkit-flex-direction: column !important;
-  position: relative !important;
-}
-
-/* Panel Messages */
-.panel-messages {
-  flex: 1 !important;
-  overflow-y: auto !important;
-  padding: 16px 20px !important;
-  scroll-behavior: smooth !important;
-  background: #1a1a1a !important;
-}
-
-.panel-messages::-webkit-scrollbar {
-  width: 6px !important;
-}
-
-.panel-messages::-webkit-scrollbar-track {
-  background: #1a1a1a !important;
-}
-
-.panel-messages::-webkit-scrollbar-thumb {
-  background: #333 !important;
-  border-radius: 3px !important;
-}
-
-.panel-messages::-webkit-scrollbar-thumb:hover {
-  background: #555 !important;
-}
-
-/* Empty State */
-.empty-state {
-  text-align: center !important;
-  padding: 40px 20px !important;
-  color: #999 !important;
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  min-height: 200px !important;
-}
-
-.empty-icon {
-  width: 48px !important;
-  height: 48px !important;
-  margin: 0 auto 16px !important;
-  background: #333 !important;
-  border-radius: 12px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  color: #666 !important;
-}
-
-.empty-state p {
-  font-size: 14px !important;
-  line-height: 1.5 !important;
-  margin: 0 !important;
-}
-
-/* Messages List */
-.messages-list {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 16px !important;
-}
-
-.message-group {
-  background: #222 !important;
-  border: 1px solid #333 !important;
-  border-radius: 12px !important;
-  padding: 16px !important;
-  transition: all 0.2s ease !important;
-}
-
-.message-group:hover {
-  border-color: #555 !important;
-}
-
-.message-group.ai-message {
-  background: #222 !important;
-  border-color: #333 !important;
-}
-
-.message-group.user-message {
-  background: #1e3a8a !important;
-  border-color: #3b82f6 !important;
-}
-
-.message-header {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  margin-bottom: 12px !important;
-}
-
-.message-sender {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
-
-.sender-name {
-  font-size: 14px !important;
-  font-weight: 600 !important;
-  color: #fff !important;
-}
-
-.message-time {
-  font-size: 12px !important;
-  color: #999 !important;
-}
-
-.message-badges {
-  display: flex !important;
-  gap: 4px !important;
-}
-
-.badge {
-  font-size: 10px !important;
-  padding: 2px 6px !important;
-  border-radius: 4px !important;
-  font-weight: 500 !important;
-}
-
-.web-badge {
-  background: #059669 !important;
-  color: white !important;
-}
-
-.context-badge {
-  background: #3b82f6 !important;
-  color: white !important;
-}
-
-.processing-indicator {
-  font-size: 12px !important;
-  color: #999 !important;
-  font-style: italic !important;
-}
-
-.message-content {
-  color: #ddd !important;
-  font-size: 14px !important;
-  line-height: 1.6 !important;
-}
-
-.message-content p {
+.share-modal h3 {
   margin: 0 0 8px 0 !important;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  color: #ffffff !important;
+  text-align: center !important;
 }
 
-.message-content p:last-child {
-  margin-bottom: 0 !important;
-}
-
-.message-content strong {
-  color: #fff !important;
-}
-
-.message-content code {
-  background: #333 !important;
-  color: #fff !important;
-  padding: 2px 4px !important;
-  border-radius: 4px !important;
-  font-size: 13px !important;
-}
-
-.message-content pre {
-  background: #333 !important;
-  color: #fff !important;
-  padding: 12px !important;
-  border-radius: 8px !important;
-  overflow-x: auto !important;
-  margin: 8px 0 !important;
-}
-
-.message-content pre code {
-  background: none !important;
-  padding: 0 !important;
-}
-
-.message-text {
-  color: #ddd !important;
+.share-modal p {
+  margin: 0 0 24px 0 !important;
+  color: rgba(255, 255, 255, 0.6) !important;
   font-size: 14px !important;
-  line-height: 1.5 !important;
-  margin-bottom: 4px !important;
+  text-align: center !important;
 }
 
-.message-text:last-child {
-  margin-bottom: 0 !important;
-}
-
-/* Copy Button */
-.copy-button {
-  background: none !important;
-  border: none !important;
-  color: #999 !important;
-  cursor: pointer !important;
-  padding: 4px !important;
-  border-radius: 4px !important;
-  transition: all 0.2s ease !important;
-}
-
-.copy-button:hover {
-  color: #fff !important;
-  background: #333 !important;
-}
-
-/* Citations */
-.message-citations {
-  margin-top: 12px !important;
-  padding-top: 12px !important;
-  border-top: 1px solid #333 !important;
-}
-
-.citations-toggle {
-  background: none !important;
-  border: none !important;
-  color: #999 !important;
-  cursor: pointer !important;
-  font-size: 12px !important;
-  padding: 4px 0 !important;
+.share-link-container {
   display: flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-}
-
-.citations-toggle:hover {
-  color: #fff !important;
-}
-
-.citations-list {
-  margin-top: 8px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 4px !important;
-}
-
-.citation-link {
-  color: #60a5fa !important;
-  text-decoration: none !important;
-  font-size: 12px !important;
-  display: block !important;
-}
-
-.citation-link:hover {
-  color: #93c5fd !important;
-  text-decoration: underline !important;
-}
-
-/* Old typing indicator removed - using better version below */
-
-/* Thinking Container */
-.thinking-container {
-  display: flex !important;
-  align-items: center !important;
   gap: 12px !important;
-  padding: 12px 0 !important;
+  margin-bottom: 20px !important;
 }
 
-.thinking-text {
-  font-size: 14px !important;
-  color: #888 !important;
-  font-style: italic !important;
-  animation: thinking-pulse 2s infinite ease-in-out !important;
-}
-
-@keyframes thinking-pulse {
-  0%, 100% {
-    opacity: 0.8 !important;
-  }
-  50% {
-    opacity: 1 !important;
-  }
-}
-
-/* Animated Typing Indicator */
-.typing-indicator {
-  display: flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-}
-
-/* Ensure typing indicator works in AI assistant */
-.thinking-container .typing-indicator {
-  display: flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-}
-
-.typing-dot {
-  width: 8px !important;
-  height: 8px !important;
-  background: #3b82f6 !important;
-  border-radius: 50% !important;
-  animation: typing-bounce 1.4s infinite ease-in-out !important;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.3) !important;
-}
-
-.typing-dot:nth-child(1) {
-  animation-delay: 0s !important;
-}
-
-.typing-dot:nth-child(2) {
-  animation-delay: 0.2s !important;
-}
-
-.typing-dot:nth-child(3) {
-  animation-delay: 0.4s !important;
-}
-
-/* Ensure animation works in thinking container */
-.thinking-container .typing-dot {
-  width: 8px !important;
-  height: 8px !important;
-  background: #3b82f6 !important;
-  border-radius: 50% !important;
-  animation: typing-bounce 1.4s infinite ease-in-out !important;
-  box-shadow: 0 0 4px rgba(59, 130, 246, 0.3) !important;
-}
-
-.thinking-container .typing-dot:nth-child(1) {
-  animation-delay: 0s !important;
-}
-
-.thinking-container .typing-dot:nth-child(2) {
-  animation-delay: 0.2s !important;
-}
-
-.thinking-container .typing-dot:nth-child(3) {
-  animation-delay: 0.4s !important;
-}
-
-@keyframes typing-bounce {
-  0%, 80%, 100% {
-    transform: translateY(0) scale(1) !important;
-    opacity: 0.6 !important;
-  }
-  40% {
-    transform: translateY(-8px) scale(1.2) !important;
-    opacity: 1 !important;
-  }
-}
-
-/* Panel Input */
-.panel-input {
-  padding: 16px 20px !important;
-  border-top: 1px solid #333 !important;
-  background: #1a1a1a !important;
-}
-
-.input-form {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 8px !important;
-}
-
-.input-controls {
-  display: flex !important;
-  gap: 8px !important;
-}
-
-.control-button {
-  padding: 6px 12px !important;
-  font-size: 12px !important;
-  border-radius: 6px !important;
-  border: 1px solid #555 !important;
-  background: #333 !important;
-  color: #ddd !important;
-  cursor: pointer !important;
-  transition: all 0.2s ease !important;
-  font-weight: 500 !important;
-}
-
-.control-button:hover {
-  background: #555 !important;
-  color: #fff !important;
-}
-
-.control-button.active {
-  background: #059669 !important;
-  border-color: #059669 !important;
-  color: white !important;
-}
-
-.control-button:disabled {
-  opacity: 0.5 !important;
-  cursor: not-allowed !important;
-}
-
-.input-row {
-  display: flex !important;
-  gap: 8px !important;
-}
-
-.message-input {
+.share-link-input {
   flex: 1 !important;
-  background: #333 !important;
-  border: 1px solid #555 !important;
-  border-radius: 8px !important;
   padding: 12px 16px !important;
-  color: #fff !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
   font-size: 14px !important;
+  font-family: monospace !important;
+  backdrop-filter: blur(10px) !important;
   transition: all 0.2s ease !important;
 }
 
-.message-input::placeholder {
-  color: #999 !important;
-}
-
-.message-input:focus {
+.share-link-input:focus {
   outline: none !important;
-  border-color: #3b82f6 !important;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
 }
 
-.send-button {
-  background: #3b82f6 !important;
-  border: none !important;
-  border-radius: 8px !important;
-  padding: 12px 16px !important;
-  color: white !important;
-  cursor: pointer !important;
-  transition: all 0.2s ease !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-.send-button:hover:not(:disabled) {
+.share-copy-button {
+  padding: 12px 20px !important;
   background: #2563eb !important;
-}
-
-.send-button:disabled {
-  opacity: 0.5 !important;
-  cursor: not-allowed !important;
-}
-
-.spinner {
-  width: 16px !important;
-  height: 16px !important;
-  border: 2px solid white !important;
-  border-top: 2px solid transparent !important;
-  border-radius: 50% !important;
-  animation: spin 1s linear infinite !important;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg) !important; }
-  100% { transform: rotate(360deg) !important; }
-}
-
-/* Transcript Section - Fix layout issues */
-.transcript-section {
-  border-bottom: 1px solid #333 !important;
-  background: #1a1a1a !important;
-  padding: 16px 20px !important;
-  flex-shrink: 0 !important;
-}
-
-/* Override globals.css constraint that limits transcript height */
-.transcript-section.full-panel .transcript-messages {
-  max-height: none !important;
-  height: auto !important;
-  flex: 1 !important;
-}
-
-.transcript-section.full-panel .transcript-list {
-  max-height: none !important;
-  height: auto !important;
-  flex: 1 !important;
-}
-
-.transcript-section.full-panel .empty-state {
-  max-height: none !important;
-  height: auto !important;
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-/* High specificity override for full-panel transcript display */
-.right-side-panel .panel-content .transcript-section.full-panel .transcript-messages.full-height {
-  max-height: none !important;
-  height: auto !important;
-  flex: 1 !important;
-  overflow-y: auto !important;
-  /* Safari compatibility */
-  -webkit-flex: 1 !important;
-  -webkit-overflow-scrolling: touch !important;
-  padding-bottom: 24px !important;
-}
-
-.right-side-panel .panel-content .transcript-section.full-panel .transcript-messages.full-height .transcript-list {
-  max-height: none !important;
-  height: auto !important;
-  flex: 1 !important;
-  /* Safari compatibility */
-  -webkit-flex: 1 !important;
-  padding-bottom: 16px !important;
-}
-
-.transcript-section.full-panel {
-  min-height: 0 !important;
-  padding: 0 !important;
-  border-bottom: none !important;
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-  /* Safari compatibility */
-  -webkit-flex: 1 !important;
-  -webkit-flex-direction: column !important;
-  position: relative !important;
-}
-
-.transcript-messages.full-height {
-  flex: 1 !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  height: auto !important;
-  padding: 16px 20px 24px 20px !important;
-  overflow-y: auto !important;
-  display: flex !important;
-  flex-direction: column !important;
-  /* Safari compatibility */
-  -webkit-overflow-scrolling: touch !important;
-  will-change: scroll-position !important;
-}
-
-.transcript-header {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  margin-bottom: 12px !important;
-}
-
-.transcript-title {
+  border: 1px solid #2563eb !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
   font-size: 14px !important;
   font-weight: 600 !important;
-  color: #fff !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  backdrop-filter: blur(10px) !important;
 }
 
-.recording-indicator {
+.share-copy-button:hover {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+  transform: translateY(-1px) !important;
+}
+
+.share-quick-actions {
   display: flex !important;
-  align-items: center !important;
-  gap: 6px !important;
-  font-size: 12px !important;
-  color: #ef4444 !important;
-}
-
-.recording-dot {
-  width: 8px !important;
-  height: 8px !important;
-  background: #ef4444 !important;
-  border-radius: 50% !important;
-  animation: pulse 2s infinite !important;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(1) !important;
-    opacity: 1 !important;
-  }
-  50% {
-    transform: scale(1.2) !important;
-    opacity: 0.7 !important;
-  }
-  100% {
-    transform: scale(1) !important;
-    opacity: 1 !important;
-  }
-}
-
-.transcript-messages {
-  max-height: 120px !important;
-  overflow-y: auto !important;
-  background: #1a1a1a !important;
-}
-
-.transcript-messages::-webkit-scrollbar {
-  width: 4px !important;
-  height: 4px !important;
-}
-
-.transcript-messages::-webkit-scrollbar-track {
-  background: #1a1a1a !important;
-  border-radius: 2px !important;
-}
-
-.transcript-messages::-webkit-scrollbar-thumb {
-  background: #333 !important;
-  border-radius: 2px !important;
-  /* Safari specific */
-  -webkit-border-radius: 2px !important;
-}
-
-.transcript-messages::-webkit-scrollbar-thumb:hover {
-  background: #555 !important;
-}
-
-/* Safari-specific scrollbar for full-height transcript */
-.transcript-messages.full-height::-webkit-scrollbar {
-  width: 6px !important;
-}
-
-.transcript-messages.full-height::-webkit-scrollbar-thumb {
-  background: #444 !important;
-  border-radius: 3px !important;
-}
-
-.transcript-messages.full-height::-webkit-scrollbar-thumb:hover {
-  background: #666 !important;
-}
-
-.transcript-list {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 8px !important;
-  flex: 1 !important;
-  min-height: 0 !important;
-  padding-bottom: 16px !important;
-  /* Safari flex compatibility */
-  -webkit-flex: 1 !important;
-  -webkit-flex-direction: column !important;
-}
-
-.transcript-item {
-  font-size: 12px !important;
-}
-
-.transcript-item-header {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  margin-bottom: 4px !important;
-}
-
-.speaker-badge {
-  padding: 2px 8px !important;
-  border-radius: 4px !important;
-  font-size: 11px !important;
-  font-weight: 500 !important;
-  background: #333 !important;
-  color: #ddd !important;
-  border: 1px solid #555 !important;
-}
-
-.transcript-time {
-  font-size: 10px !important;
-  color: #999 !important;
-}
-
-.transcript-text {
-  color: #ddd !important;
-  padding-left: 8px !important;
-  border-left: 2px solid #555 !important;
-  font-size: 12px !important;
-  line-height: 1.4 !important;
-}
-
-.ai-chat-section {
-  flex: 1 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  min-height: 0 !important;
-  background: #1a1a1a !important;
-}
-
-/* Suggestion System */
-.suggestion-list {
-  margin-top: 16px !important;
-}
-
-.suggestion-title {
-  font-size: 14px !important;
-  color: #999 !important;
-  margin-bottom: 20px !important;
-  display: block !important;
-  line-height: 1.4 !important;
-}
-
-/* Specific override for AI assistant suggestions */
-.ai-chat-section .suggestion-title,
-.panel-content .suggestion-title {
-  font-size: 14px !important;
-  color: #999 !important;
-  margin-bottom: 24px !important;
+  gap: 12px !important;
   margin-top: 8px !important;
-  display: block !important;
-  line-height: 1.4 !important;
+  justify-content: center !important;
 }
 
-.suggestion-buttons {
+.share-action-button {
+  padding: 10px 20px !important;
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 8px !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.share-action-button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Settings Modal Positioning */
+.lk-settings-menu-modal {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
   display: flex !important;
-  flex-direction: column !important;
-  gap: 6px !important;
-  margin-top: 4px !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 1002 !important;
+  padding: 1rem !important;
 }
 
-/* Specific spacing for AI assistant suggestion buttons */
-.ai-chat-section .suggestion-buttons,
-.panel-content .suggestion-buttons {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 8px !important;
-  margin-top: 0 !important;
+/* Settings Modal Content Styling */
+.settings-modal-content {
+  background: #1a1a1a !important;
+  border: 1px solid #374151 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(20px) !important;
 }
 
-.suggestion-button {
+/* Remove all blue focus outlines and borders */
+.settings-modal-content *:focus,
+.settings-modal-content *:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: #6b7280 !important;
+}
+
+/* Settings button styling to match control bar theme */
+.settings-btn {
+  background: transparent !important;
+  border: 1px solid #4b5563 !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  outline: none !important;
+}
+
+.settings-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: #6b7280 !important;
+  transform: none !important;
+}
+
+.settings-btn:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: #6b7280 !important;
+}
+
+/* Settings close button */
+.settings-close-btn {
+  background: transparent !important;
+  border: none !important;
+  color: #9ca3af !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.settings-close-btn:hover {
+  background: #374151 !important;
+  color: #ffffff !important;
+}
+
+/* Settings device menu styling */
+.settings-device-menu button,
+.settings-device-menu .lk-button {
+  background: transparent !important;
+  border: 1px solid #4b5563 !important;
+  color: #ffffff !important;
+  border-radius: 6px !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+  height: 36px !important;
   width: 100% !important;
   text-align: left !important;
-  padding: 8px 12px !important;
-  font-size: 12px !important;
-  background: #333 !important;
-  border: 1px solid #555 !important;
-  border-radius: 6px !important;
-  color: #ddd !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.settings-device-menu button:hover,
+.settings-device-menu .lk-button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: #6b7280 !important;
+}
+
+.settings-device-menu button:focus,
+.settings-device-menu .lk-button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: #6b7280 !important;
+}
+
+/* Settings dropdown button */
+.settings-dropdown-btn {
+  background: transparent !important;
+  border: 1px solid #4b5563 !important;
+  color: #9ca3af !important;
   cursor: pointer !important;
   transition: all 0.2s ease !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
 }
 
-.suggestion-button:hover:not(:disabled) {
-  background: #555 !important;
-  color: #fff !important;
+.settings-dropdown-btn:hover {
+  background: #374151 !important;
+  border-color: #6b7280 !important;
+  color: #ffffff !important;
 }
 
-.suggestion-button:disabled {
-  opacity: 0.5 !important;
-  cursor: not-allowed !important;
+/* Override LiveKit device menu dropdown styling in settings */
+.settings-device-menu [role="menu"],
+.settings-device-menu .lk-menu {
+  background: #1a1a1a !important;
+  border: 1px solid #374151 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(20px) !important;
+  z-index: 1100 !important;
+  position: absolute !important;
+  top: calc(100% + 4px) !important;
+  left: 0 !important;
+  right: 0 !important;
+  min-width: 200px !important;
+  max-height: 200px !important;
+  overflow-y: auto !important;
 }
 
-/* Settings Panel */
-.settings-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.settings-device-menu [role="menu"] button,
+.settings-device-menu .lk-menu button {
+  background: transparent !important;
+  border: none !important;
+  color: #ffffff !important;
+  padding: 8px 12px !important;
+  font-size: 14px !important;
+  width: 100% !important;
+  text-align: left !important;
+  border-radius: 4px !important;
+  margin: 2px !important;
+  height: auto !important;
+  min-height: 32px !important;
 }
 
-.settings-section {
-  padding: 20px;
-  border-bottom: 1px solid #333;
+.settings-device-menu [role="menu"] button:hover,
+.settings-device-menu .lk-menu button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: none !important;
 }
 
-.settings-section:last-child {
-  border-bottom: none;
+.settings-device-menu [role="menu"] button:focus,
+.settings-device-menu .lk-menu button:focus {
+  outline: none !important;
+  box-shadow: none !important;
+  background: rgba(255, 255, 255, 0.1) !important;
 }
 
-.settings-section-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-  margin: 0 0 16px 0;
+/* Remove any blue tints from MediaDeviceMenu */
+.settings-device-menu .lk-button[aria-pressed="true"],
+.settings-device-menu button[aria-pressed="true"] {
+  background: #374151 !important;
+  border-color: #6b7280 !important;
+  color: #ffffff !important;
 }
 
-.settings-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
+/* Fix footer positioning and ensure it's always visible */
+.settings-modal-content .border-t {
+  border-top: 1px solid #374151 !important;
+  background: #1a1a1a !important;
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 10 !important;
 }
 
-.settings-item:last-child {
-  margin-bottom: 0;
+/* Ensure modal content doesn't exceed viewport */
+.settings-modal-content {
+  max-height: 85vh !important;
+  max-width: min(640px, 90vw) !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
-.settings-item label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #ddd;
-}
-
-.settings-select,
-.settings-input {
-  background: #333;
-  border: 1px solid #555;
-  border-radius: 6px;
-  padding: 8px 12px;
-  color: #fff;
-  font-size: 14px;
-  transition: all 0.2s ease;
-}
-
-.settings-select:focus,
-.settings-input:focus {
-  outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.settings-input[readonly] {
-  background: #2a2a2a;
-  color: #999;
-  cursor: not-allowed;
+/* Make scrollable content area flexible */
+.settings-modal-content > div:nth-child(2) {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  min-height: 0 !important;
 }
 
 /* Responsive Design */
@@ -1057,8 +653,13 @@
     width: 100vw !important;
   }
   
-  .lk-main-content {
+  .lk-video-conference.panel-open {
     width: 100% !important;
+  }
+  
+  .lk-video-conference.panel-open .custom-control-bar {
+    right: 0 !important;
+    width: 100vw !important;
   }
   
   .custom-control-bar {
@@ -1066,17 +667,397 @@
     gap: 8px !important;
   }
   
+  .lk-settings-menu-modal {
+    padding: 0.5rem !important;
+  }
+}
 
-  
-  .panel-header {
-    padding: 12px 16px !important;
-  }
-  
-  .panel-messages {
-    padding: 12px 16px !important;
-  }
-  
-  .panel-input {
-    padding: 12px 16px !important;
-  }
+/* PreJoin Component Styling - Aggressive overrides */
+.prejoin-wrapper,
+.prejoin-wrapper *,
+.lk-prejoin,
+.lk-prejoin *,
+[data-lk-theme] .lk-prejoin,
+[data-lk-theme] .lk-prejoin * {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+}
+
+/* Force remove any LiveKit default backgrounds */
+.prejoin-wrapper .lk-prejoin {
+  background: transparent !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Input styling */
+.prejoin-wrapper input,
+.lk-prejoin input {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border-radius: 0.75rem !important;
+  padding: 1rem !important;
+  font-size: 1rem !important;
+  transition: all 0.3s ease !important;
+  backdrop-filter: blur(10px) !important;
+  width: 100% !important;
+  margin-bottom: 0.75rem !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+}
+
+.prejoin-wrapper input:focus,
+.lk-prejoin input:focus {
+  border-color: #64748b !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.2), 0 4px 8px rgba(0, 0, 0, 0.1) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+.prejoin-wrapper input::placeholder,
+.lk-prejoin input::placeholder {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Label styling */
+.prejoin-wrapper label,
+.lk-prejoin label {
+  color: #ffffff !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  margin-bottom: 0.5rem !important;
+  display: block !important;
+}
+
+/* Button group styling - each group is a flex container */
+.prejoin-wrapper .lk-button-group,
+.lk-prejoin .lk-button-group {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.25rem !important;
+  margin: 0.75rem 0 !important;
+  position: relative !important;
+  flex-wrap: nowrap !important;
+}
+
+/* Container for all button groups */
+.prejoin-wrapper .lk-prejoin,
+.lk-prejoin .lk-prejoin {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.75rem !important;
+}
+
+/* Multiple button groups in one row */
+.prejoin-wrapper .lk-prejoin > div,
+.lk-prejoin .lk-prejoin > div {
+  display: flex !important;
+  gap: 1rem !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+/* Main toggle button styling */
+.prejoin-wrapper .lk-button-group > .lk-button:not(.lk-button-group-menu .lk-button),
+.lk-prejoin .lk-button-group > .lk-button:not(.lk-button-group-menu .lk-button) {
+  flex: 1 !important;
+  min-width: 120px !important;
+  height: 40px !important;
+  padding: 0.625rem 1rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+}
+
+/* Dropdown menu container - positioned relative to button group */
+.prejoin-wrapper .lk-button-group-menu,
+.lk-prejoin .lk-button-group-menu {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+}
+
+/* Small dropdown trigger button */
+.prejoin-wrapper .lk-button-group-menu > .lk-button,
+.lk-prejoin .lk-button-group-menu > .lk-button {
+  min-width: 32px !important;
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  border-radius: 0.375rem !important;
+  font-size: 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  margin-left: 0.25rem !important;
+}
+
+/* Button styling - default (inactive) state */
+.prejoin-wrapper .lk-button,
+.lk-prejoin .lk-button,
+.prejoin-wrapper button,
+.lk-prejoin button {
+  background: transparent !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  border-radius: 0.5rem !important;
+  padding: 0.625rem 1rem !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+  min-height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  cursor: pointer !important;
+}
+
+.prejoin-wrapper .lk-button:hover,
+.lk-prejoin .lk-button:hover,
+.prejoin-wrapper button:hover,
+.lk-prejoin button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.prejoin-wrapper .lk-button:active,
+.lk-prejoin .lk-button:active,
+.prejoin-wrapper button:active,
+.lk-prejoin button:active {
+  transform: translateY(0) !important;
+}
+
+/* Active/pressed button state - Camera/Mic ON (blue) */
+.prejoin-wrapper .lk-button[aria-pressed="true"],
+.lk-prejoin .lk-button[aria-pressed="true"],
+.prejoin-wrapper button[aria-pressed="true"],
+.lk-prejoin button[aria-pressed="true"] {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  color: #ffffff !important;
+}
+
+/* Camera/Mic OFF state - red icons, transparent background */
+.prejoin-wrapper .lk-button[aria-pressed="false"][data-testid*="camera"],
+.lk-prejoin .lk-button[aria-pressed="false"][data-testid*="camera"],
+.prejoin-wrapper .lk-button[aria-pressed="false"][data-testid*="microphone"],
+.lk-prejoin .lk-button[aria-pressed="false"][data-testid*="microphone"],
+.prejoin-wrapper button[aria-pressed="false"][data-testid*="camera"],
+.lk-prejoin button[aria-pressed="false"][data-testid*="camera"],
+.prejoin-wrapper button[aria-pressed="false"][data-testid*="microphone"],
+.lk-prejoin button[aria-pressed="false"][data-testid*="microphone"] {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ef4444 !important;
+}
+
+/* More specific selectors for camera/mic buttons */
+.prejoin-wrapper .lk-button[aria-pressed="false"]:has(svg[data-lucide="video-off"]),
+.lk-prejoin .lk-button[aria-pressed="false"]:has(svg[data-lucide="video-off"]),
+.prejoin-wrapper .lk-button[aria-pressed="false"]:has(svg[data-lucide="mic-off"]),
+.lk-prejoin .lk-button[aria-pressed="false"]:has(svg[data-lucide="mic-off"]) {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ef4444 !important;
+}
+
+/* Alternative selectors for LiveKit buttons with off icons */
+.prejoin-wrapper .lk-button:has([data-lk-source="camera"][data-lk-enabled="false"]),
+.lk-prejoin .lk-button:has([data-lk-source="camera"][data-lk-enabled="false"]),
+.prejoin-wrapper .lk-button:has([data-lk-source="microphone"][data-lk-enabled="false"]),
+.lk-prejoin .lk-button:has([data-lk-source="microphone"][data-lk-enabled="false"]) {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ef4444 !important;
+}
+
+/* Catch buttons with "off" in their class or data attributes */
+.prejoin-wrapper .lk-button[class*="off"],
+.lk-prejoin .lk-button[class*="off"],
+.prejoin-wrapper button[class*="off"],
+.lk-prejoin button[class*="off"],
+.prejoin-wrapper .lk-button[data-lk-muted="true"],
+.lk-prejoin .lk-button[data-lk-muted="true"] {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #ef4444 !important;
+}
+
+/* Additional fallback selectors for camera/mic off states */
+.prejoin-wrapper .lk-button svg[data-lucide="video-off"],
+.lk-prejoin .lk-button svg[data-lucide="video-off"],
+.prejoin-wrapper .lk-button svg[data-lucide="mic-off"],
+.lk-prejoin .lk-button svg[data-lucide="mic-off"] {
+  color: #ef4444 !important;
+}
+
+.prejoin-wrapper .lk-button:has(svg[data-lucide="video-off"]),
+.lk-prejoin .lk-button:has(svg[data-lucide="video-off"]),
+.prejoin-wrapper .lk-button:has(svg[data-lucide="mic-off"]),
+.lk-prejoin .lk-button:has(svg[data-lucide="mic-off"]) {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Join button - special styling */
+.prejoin-wrapper .lk-button[data-lk-join-button],
+.lk-prejoin .lk-button[data-lk-join-button],
+.prejoin-wrapper button[type="submit"],
+.lk-prejoin button[type="submit"] {
+  background: #2563eb !important;
+  border: 1px solid #2563eb !important;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  width: 100% !important;
+  margin-top: 0.75rem !important;
+  padding: 0.875rem 1.5rem !important;
+  font-size: 0.875rem !important;
+}
+
+.prejoin-wrapper .lk-button[data-lk-join-button]:hover,
+.lk-prejoin .lk-button[data-lk-join-button]:hover,
+.prejoin-wrapper button[type="submit"]:hover,
+.lk-prejoin button[type="submit"]:hover {
+  background: #1d4ed8 !important;
+  border-color: #1d4ed8 !important;
+}
+
+/* Video preview container - minimal styling, let LiveKit handle colors */
+.prejoin-wrapper .lk-participant-tile,
+.lk-prejoin .lk-participant-tile {
+  border-radius: 0.75rem !important;
+  width: 100% !important;
+  aspect-ratio: 4/3 !important;
+  max-height: 160px !important;
+  margin-bottom: 1rem !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+/* Video preview styling - minimal overrides */
+.prejoin-wrapper video,
+.lk-prejoin video {
+  border-radius: 0.75rem !important;
+  border: none !important;
+  height: 100% !important;
+  width: 100% !important;
+  object-fit: cover !important;
+  object-position: center !important;
+}
+
+/* Device selection dropdown list */
+.prejoin-wrapper .lk-button-group-menu [role="menu"],
+.lk-prejoin .lk-button-group-menu [role="menu"],
+.prejoin-wrapper .lk-button-group-menu .lk-menu,
+.lk-prejoin .lk-button-group-menu .lk-menu {
+  background: rgba(0, 0, 0, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(20px) !important;
+  z-index: 1000 !important;
+  position: absolute !important;
+  top: calc(100% + 0.25rem) !important;
+  right: 0 !important;
+  min-width: 180px !important;
+  max-height: 200px !important;
+  overflow-y: auto !important;
+}
+
+/* Dropdown menu items */
+.prejoin-wrapper .lk-button-group-menu [role="menu"] button,
+.lk-prejoin .lk-button-group-menu [role="menu"] button,
+.prejoin-wrapper .lk-button-group-menu .lk-menu button,
+.lk-prejoin .lk-button-group-menu .lk-menu button {
+  color: #ffffff !important;
+  padding: 0.5rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  background: transparent !important;
+  border: none !important;
+  width: 100% !important;
+  text-align: left !important;
+  border-radius: 0.25rem !important;
+  margin: 0.125rem !important;
+  min-height: auto !important;
+  height: auto !important;
+}
+
+.prejoin-wrapper .lk-button-group-menu [role="menu"] button:hover,
+.lk-prejoin .lk-button-group-menu [role="menu"] button:hover,
+.prejoin-wrapper .lk-button-group-menu .lk-menu button:hover,
+.lk-prejoin .lk-button-group-menu .lk-menu button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+  transform: none !important;
+}
+
+/* Remove LiveKit color overrides - let it use defaults */
+
+/* Additional dropdown selectors for different LiveKit versions */
+.prejoin-wrapper .lk-button-group-menu > div,
+.lk-prejoin .lk-button-group-menu > div,
+.prejoin-wrapper [data-lk-menu],
+.lk-prejoin [data-lk-menu] {
+  background: rgba(0, 0, 0, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+  backdrop-filter: blur(20px) !important;
+  z-index: 1000 !important;
+  position: absolute !important;
+  top: 100% !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  margin-top: 0.25rem !important;
+  min-width: 180px !important;
+  max-height: 200px !important;
+  overflow-y: auto !important;
+}
+
+/* Clean aspect ratio for video container */
+.prejoin-wrapper .lk-participant-tile,
+.lk-prejoin .lk-participant-tile {
+  aspect-ratio: 4/3 !important;
+  height: auto !important;
+  max-height: 160px !important;
+}
+
+/* Only add border radius to participant tiles - let LiveKit handle all colors */
+.lk-participant-tile {
+  border-radius: 0.5rem !important;
+}
+
+/* Participant name overlay styling */
+.lk-participant-tile .lk-participant-name,
+.lk-participant-tile [data-lk-participant-name] {
+  background: rgba(0, 0, 0, 0.6) !important;
+  color: #ffffff !important;
+  backdrop-filter: blur(10px) !important;
+  border-radius: 0.375rem !important;
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.875rem !important;
+}
+
+/* Video track styling to match theme */
+.lk-participant-tile video {
+  border-radius: 0.5rem !important;
+}
+
+/* Muted indicator styling */
+.lk-participant-tile .lk-participant-metadata .lk-audio-muted-indicator,
+.lk-participant-tile [data-lk-muted] {
+  background: rgba(239, 68, 68, 0.9) !important;
+  color: #ffffff !important;
+  border-radius: 50% !important;
+  padding: 0.25rem !important;
 } 

@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       customerId,
       process.env.STRIPE_PRICE_ID!,
       `${process.env.NEXT_PUBLIC_APP_URL}/subscription/success`,
-      `${process.env.NEXT_PUBLIC_APP_URL}/subscription/canceled`
+      `${process.env.NEXT_PUBLIC_APP_URL}`  // Redirect to main dashboard on cancel
     );
 
     console.log('✅ Created checkout session:', session.id);

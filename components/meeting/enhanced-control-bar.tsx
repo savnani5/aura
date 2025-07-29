@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   useTracks, 
   useRoomContext, 
@@ -8,11 +8,32 @@ import {
   useMediaDeviceSelect,
   TrackToggle,
   DisconnectButton,
-  useLayoutContext
+  useLayoutContext,
+  useParticipants
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
+import { 
+  Video, 
+  VideoOff, 
+  Mic, 
+  MicOff, 
+  Monitor, 
+  Settings, 
+  Users, 
+  MessageSquare, 
+  Bot, 
+  PhoneOff,
+  X,
+  FileText
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { ControlBarChat } from './control-bar-chat';
 import { SimpleAIAssistant } from './simple-ai-assistant';
+import { TranscriptsPanel } from './transcripts-panel';
+import { SettingsMenu } from './settings-menu';
+import { PermissionModal } from './permission-modal';
+import { isPermissionError, parsePermissionError, type PermissionError } from '@/lib/utils/permission-utils';
 import { Transcript } from '@/lib/services/transcription';
 
 interface EnhancedControlBarProps {
@@ -24,41 +45,139 @@ interface EnhancedControlBarProps {
     settings?: boolean;
     leave?: boolean;
   };
-  SettingsComponent?: React.ComponentType;
-  onSettingsToggle?: (show: boolean) => void;
 }
 
 export function EnhancedControlBar({ 
   onTranscriptsChange, 
-  controls = {}, 
-  SettingsComponent,
-  onSettingsToggle
+  controls = {}
 }: EnhancedControlBarProps) {
   const [showChat, setShowChat] = useState(false);
   const [showAI, setShowAI] = useState(false);
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [showTranscripts, setShowTranscripts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
+  const [currentTranscripts, setCurrentTranscripts] = useState<string>('');
+  const [panelWidth, setPanelWidth] = useState(() => {
+    // Load saved width from localStorage or use percentage-based default
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ohm-panel-width');
+      if (saved) {
+        return parseInt(saved, 10);
+      }
+      // Default to 35% of window width, with min/max constraints
+      const defaultWidth = Math.max(350, Math.min(600, window.innerWidth * 0.35));
+      return Math.round(defaultWidth);
+    }
+    return 450; // Fallback for SSR
+  });
+  const [isResizing, setIsResizing] = useState(false);
   
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const layoutContext = useLayoutContext();
+  const participants = useParticipants();
+
+    // Handle window resize to keep panel proportional
+  useEffect(() => {
+    const handleResize = () => {
+      if (typeof window !== 'undefined') {
+        const maxAllowed = Math.min(800, window.innerWidth * 0.7);
+        const minAllowed = Math.max(300, window.innerWidth * 0.2);
+        
+        const savedWidth = localStorage.getItem('ohm-panel-width');
+        if (savedWidth) {
+          const currentWidth = parseInt(savedWidth, 10);
+          if (currentWidth > maxAllowed || currentWidth < minAllowed) {
+            const adjustedWidth = Math.max(minAllowed, Math.min(maxAllowed, currentWidth));
+            setPanelWidth(adjustedWidth);
+            localStorage.setItem('ohm-panel-width', adjustedWidth.toString());
+          }
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Track states - initialize based on actual participant state
   const [isCameraEnabled, setIsCameraEnabled] = useState(localParticipant?.isCameraEnabled ?? false);
   const [isMicEnabled, setIsMicEnabled] = useState(localParticipant?.isMicrophoneEnabled ?? false);
   const [isScreenSharing, setIsScreenSharing] = useState(localParticipant?.isScreenShareEnabled ?? false);
+  
+  // Permission modal state
+  const [permissionModal, setPermissionModal] = useState<{
+    isOpen: boolean;
+    type: 'camera' | 'microphone' | 'screen' | 'audio';
+    error?: string;
+  }>({
+    isOpen: false,
+    type: 'camera'
+  });
 
   // Apply layout adjustments to main video conference element
   useEffect(() => {
     const videoConference = document.querySelector('.lk-video-conference');
     
     if (videoConference) {
-      if (showChat || showAI || showSettings) {
+      if (showChat || showAI || showParticipants || showTranscripts) {
         videoConference.classList.add('panel-open');
+        (videoConference as HTMLElement).style.setProperty('--panel-width', `${panelWidth}px`);
       } else {
         videoConference.classList.remove('panel-open');
+        (videoConference as HTMLElement).style.removeProperty('--panel-width');
       }
     }
-  }, [showChat, showAI, showSettings]);
+  }, [showChat, showAI, showParticipants, showTranscripts, panelWidth]);
+
+  // Handle double-click to reset width
+  const handleDoubleClick = () => {
+    const defaultWidth = Math.max(350, Math.min(600, window.innerWidth * 0.35));
+    const resetWidth = Math.round(defaultWidth);
+    setPanelWidth(resetWidth);
+    localStorage.setItem('ohm-panel-width', resetWidth.toString());
+  };
+
+  // Handle panel resizing
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    
+    const startX = e.clientX;
+    const startWidth = panelWidth;
+    
+    // Add resizing class to body for visual feedback
+    document.body.classList.add('resizing');
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = startX - e.clientX; // Reversed because we're dragging from left edge
+      
+      // Dynamic constraints based on window size
+      const minWidth = Math.max(300, window.innerWidth * 0.2); // Min 20% of window
+      const maxWidth = Math.min(800, window.innerWidth * 0.7); // Max 70% of window
+      
+      const newWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + deltaX));
+      setPanelWidth(newWidth);
+    };
+    
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.classList.remove('resizing');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      
+      // Save width to localStorage
+      localStorage.setItem('ohm-panel-width', panelWidth.toString());
+    };
+    
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
 
   // Monitor track states and connection state
   useEffect(() => {
@@ -143,23 +262,43 @@ export function EnhancedControlBar({
   const handleChatToggle = () => {
     setShowChat(!showChat);
     if (showAI) setShowAI(false);
-    if (showSettings) setShowSettings(false);
+    if (showParticipants) setShowParticipants(false);
+    if (showTranscripts) setShowTranscripts(false);
+    
+    // Clear unread messages when opening chat
+    if (!showChat) {
+      setHasUnreadMessages(false);
+    }
   };
 
   const handleAIToggle = () => {
     setShowAI(!showAI);
     if (showChat) setShowChat(false);
-    if (showSettings) setShowSettings(false);
+    if (showParticipants) setShowParticipants(false);
+    if (showTranscripts) setShowTranscripts(false);
+  };
+
+  const handleParticipantsToggle = () => {
+    setShowParticipants(!showParticipants);
+    if (showChat) setShowChat(false);
+    if (showAI) setShowAI(false);
+    if (showTranscripts) setShowTranscripts(false);
+  };
+
+  const handleTranscriptsToggle = () => {
+    setShowTranscripts(!showTranscripts);
+    if (showChat) setShowChat(false);
+    if (showAI) setShowAI(false);
+    if (showParticipants) setShowParticipants(false);
   };
 
   const handleSettingsToggle = () => {
-    const newShowSettings = !showSettings;
-    setShowSettings(newShowSettings);
     if (showChat) setShowChat(false);
     if (showAI) setShowAI(false);
+    if (showParticipants) setShowParticipants(false);
+    if (showTranscripts) setShowTranscripts(false);
     
-    // Call parent callback to update widget state
-    onSettingsToggle?.(newShowSettings);
+    setShowSettings(!showSettings);
   };
 
   const toggleCamera = async () => {
@@ -180,6 +319,23 @@ export function EnhancedControlBar({
       }, 100);
     } catch (error) {
       console.error('Error toggling camera:', error);
+      
+      // Check if this is a permission error
+      if (isPermissionError(error)) {
+        const permissionError = parsePermissionError(error, 'camera');
+        setPermissionModal({
+          isOpen: true,
+          type: 'camera',
+          error: permissionError.message
+        });
+      } else {
+        // For non-permission errors, show a generic alert
+        if (error instanceof Error && error.name === 'NotSupportedError') {
+          alert('Camera is not supported in this browser.');
+        } else {
+          alert('Failed to access camera. Please check your camera settings and try again.');
+        }
+      }
     }
   };
 
@@ -201,6 +357,23 @@ export function EnhancedControlBar({
       }, 100);
     } catch (error) {
       console.error('Error toggling microphone:', error);
+      
+      // Check if this is a permission error
+      if (isPermissionError(error)) {
+        const permissionError = parsePermissionError(error, 'microphone');
+        setPermissionModal({
+          isOpen: true,
+          type: 'microphone',
+          error: permissionError.message
+        });
+      } else {
+        // For non-permission errors, show a generic alert
+        if (error instanceof Error && error.name === 'NotSupportedError') {
+          alert('Microphone is not supported in this browser.');
+        } else {
+          alert('Failed to access microphone. Please check your microphone settings and try again.');
+        }
+      }
     }
   };
 
@@ -222,20 +395,20 @@ export function EnhancedControlBar({
       }, 100);
     } catch (error) {
       console.log('Screen sharing error caught:', error);
-      if (error instanceof Error) {
-        if (error.name === 'NotAllowedError' || error.message.includes('Permission denied')) {
-          // User cancelled or denied permission - don't show error
-          console.log('Screen sharing cancelled by user');
-          return; // Don't show any error to user
-        } else if (error.name === 'NotSupportedError') {
+      // Check if this is a permission error
+      if (isPermissionError(error)) {
+        const permissionError = parsePermissionError(error, 'screen');
+        setPermissionModal({
+          isOpen: true,
+          type: 'screen',
+          error: permissionError.message
+        });
+      } else if (error instanceof Error) {
+        if (error.name === 'NotSupportedError') {
           alert('Screen sharing is not supported in this browser.');
         } else {
           alert('Failed to start screen sharing. Please try again.');
         }
-      } else if (typeof error === 'string' && error.includes('Permission denied')) {
-        // Handle string error messages about permission
-        console.log('Screen sharing permission denied by user');
-        return; // Don't show any error to user
       } else {
         alert('Failed to start screen sharing. Please try again.');
       }
@@ -243,8 +416,9 @@ export function EnhancedControlBar({
   };
 
   const handleLeave = () => {
+    console.log('🚪 CONTROL BAR: Leave button clicked - disconnecting room...');
     room?.disconnect();
-    window.location.href = '/';
+    // Don't redirect immediately - let the RoomEvent.Disconnected handler take care of it
   };
 
   // Debug: Log button states
@@ -256,232 +430,375 @@ export function EnhancedControlBar({
 
   return (
     <>
-      {/* Custom Control Bar */}
+      {/* Modern Control Bar */}
       <div className="custom-control-bar">
         {/* Camera Button */}
         {(controls.camera ?? true) && (
-          <button
-            className={`control-bar-button ${isCameraEnabled ? 'active' : ''}`}
+          <Button
+            size="icon"
             onClick={toggleCamera}
             title={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
-            style={{ 
-              // Debug: Force blue background when active for testing
-              ...(isCameraEnabled && {
-                background: 'rgba(59, 130, 246, 0.8)',
-                borderColor: 'rgba(59, 130, 246, 0.6)',
-                color: 'white'
-              })
-            }}
+            className={cn(
+              "h-12 w-12 rounded-full transition-all duration-200",
+              isCameraEnabled 
+                ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                : "bg-transparent hover:bg-white/10 text-red-500"
+            )}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {isCameraEnabled ? (
-                <path d="M23 7l-7 5 7 5V7z M16 6H3a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h13a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              ) : (
-                <>
-                  <path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </>
-              )}
-            </svg>
-            <span>Camera</span>
-          </button>
+            {isCameraEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+          </Button>
         )}
 
         {/* Microphone Button */}
         {(controls.microphone ?? true) && (
-          <button
-            className={`control-bar-button ${isMicEnabled ? 'active' : ''}`}
+          <Button
+            size="icon"
             onClick={toggleMicrophone}
             title={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
-            style={{ 
-              // Debug: Force blue background when active for testing
-              ...(isMicEnabled && {
-                background: 'rgba(59, 130, 246, 0.8)',
-                borderColor: 'rgba(59, 130, 246, 0.6)',
-                color: 'white'
-              })
-            }}
+            className={cn(
+              "h-12 w-12 rounded-full transition-all duration-200",
+              isMicEnabled 
+                ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                : "bg-transparent hover:bg-white/10 text-red-500"
+            )}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {isMicEnabled ? (
-                <>
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="currentColor" strokeWidth="2"/>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeWidth="2"/>
-                  <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2"/>
-                  <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2"/>
-                </>
-              ) : (
-                <>
-                  <line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </>
-              )}
-            </svg>
-            <span>Microphone</span>
-          </button>
+            {isMicEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+          </Button>
         )}
 
         {/* Screen Share Button */}
         {(controls.screenShare ?? true) && (
-          <button
-            className={`control-bar-button ${isScreenSharing ? 'active' : ''}`}
+          <Button
+            size="icon"
             onClick={toggleScreenShare}
             title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
-            style={{ 
-              // Debug: Force blue background when active for testing
-              ...(isScreenSharing && {
-                background: 'rgba(59, 130, 246, 0.8)',
-                borderColor: 'rgba(59, 130, 246, 0.6)',
-                color: 'white'
-              })
-            }}
+            className={cn(
+              "h-12 w-12 rounded-full transition-all duration-200",
+              isScreenSharing 
+                ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                : "bg-transparent hover:bg-white/10 text-white"
+            )}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="2" y="3" width="20" height="14" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
-              <line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" strokeWidth="2"/>
-              <line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" strokeWidth="2"/>
-              {isScreenSharing && (
-                <path d="M8 10l4-4 4 4M12 6v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              )}
-            </svg>
-            <span>{isScreenSharing ? 'Stop sharing' : 'Share screen'}</span>
-          </button>
+            <Monitor size={20} />
+          </Button>
         )}
 
-                 {/* Settings Button */}
-         {(controls.settings ?? true) && (
-           <button
-             className={`control-bar-button ${showSettings ? 'active' : ''}`}
-             onClick={handleSettingsToggle}
-             title="Settings"
-           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" strokeWidth="2"/>
-            </svg>
-            <span>Settings</span>
-          </button>
+        {/* Divider */}
+        <div className="w-px h-8 bg-gray-600 mx-1" />
+
+        {/* Settings Button */}
+        {(controls.settings ?? true) && (
+          <Button
+            size="icon"
+            onClick={handleSettingsToggle}
+            title="Settings"
+            className={cn(
+              "h-12 w-12 rounded-full transition-all duration-200",
+              showSettings 
+                ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                : "bg-transparent hover:bg-white/10 text-white"
+            )}
+          >
+            <Settings size={20} />
+          </Button>
         )}
+
+        {/* Participants Button */}
+        <Button
+          size="icon"
+          onClick={handleParticipantsToggle}
+          title="Participants"
+          className={cn(
+            "h-12 w-12 rounded-full relative transition-all duration-200",
+            showParticipants 
+              ? "bg-blue-600 hover:bg-blue-700 text-white" 
+              : "bg-transparent hover:bg-white/10 text-white"
+          )}
+        >
+          <Users size={20} />
+        </Button>
 
         {/* Chat Button */}
-        <button
-          className={`control-bar-button ${showChat ? 'active' : ''}`}
+        <Button
+          size="icon"
           onClick={handleChatToggle}
-          title="Toggle Chat"
+          title="Chat"
+          className={cn(
+            "h-12 w-12 rounded-full relative transition-all duration-200",
+            showChat 
+              ? "bg-blue-600 hover:bg-blue-700 text-white" 
+              : "bg-transparent hover:bg-white/10 text-white"
+          )}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" strokeWidth="2"/>
-          </svg>
-          <span>Chat</span>
-        </button>
+          <MessageSquare size={20} />
+          {hasUnreadMessages && (
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
+          )}
+        </Button>
 
         {/* AI Assistant Button */}
-        <button
-          className={`control-bar-button ${showAI ? 'active' : ''}`}
+        <Button
+          size="icon"
           onClick={handleAIToggle}
-          title="Toggle AI Assistant"
+          title="AI Assistant"
+          className={cn(
+            "h-12 w-12 rounded-full transition-all duration-200",
+            showAI 
+              ? "bg-blue-600 hover:bg-blue-700 text-white" 
+              : "bg-transparent hover:bg-white/10 text-white"
+          )}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <span>AI Assistant</span>
-        </button>
+          <Bot size={20} />
+        </Button>
+
+        {/* Transcripts Button */}
+        <Button
+          size="icon"
+          onClick={handleTranscriptsToggle}
+          title="Transcripts"
+          className={cn(
+            "h-12 w-12 rounded-full transition-all duration-200",
+            showTranscripts 
+              ? "bg-blue-600 hover:bg-blue-700 text-white" 
+              : "bg-transparent hover:bg-white/10 text-white"
+          )}
+        >
+          <FileText size={20} />
+        </Button>
+
+        {/* Divider */}
+        <div className="w-px h-8 bg-gray-600 mx-1" />
 
         {/* Leave Button */}
         {(controls.leave ?? true) && (
-          <button
-            className="control-bar-button leave-button"
+          <Button
+            variant="destructive"
+            size="icon"
             onClick={handleLeave}
             title="Leave Meeting"
+            className="h-12 w-12 rounded-full"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <polyline points="16,17 21,12 16,7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              <line x1="21" y1="12" x2="9" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            <span>Leave</span>
-          </button>
+            <PhoneOff size={20} />
+          </Button>
         )}
       </div>
 
       {/* Chat Panel */}
-      <div className={`right-side-panel ${showChat ? 'open' : ''}`}>
-      <ControlBarChat 
-        isOpen={showChat} 
-        onClose={() => setShowChat(false)} 
-      />
-      </div>
-
-      {/* Settings Panel */}
-      <div className={`right-side-panel ${showSettings ? 'open' : ''}`}>
-        {showSettings && (
-          <div className="settings-panel">
-            <div className="panel-header">
-              <div className="panel-header-content">
-                <div className="panel-icon">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1 1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" stroke="currentColor" strokeWidth="2"/>
-                  </svg>
-                </div>
-                <h3 className="panel-title">Settings</h3>
-              </div>
-              <button className="close-button" onClick={() => setShowSettings(false)}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-            <div className="panel-content">
-              <div className="settings-section">
-                <h4 className="settings-section-title">Audio & Video</h4>
-                <div className="settings-item">
-                  <label>Camera</label>
-                  <select className="settings-select">
-                    <option>Default Camera</option>
-                  </select>
-                </div>
-                <div className="settings-item">
-                  <label>Microphone</label>
-                  <select className="settings-select">
-                    <option>Default Microphone</option>
-                  </select>
-                </div>
-                <div className="settings-item">
-                  <label>Speaker</label>
-                  <select className="settings-select">
-                    <option>Default Speaker</option>
-                  </select>
-                </div>
-              </div>
-              <div className="settings-section">
-                <h4 className="settings-section-title">Meeting</h4>
-                <div className="settings-item">
-                  <label>Room Name</label>
-                  <input type="text" className="settings-input" value={room?.name || ''} readOnly />
-                </div>
-                <div className="settings-item">
-                  <label>Participants</label>
-                  <input type="text" className="settings-input" value={`${room?.numParticipants || 0} connected`} readOnly />
-                </div>
-              </div>
+      <div 
+        className={cn(
+          "fixed right-0 top-0 h-full border-l border-gray-700 shadow-lg transition-all duration-300 z-40",
+          showChat ? "translate-x-0" : "translate-x-full"
+        )}
+        style={{ 
+          width: showChat ? `${panelWidth}px` : '0'
+        }}
+      >
+        {showChat && (
+          <div 
+            className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleDoubleClick}
+            title="Drag to resize panel (double-click to reset)"
+          >
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
             </div>
           </div>
         )}
+        <ControlBarChat 
+          isOpen={showChat} 
+          onClose={() => setShowChat(false)}
+          onNewMessage={() => {
+            if (!showChat) {
+              setHasUnreadMessages(true);
+            }
+          }}
+        />
       </div>
 
       {/* AI Assistant Panel */}
-      <div className={`right-side-panel ${showAI ? 'open' : ''}`}>
-      <SimpleAIAssistant 
-        isOpen={showAI} 
-        onClose={() => setShowAI(false)}
-        onTranscriptsChange={onTranscriptsChange}
-      />
+      <div 
+        className={cn(
+          "fixed right-0 top-0 h-full border-l border-gray-700 shadow-lg transition-all duration-300 z-40",
+          showAI ? "translate-x-0" : "translate-x-full"
+        )}
+        style={{ 
+          width: showAI ? `${panelWidth}px` : '0'
+        }}
+      >
+        {showAI && (
+          <div 
+            className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleDoubleClick}
+            title="Drag to resize panel (double-click to reset)"
+          >
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
+            </div>
+          </div>
+        )}
+        <SimpleAIAssistant 
+          isOpen={showAI} 
+          onClose={() => setShowAI(false)}
+          currentTranscripts={currentTranscripts}
+        />
       </div>
+
+      {/* Transcripts Panel */}
+      <div 
+        className={cn(
+          "fixed right-0 top-0 h-full border-l border-gray-700 shadow-lg transition-all duration-300 z-40",
+          showTranscripts ? "translate-x-0" : "translate-x-full"
+        )}
+        style={{ 
+          width: showTranscripts ? `${panelWidth}px` : '0'
+        }}
+      >
+        {showTranscripts && (
+          <div 
+            className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleDoubleClick}
+            title="Drag to resize panel (double-click to reset)"
+          >
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
+            </div>
+          </div>
+        )}
+        <TranscriptsPanel 
+          isOpen={showTranscripts} 
+          onClose={() => setShowTranscripts(false)}
+          onTranscriptsChange={useCallback((transcripts: Transcript[]) => {
+            if (onTranscriptsChange) {
+              onTranscriptsChange(transcripts);
+            }
+            // Format transcripts for AI assistant
+            const formattedTranscripts = transcripts
+              .map((t: Transcript) => `${t.speaker}: ${t.text}`)
+              .join('\n');
+            setCurrentTranscripts(formattedTranscripts);
+          }, [onTranscriptsChange])}
+        />
+      </div>
+
+      {/* Participants Panel */}
+      <div 
+        className={cn(
+          "fixed right-0 top-0 h-full bg-[#1a1a1a] border-l border-[rgba(55,65,81,0.3)] shadow-lg transition-all duration-300 z-40",
+          showParticipants ? "translate-x-0" : "translate-x-full"
+        )}
+        style={{ 
+          width: showParticipants ? `${panelWidth}px` : '0'
+        }}
+      >
+        {showParticipants && (
+          <div 
+            className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
+            onMouseDown={handleMouseDown}
+            onDoubleClick={handleDoubleClick}
+            title="Drag to resize panel (double-click to reset)"
+          >
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
+            </div>
+          </div>
+        )}
+        <div className="flex items-center justify-between p-4 border-b border-[rgba(55,65,81,0.3)]">
+          <div className="flex items-center gap-2">
+            <Users size={18} className="text-gray-400" />
+            <h3 className="font-medium text-white">Participants ({participants.length})</h3>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowParticipants(false)}
+            className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
+          >
+            <X size={18} />
+          </Button>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4">
+          {participants.length > 0 ? (
+            <div className="space-y-3">
+              {participants.map((participant, index) => (
+                <div key={participant.identity} className="flex items-center gap-3 p-3 hover:bg-[#2a2a2a] transition-colors">
+                  <div className={cn(
+                    "w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-white font-medium",
+                    participant.isLocal ? "bg-blue-600" : "bg-[#374151]"
+                  )}>
+                    {(participant.name || participant.identity || 'U').charAt(0).toUpperCase()}
+                  </div>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-white truncate">
+                      {participant.name || participant.identity}
+                      {participant.isLocal && ' (You)'}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {participant.isLocal ? 'Local' : 'Remote'}
+                      {participant.isCameraEnabled && ' • Camera'}
+                      {participant.isMicrophoneEnabled && ' • Mic'}
+                    </div>
+                  </div>
+                  
+                  {/* Mic/Camera indicators */}
+                  <div className="flex gap-1">
+                    <div className={cn(
+                      "w-5 h-5 rounded flex items-center justify-center",
+                      participant.isMicrophoneEnabled ? "bg-green-500" : "bg-destructive"
+                    )}>
+                      {participant.isMicrophoneEnabled ? (
+                        <Mic size={10} className="text-white" />
+                      ) : (
+                        <MicOff size={10} className="text-white" />
+                      )}
+                    </div>
+                    
+                    <div className={cn(
+                      "w-5 h-5 rounded flex items-center justify-center",
+                      participant.isCameraEnabled ? "bg-green-500" : "bg-destructive"
+                    )}>
+                      {participant.isCameraEnabled ? (
+                        <Video size={10} className="text-white" />
+                      ) : (
+                        <VideoOff size={10} className="text-white" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-gray-400 p-5 text-sm">
+              No participants connected
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <>
+          <div 
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[3000]"
+            onClick={() => setShowSettings(false)}
+          />
+          <div className="fixed inset-0 flex items-center justify-center z-[3100] p-4">
+            <SettingsMenu onClose={() => setShowSettings(false)} />
+          </div>
+        </>
+      )}
+
+      {/* Permission Modal */}
+      <PermissionModal
+        isOpen={permissionModal.isOpen}
+        onClose={() => setPermissionModal({ ...permissionModal, isOpen: false })}
+        permissionType={permissionModal.type}
+        error={permissionModal.error}
+      />
     </>
   );
 } 

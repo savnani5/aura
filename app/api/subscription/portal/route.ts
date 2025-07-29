@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     // Create customer portal session
     const portalSession = await stripeService.createPortalSession(
       user.stripeCustomerId,
-      `${process.env.NEXT_PUBLIC_APP_URL}/subscription`
+      `${process.env.NEXT_PUBLIC_APP_URL}`  // Redirect to main dashboard
     );
 
     return NextResponse.json({ 

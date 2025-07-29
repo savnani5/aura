@@ -69,25 +69,14 @@ export async function GET(request: NextRequest) {
       }
     }
     
-    console.log('🏠 Fetching meeting rooms for user:', user._id);
     // Fetch user's meeting rooms
     const meetingRooms = await db.getMeetingRoomsByUser(user._id, user.email, limit);
-    console.log('🏠 Raw meeting rooms from DB:', meetingRooms.length, 'rooms');
-    console.log('🏠 Meeting rooms details:', meetingRooms.map(room => ({
-      id: room._id,
-      roomName: room.roomName,
-      title: room.title,
-      createdBy: room.createdBy,
-      participants: room.participants.map(p => ({ name: p.name, role: p.role, userId: p.userId, email: p.email }))
-    })));
     
     // Get real-time meeting counts for all rooms
     const roomIds = meetingRooms.map(room => room._id);
     const meetingCounts = await db.getRealMeetingCountsByRooms(roomIds);
-    console.log('📊 Real-time meeting counts:', meetingCounts);
     
     const formattedRooms = meetingRooms.map(room => toMeetingRoomCard(room, meetingCounts[room._id]));
-    console.log('🏠 Formatted meeting rooms:', formattedRooms);
     
     return NextResponse.json({ 
       success: true, 
@@ -181,13 +170,30 @@ export async function POST(request: NextRequest) {
       }, { status: 409 });
     }
 
+    // Ensure the creator is always added as a host participant
+    const allParticipants = participants || [];
+    
+    // Check if creator is already in participants list
+    const creatorInParticipants = allParticipants.some(p => 
+      p.email === user.email || p.role === 'host'
+    );
+    
+    // If creator is not in participants, add them as host
+    if (!creatorInParticipants) {
+      allParticipants.unshift({
+        email: user.email,
+        name: user.name,
+        role: 'host'
+      });
+    }
+
     // Create meeting room with user as creator and host
     const roomData = fromCreateMeetingForm({
       roomName,
       title,
       type,
       isRecurring: isRecurring || false,
-      participants: participants || [],
+      participants: allParticipants,
       startDate,
       endDate,
       frequency,

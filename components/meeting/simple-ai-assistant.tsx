@@ -1,149 +1,89 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
-import { useTracks, useRoomContext, useDataChannel } from '@livekit/components-react';
-import { Track } from 'livekit-client';
-import { Transcript, TranscriptionService } from '@/lib/services/transcription';
+import React, { useEffect, useState, useRef } from 'react';
+import { useRoomContext } from '@livekit/components-react';
 import ReactMarkdown from 'react-markdown';
-import { useUser } from '@clerk/nextjs';
-import { MeetingStorageUtils, useMeetingStore } from '@/lib/state';
+import { useUser, SignUpButton } from '@clerk/nextjs';
+import { 
+  Bot, 
+  X, 
+  Send, 
+  Copy, 
+  ChevronDown,
+  Plus,
+  Check
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface SimpleAIAssistantProps {
-  onTranscriptsChange?: (transcripts: Transcript[]) => void;
   isOpen: boolean;
   onClose: () => void;
+  currentTranscripts?: string; // Pass current transcripts from parent
 }
 
-interface DisplayTranscript {
-  speaker: string;
-  text: string;
-  participantId: string;
-  timestamp: number;
-  entryId: string;
-  isLocal?: boolean;
-  speakerConfidence?: number;
-  deepgramSpeaker?: number;
-}
-
-interface SharedTranscript {
+interface ChatMessage {
   id: string;
-  speaker: string;
-  text: string;
-  participantId: string;
+  type: 'user' | 'ai';
+  message: string;
   timestamp: number;
-  entryId: string;
-  type: 'transcript' | 'transcript_update';
-  isLocal?: boolean;
-  speakerConfidence?: number;
-  deepgramSpeaker?: number;
+  userName?: string;
+  usedContext?: boolean;
+  relevantTranscripts?: number;
+  usedWebSearch?: boolean;
+  citations?: string[];
 }
 
-export function SimpleAIAssistant({ onTranscriptsChange, isOpen, onClose }: SimpleAIAssistantProps) {
-  const { user } = useUser();
-  const [transcripts, setTranscripts] = useState<Transcript[]>([]);
-  const [sharedTranscripts, setSharedTranscripts] = useState<DisplayTranscript[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
-  const [showTranscripts, setShowTranscripts] = useState(false);
+export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: SimpleAIAssistantProps) {
+  const { user, isLoaded } = useUser();
   const room = useRoomContext();
-  const tracks = useTracks();
+
+  // Check if user is a guest (not authenticated)
+  const isGuest = !isLoaded || !user;
 
   // AI Chat functionality
-  const [aiChatHistory, setAiChatHistory] = useState<Array<{
-    id: string;
-    type: 'user' | 'ai';
-    message: string;
-    timestamp: number;
-    userName?: string;
-    usedContext?: boolean;
-    relevantTranscripts?: number;
-    usedWebSearch?: boolean;
-    citations?: string[];
-  }>>([]);
+  const [aiChatHistory, setAiChatHistory] = useState<ChatMessage[]>([]);
   const [aiChatInput, setAiChatInput] = useState('');
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [expandedSources, setExpandedSources] = useState<Set<string>>(new Set());
+  const [currentAiMessage, setCurrentAiMessage] = useState('');
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
-  // Refs for auto-scrolling (allow user control during streaming)
-  const chatMessagesRef = React.useRef<HTMLDivElement>(null);
-  const transcriptMessagesRef = React.useRef<HTMLDivElement>(null);
-  const sharedTranscriptsRef = React.useRef<DisplayTranscript[]>([]);
-  const [userScrolling, setUserScrolling] = useState(false);
+  // Refs for auto-scrolling
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
 
-  // Update ref whenever sharedTranscripts changes
-  React.useEffect(() => {
-    sharedTranscriptsRef.current = sharedTranscripts;
-  }, [sharedTranscripts]);
-
-  // Question suggestions for AI chat (simplified)
+  // Question suggestions for AI chat
   const questionSuggestions = [
-    "Summarize our discussions",
-    "What are the key decisions?", 
-    "List action items",
-    "Show recent topics"
+    {
+      display: "Summarize past 5 mins",
+      query: "Can you summarize what has been discussed in the past 5 minutes of our meeting?"
+    },
+    {
+      display: "Last meeting recap",
+      query: "What was discussed in our last meeting and how does it relate to today's discussion?"
+    },
+    {
+      display: "What to ask next?",
+      query: "Based on what has been discussed so far, what should I ask next to move the conversation forward?"
+    },
+    {
+      display: "Key decisions made",
+      query: "What are the key decisions that have been made during this meeting?"
+    }
   ];
 
-  // Browser compatibility check (simplified)
-  React.useEffect(() => {
-    const browserSupport = TranscriptionService.getBrowserSupport();
-    if (!browserSupport.supported) {
-      console.warn('Transcription not supported in this browser');
-    }
-  }, []);
-
-  // Handle user scrolling to prevent auto-scroll interference
-  const handleScroll = useCallback(() => {
+  // Auto-scroll chat messages
+  useEffect(() => {
     if (chatMessagesRef.current) {
-      const { scrollTop, scrollHeight, clientHeight } = chatMessagesRef.current;
-      const isAtBottom = scrollTop + clientHeight >= scrollHeight - 10;
-      setUserScrolling(!isAtBottom);
-    }
-  }, []);
-
-  // Auto-scroll chat messages only if user isn't scrolling
-  React.useEffect(() => {
-    if (chatMessagesRef.current && !userScrolling && !isAiProcessing) {
       chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
     }
-  }, [aiChatHistory, userScrolling, isAiProcessing]);
+  }, [aiChatHistory, currentAiMessage]);
 
-  // Auto-scroll transcript messages when new transcripts arrive
-  useEffect(() => {
-    if (transcriptMessagesRef.current && sharedTranscripts.length > 0) {
-      setTimeout(() => {
-        if (transcriptMessagesRef.current) {
-          transcriptMessagesRef.current.scrollTop = transcriptMessagesRef.current.scrollHeight;
-        }
-      }, 100);
-    }
-  }, [sharedTranscripts.length]);
-
-  // Data channel for sharing transcripts
-  const { send: sendData } = useDataChannel('transcript-sync');
-
-  // Generate speaker colors for consistency
-  const getSpeakerColor = (speaker: string) => {
-    const colors = [
-      'bg-slate-100 text-slate-800 border-slate-200',
-      'bg-gray-100 text-gray-800 border-gray-200', 
-      'bg-zinc-100 text-zinc-800 border-zinc-200',
-      'bg-neutral-100 text-neutral-800 border-neutral-200',
-      'bg-stone-100 text-stone-800 border-stone-200',
-      'bg-slate-200 text-slate-900 border-slate-300'
-    ];
-    const hash = speaker.split('').reduce((a, b) => {
-      a = ((a << 5) - a) + b.charCodeAt(0);
-      return a & a;
-    }, 0);
-    return colors[Math.abs(hash) % colors.length];
-  };
-
-  const formatTimestamp = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async (messageId: string, text: string) => {
     try {
       await navigator.clipboard.writeText(text);
+      setCopiedMessageId(messageId);
+      setTimeout(() => setCopiedMessageId(null), 2000);
     } catch (err) {
       console.error('Failed to copy text: ', err);
     }
@@ -161,61 +101,13 @@ export function SimpleAIAssistant({ onTranscriptsChange, isOpen, onClose }: Simp
     });
   };
 
-  // Group consecutive transcripts from the same speaker
-  const groupedTranscripts = React.useMemo(() => {
-    const groups: Array<{
-      speaker: string;
-      participantId: string;
-      startTime: number;
-      endTime: number;
-      messages: DisplayTranscript[];
-      speakerColor: string;
-      speakerConfidence?: number;
-      deepgramSpeaker?: number;
-    }> = [];
-
-    sharedTranscripts.forEach((transcript) => {
-      const lastGroup = groups[groups.length - 1];
-      
-      const shouldGroup = lastGroup && 
-        lastGroup.speaker === transcript.speaker &&
-        lastGroup.participantId === transcript.participantId &&
-        (transcript.timestamp - lastGroup.endTime) < 30000;
-      
-      if (shouldGroup) {
-        lastGroup.messages.push(transcript);
-        lastGroup.endTime = transcript.timestamp;
-        if (transcript.speakerConfidence !== undefined) {
-          lastGroup.speakerConfidence = transcript.speakerConfidence;
-        }
-        if (transcript.deepgramSpeaker !== undefined) {
-          lastGroup.deepgramSpeaker = transcript.deepgramSpeaker;
-        }
-      } else {
-        groups.push({
-          speaker: transcript.speaker,
-          participantId: transcript.participantId,
-          startTime: transcript.timestamp,
-          endTime: transcript.timestamp,
-          messages: [transcript],
-          speakerColor: getSpeakerColor(transcript.speaker),
-          speakerConfidence: transcript.speakerConfidence,
-          deepgramSpeaker: transcript.deepgramSpeaker,
-        });
-      }
-    });
-
-    return groups;
-  }, [sharedTranscripts, getSpeakerColor]);
-
-  // Format time range for transcript groups
-  const formatTimeRange = (startTime: number, endTime: number) => {
-    const start = formatTimestamp(startTime);
-    if (startTime === endTime) {
-      return start;
-    }
-    const end = formatTimestamp(endTime);
-    return `${start} - ${end}`;
+  const clearChat = () => {
+    setAiChatHistory([]);
+    setAiChatInput('');
+    setCurrentAiMessage('');
+    setIsAiProcessing(false);
+    setExpandedSources(new Set());
+    setCopiedMessageId(null);
   };
 
   // AI chat submit
@@ -224,14 +116,7 @@ export function SimpleAIAssistant({ onTranscriptsChange, isOpen, onClose }: Simp
     if (!aiChatInput.trim() || isAiProcessing) return;
 
     const messageText = aiChatInput.trim();
-    let aiMessage = messageText;
-    if (messageText.toLowerCase().startsWith('@web ')) {
-      aiMessage = messageText;
-    } else {
-      aiMessage = messageText;
-    }
-    
-    await handleAiChat(aiMessage);
+    await handleAiChat(messageText);
     setAiChatInput('');
   };
 
@@ -242,9 +127,9 @@ export function SimpleAIAssistant({ onTranscriptsChange, isOpen, onClose }: Simp
     const roomName = room?.name || 'unknown';
 
     const userChatId = `ai-user-${Date.now()}`;
-    const userAiMessage = {
+    const userAiMessage: ChatMessage = {
       id: userChatId,
-      type: 'user' as const,
+      type: 'user',
       message: message,
       timestamp: Date.now(),
       userName: currentUser,
@@ -252,40 +137,24 @@ export function SimpleAIAssistant({ onTranscriptsChange, isOpen, onClose }: Simp
 
     setAiChatHistory(prev => [...prev, userAiMessage]);
     setIsAiProcessing(true);
+    setCurrentAiMessage('');
 
     const aiChatId = `ai-response-${Date.now()}`;
-    const aiMessagePlaceholder = {
-      id: aiChatId,
-      type: 'ai' as const,
-      message: '🧠 Thinking...',
-      timestamp: Date.now(),
-      usedContext: false,
-      relevantTranscripts: 0,
-      usedWebSearch: false,
-      citations: undefined as string[] | undefined,
-      isThinking: true,
-    };
-
-    setAiChatHistory(prev => [...prev, aiMessagePlaceholder]);
 
     try {
-      const currentTranscripts = sharedTranscripts
-        .map(t => `${t.speaker}: ${t.text}`)
-        .join('\n');
-
-      const response = await fetch('/api/ai-chat/stream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message,
-          roomName,
-          userName: currentUser,
-          currentTranscripts,
-          isLiveMeeting: true,
-        }),
-      });
+                        const response = await fetch('/api/ai-chat/stream', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      message,
+                      roomName,
+                      userName: currentUser,
+                      currentTranscripts: currentTranscripts || '', // Pass current transcripts from parent
+                      isLiveMeeting: true,
+                    }),
+                  });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -322,35 +191,24 @@ export function SimpleAIAssistant({ onTranscriptsChange, isOpen, onClose }: Simp
                     ...finalMetadata,
                     usedContext: parsed.usedContext,
                     relevantTranscripts: parsed.relevantTranscripts,
-                    queryType: parsed.queryType,
-                    confidence: parsed.confidence
                   };
+                } else if (parsed.type === 'retry') {
+                  console.log(`🔄 Retrying with ${parsed.nextModel} (attempt ${parsed.attempt}/${parsed.totalAttempts})`);
+                  setCurrentAiMessage(`🔄 Switching to backup AI model... (attempt ${parsed.attempt}/${parsed.totalAttempts})`);
                 } else if (parsed.type === 'text') {
                   accumulatedMessage += parsed.content;
-                  
-                  setAiChatHistory(prev => 
-                    prev.map(msg => 
-                      msg.id === aiChatId 
-                        ? { ...msg, message: accumulatedMessage, isThinking: false, ...finalMetadata }
-                        : msg
-                    )
-                  );
+                  setCurrentAiMessage(accumulatedMessage);
                 } else if (parsed.type === 'complete') {
                   finalMetadata = {
                     ...finalMetadata,
                     usedWebSearch: parsed.usedWebSearch,
                     citations: parsed.citations
                   };
-                  
-                  setAiChatHistory(prev => 
-                    prev.map(msg => 
-                      msg.id === aiChatId 
-                        ? { ...msg, message: parsed.content, ...finalMetadata }
-                        : msg
-                    )
-                  );
+                  accumulatedMessage = parsed.content;
+                  setCurrentAiMessage(accumulatedMessage);
                 } else if (parsed.type === 'error') {
-                  throw new Error(parsed.error || 'Unknown error');
+                  const errorMessage = parsed.message || parsed.error || 'Unknown error';
+                  throw new Error(errorMessage);
                 }
               } catch (parseError) {
                 console.warn('Failed to parse streaming data:', parseError);
@@ -359,498 +217,344 @@ export function SimpleAIAssistant({ onTranscriptsChange, isOpen, onClose }: Simp
           }
         }
       }
+
+      // Add final AI message to history
+      const finalAiMessage: ChatMessage = {
+        id: aiChatId,
+        type: 'ai',
+        message: accumulatedMessage,
+        timestamp: Date.now(),
+        ...finalMetadata
+      };
+
+      setAiChatHistory(prev => [...prev, finalAiMessage]);
+      setCurrentAiMessage('');
     } catch (error) {
       console.error('Error sending AI chat:', error);
       
-      setAiChatHistory(prev => 
-        prev.map(msg => 
-          msg.id === aiChatId 
-            ? { ...msg, message: 'Sorry, I encountered an error. Please try again.' }
-            : msg
-        )
-      );
+      const errorMessage: ChatMessage = {
+        id: aiChatId,
+        type: 'ai',
+        message: 'Sorry, I encountered an error. Please try again.',
+        timestamp: Date.now()
+      };
+
+      setAiChatHistory(prev => [...prev, errorMessage]);
+      setCurrentAiMessage('');
     } finally {
       setIsAiProcessing(false);
     }
   };
 
-  // Transcription service setup
-  const transcriptionService = React.useMemo(() => 
-    new TranscriptionService(room, (transcript: Transcript) => {
-      console.log('📝 Transcript received:', transcript);
-      setTranscripts(prev => {
-        const updated = [...prev, transcript];
-        return updated;
-      });
-
-      useMeetingStore.getState().addTranscript({
-        id: `transcript-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        speaker: transcript.speaker,
-        text: transcript.text,
-        timestamp: transcript.timestamp,
-        participantId: transcript.participantId,
-        isLocal: transcript.participantId === room?.localParticipant?.identity,
-        speakerConfidence: transcript.speakerConfidence
-      });
-
-      const shareMessage = {
-        type: 'transcript',
-        speaker: transcript.speaker,
-        text: transcript.text,
-        timestamp: transcript.timestamp,
-        participantId: transcript.participantId || 'unknown',
-        speakerConfidence: transcript.speakerConfidence,
-        entryId: `${transcript.participantId || 'unknown'}-${transcript.timestamp}`,
-        isLocal: false
-      };
-      
-      try {
-        console.log('📡 Sharing transcript to other participants:', shareMessage);
-        room.localParticipant.publishData(
-          new TextEncoder().encode(JSON.stringify(shareMessage)),
-          { reliable: true }
-        );
-        console.log('✅ Transcript shared successfully');
-      } catch (error) {
-        console.error('❌ Failed to share transcript:', error);
-      }
-
-      const localDisplayTranscript: DisplayTranscript = {
-        speaker: transcript.speaker,
-        text: transcript.text,
-        participantId: transcript.participantId || 'unknown',
-        timestamp: transcript.timestamp,
-        entryId: `${transcript.participantId || 'unknown'}-${transcript.timestamp}`,
-        isLocal: true,
-        speakerConfidence: transcript.speakerConfidence
-      };
-
-      setSharedTranscripts(prev => {
-        const existingIndex = prev.findIndex(t => t.entryId === localDisplayTranscript.entryId);
-        if (existingIndex >= 0) {
-          const updated = [...prev];
-          updated[existingIndex] = localDisplayTranscript;
-          return updated;
-        } else {
-          const insertIndex = prev.findIndex(t => t.timestamp > localDisplayTranscript.timestamp);
-          if (insertIndex === -1) {
-            return [...prev, localDisplayTranscript];
-          } else {
-            const updated = [...prev];
-            updated.splice(insertIndex, 0, localDisplayTranscript);
-            return updated;
-          }
-        }
-      });
-    }), [room]);
-
-  // Listen for shared transcript data from other participants
-  React.useEffect(() => {
-    if (!room) return;
-
-    const handleDataReceived = (payload: Uint8Array, participant: any) => {
-      try {
-        const decoder = new TextDecoder();
-        const data = JSON.parse(decoder.decode(payload)) as SharedTranscript;
-        
-        const currentUserId = room.localParticipant?.identity || room.localParticipant?.name || user?.id || 'guest';
-        if (data.participantId === currentUserId) {
-          return;
-        }
-        
-        if (data.speakerConfidence !== undefined && data.speakerConfidence <= 0.3) {
-          return;
-        }
-        
-        if (data.type === 'transcript' || data.type === 'transcript_update') {
-          setSharedTranscripts(prev => {
-            const existingIndex = prev.findIndex(t => t.entryId === data.entryId);
-            
-            if (existingIndex >= 0) {
-              const updated = [...prev];
-              updated[existingIndex] = {
-                speaker: data.speaker,
-                text: data.text,
-                participantId: data.participantId,
-                timestamp: data.timestamp,
-                entryId: data.entryId,
-                isLocal: false,
-                speakerConfidence: data.speakerConfidence,
-                deepgramSpeaker: data.deepgramSpeaker
-              };
-              return updated;
-            } else {
-              const newTranscript: DisplayTranscript = {
-                speaker: data.speaker,
-                text: data.text,
-                participantId: data.participantId,
-                timestamp: data.timestamp,
-                entryId: data.entryId,
-                isLocal: false,
-                speakerConfidence: data.speakerConfidence,
-                deepgramSpeaker: data.deepgramSpeaker
-              };
-              
-              const insertIndex = prev.findIndex(t => t.timestamp > data.timestamp);
-              if (insertIndex === -1) {
-                return [...prev, newTranscript];
-              } else {
-                const updated = [...prev];
-                updated.splice(insertIndex, 0, newTranscript);
-                return updated;
-              }
-            }
-          });
-        }
-      } catch (error) {
-        console.error('Error parsing shared transcript data:', error);
-      }
-    };
-
-    room.on('dataReceived', handleDataReceived);
-    return () => {
-      room.off('dataReceived', handleDataReceived);
-    };
-  }, [room, user?.id]);
-
-  // Monitor microphone state changes
-  useEffect(() => {
-    if (!room?.localParticipant || !transcriptionService) return;
-
-    const handleMicStateChange = () => {
-      const isMicEnabled = room.localParticipant?.isMicrophoneEnabled ?? false;
-      console.log('🎤 AI Assistant: Microphone state change detected:', isMicEnabled);
-      console.log('📊 Transcription status before handling:', transcriptionService.getStatus());
-      
-      transcriptionService.handleMicrophoneStateChange(isMicEnabled);
-      
-      // Check status after handling
-      setTimeout(() => {
-        console.log('📊 Transcription status after handling:', transcriptionService.getStatus());
-        setIsRecording(transcriptionService.isActivelyRecording());
-      }, 300);
-    };
-
-    // Listen for microphone state changes
-    room.localParticipant.on('trackMuted', handleMicStateChange);
-    room.localParticipant.on('trackUnmuted', handleMicStateChange);
-
-    return () => {
-      room.localParticipant?.off('trackMuted', handleMicStateChange);
-      room.localParticipant?.off('trackUnmuted', handleMicStateChange);
-    };
-  }, [room, transcriptionService]);
-
-  // Auto-start transcription when audio tracks are available
-  const startTranscription = useCallback(async () => {
-    if (isRecording) return;
-    
-    const audioTracks = tracks.filter(track => track.publication.source === Track.Source.Microphone);
-    console.log('🎤 Audio tracks found:', audioTracks.length);
-    if (audioTracks.length === 0) return;
-
-    try {
-      console.log('🎙️ Starting transcription...');
-      setIsRecording(true);
-      const track = audioTracks[0].publication?.track;
-      if (!track) {
-        console.log('❌ No track found');
-        setIsRecording(false);
-        return;
-      }
-
-      await transcriptionService.startTranscription();
-      console.log('✅ Transcription started successfully');
-    } catch (error) {
-      console.error('❌ Failed to start transcription:', error);
-      setIsRecording(false);
-    }
-  }, [transcriptionService, isRecording, tracks]);
-
-  useEffect(() => {
-    const audioTracks = tracks.filter(track => track.publication.source === Track.Source.Microphone);
-    
-    if (audioTracks.length > 0 && !isRecording) {
-      startTranscription();
-    }
-  }, [tracks, startTranscription, isRecording]);
-
-  // Notify parent component when transcripts change
-  useEffect(() => {
-    if (onTranscriptsChange) {
-      const allTranscripts: Transcript[] = [
-        ...transcripts,
-        ...sharedTranscripts.map(st => ({
-          speaker: st.speaker,
-          text: st.text,
-          timestamp: st.timestamp
-        }))
-      ];
-      
-      allTranscripts.sort((a, b) => a.timestamp - b.timestamp);
-      onTranscriptsChange(allTranscripts);
-    }
-  }, [transcripts, sharedTranscripts, onTranscriptsChange]);
-
-  // Cleanup transcription service on unmount
-  useEffect(() => {
-    return () => {
-      if (transcriptionService) {
-        try {
-          transcriptionService.stopTranscription();
-        } catch (error) {
-          console.error('Error stopping transcription service:', error);
-        }
-      }
-    };
-  }, [transcriptionService]);
-
   if (!isOpen) return null;
 
   return (
-    <>
+    <div className="h-full flex flex-col bg-[#1a1a1a] text-white border-l border-[rgba(55,65,81,0.3)] shadow-lg">
       {/* Header */}
-      <div className="panel-header">
-        <div className="panel-header-content">
-          <div className="panel-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+      <div className="flex items-center justify-between p-4 border-b border-[rgba(55,65,81,0.3)]">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center">
+            <Bot size={16} />
           </div>
-          <h3 className="panel-title">AI Assistant</h3>
-          <button
-            onClick={() => {
-              console.log('Transcript toggle clicked, current state:', showTranscripts);
-              console.log('Shared transcripts count:', sharedTranscripts.length);
-              console.log('Is recording:', isRecording);
-              console.log('Transcription service status:', transcriptionService?.getStatus());
-              setShowTranscripts(!showTranscripts);
-            }}
-            className={`transcript-toggle ${showTranscripts ? 'active' : ''}`}
-          >
-            Transcripts
-          </button>
+          <div>
+            <h3 className="font-medium text-white">AI Assistant</h3>
+            <p className="text-sm text-gray-400">Meeting insights & chat</p>
+          </div>
         </div>
-          <button onClick={onClose} className="close-button">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          </button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={clearChat}
+            title="New Chat"
+            className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
+          >
+            <Plus size={16} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
+          >
+            <X size={16} />
+          </Button>
+        </div>
       </div>
 
       {/* Content */}
-      <div className="panel-content">
-        {showTranscripts ? (
-          <div className="transcript-section full-panel">
-            <div ref={transcriptMessagesRef} className="transcript-messages full-height">
-              {sharedTranscripts.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-icon">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" stroke="currentColor" strokeWidth="2"/>
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" stroke="currentColor" strokeWidth="2"/>
-                      <line x1="12" y1="19" x2="12" y2="23" stroke="currentColor" strokeWidth="2"/>
-                      <line x1="8" y1="23" x2="16" y2="23" stroke="currentColor" strokeWidth="2"/>
-                    </svg>
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Chat Messages */}
+        <div 
+          ref={chatMessagesRef}
+          className="flex-1 overflow-y-auto p-4 space-y-4"
+        >
+          {aiChatHistory.length === 0 ? (
+            <div className="text-center py-8">
+              {isGuest ? (
+                /* Guest Signup Prompt */
+                <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                  <div className="w-16 h-16 bg-[#2a2a2a] rounded-full flex items-center justify-center mb-4">
+                    <Bot size={24} className="text-gray-400" />
                   </div>
-                  <p>Transcription will appear here once the meeting starts</p>
+                  <h4 className="font-medium text-white mb-2">AI Assistant</h4>
+                  <p className="text-gray-400 text-sm mb-6 max-w-sm">
+                    Sign up for free to access AI-powered meeting insights, summaries, and chat with your meeting data.
+                  </p>
+                  <div className="space-y-3">
+                    <SignUpButton mode="modal">
+                      <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+                        Sign Up for Free
+                      </Button>
+                    </SignUpButton>
+                    <p className="text-xs text-gray-500">
+                      ✨ Get meeting summaries, action items, and AI chat
+                    </p>
+                  </div>
                 </div>
               ) : (
-                <div className="transcript-list">
-                  {groupedTranscripts.map((group, groupIndex) => (
-                    <div key={`${group.participantId}-${group.startTime}-${groupIndex}`} className="transcript-item">
-                      <div className="transcript-item-header">
-                        <span className={`speaker-badge ${group.speakerColor}`}>
-                          {group.speaker}
-                        </span>
-                      </div>
-                      <div className="transcript-text">
-                        {group.messages.map(message => message.text).join(' ')}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* AI Chat */
-        <div className="ai-chat-section">
-          <div className="panel-messages" ref={chatMessagesRef} onScroll={handleScroll}>
-            {aiChatHistory.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <p>Ask AI about the meeting, participants, or search the web</p>
-                
-                <div className="suggestion-list">
-                  <p className="suggestion-title">Try asking:</p>
-                  <div className="suggestion-buttons">
+                <>
+                  <div className="w-16 h-16 bg-[#2a2a2a] rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Bot size={24} className="text-gray-400" />
+                  </div>
+                  <h4 className="font-medium text-white mb-2">
+                    AI Assistant for Meeting
+                  </h4>
+                  <p className="text-sm text-gray-400 mb-6">
+                    Ask me anything about the meeting, participants, or search the web.
+                  </p>
+                  
+                  {/* Suggestions */}
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-300 mb-3">Try asking:</p>
                     {questionSuggestions.map((suggestion, index) => (
                       <button
                         key={index}
-                        className="suggestion-button"
-                        onClick={() => handleAiChat(suggestion)}
+                        onClick={() => handleAiChat(suggestion.query)}
+                        className="w-full text-left p-3 text-sm text-white bg-[#2a2a2a] hover:bg-[#374151] rounded-lg transition-colors"
                         disabled={isAiProcessing}
                       >
-                        {suggestion}
+                        {suggestion.display}
                       </button>
                     ))}
                   </div>
-                </div>
-              </div>
-            ) : (
-              <div className="messages-list">
-                {aiChatHistory.map((aiMsg) => (
-                  <div key={aiMsg.id} className={`message-group ${aiMsg.type === 'ai' ? 'ai-message' : 'user-message'}`}>
-                    <div className="message-header">
-                      <div className="message-sender">
-                        <span className="sender-name">
-                          {aiMsg.type === 'ai' ? 'AI Assistant' : aiMsg.userName}
-                                </span>
-                        <div className="message-badges">
-                          {aiMsg.usedWebSearch && (
-                            <span className="badge web-badge">Web Search</span>
-                              )}
-                              {aiMsg.usedContext && (
-                            <span className="badge context-badge">Context</span>
-                              )}
-                        </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <>
+              {aiChatHistory.map((message) => (
+                <div key={message.id} className="group">
+                                      <div
+                      className={cn(
+                        "rounded-lg p-3 max-w-[85%] relative",
+                        message.type === 'user' 
+                          ? "bg-blue-600 text-white ml-auto" 
+                          : "bg-[#2a2a2a] text-white border border-[#374151]"
+                      )}
+                    >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium">
+                          {message.type === 'user' ? message.userName : 'AI Assistant'}
+                        </span>
+                        <span className="text-xs opacity-70">
+                          {new Date(message.timestamp).toLocaleTimeString([], { 
+                            hour: '2-digit', 
+                            minute: '2-digit' 
+                          })}
+                        </span>
                       </div>
-                      {aiMsg.type === 'ai' && (
-                        <button
-                          onClick={() => copyToClipboard(aiMsg.message)}
-                          className="copy-button"
+                      {message.type === 'ai' && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => copyToClipboard(message.id, message.message)}
                           title="Copy response"
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke="currentColor" strokeWidth="2"/>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="2"/>
-                          </svg>
-                        </button>
+                          {copiedMessageId === message.id ? (
+                            <Check size={12} className="text-green-600" />
+                          ) : (
+                            <Copy size={12} />
+                          )}
+                        </Button>
                       )}
                     </div>
-                    <div className="message-content">
-                      {(aiMsg as any).isThinking ? (
-                        <div className="thinking-container">
-                          <div className="typing-indicator">
-                            <div className="typing-dot"></div>
-                            <div className="typing-dot"></div>
-                            <div className="typing-dot"></div>
-                          </div>
-                          <span className="thinking-text">🧠 Thinking...</span>
-                        </div>
-                      ) : (
-                        <ReactMarkdown>{aiMsg.message}</ReactMarkdown>
-                      )}
-                    </div>
-                    
-                    {aiMsg.type === 'ai' && aiMsg.citations && aiMsg.citations.length > 0 && (
-                      <div className="message-citations">
-                        <button
-                          onClick={() => toggleSources(aiMsg.id)}
-                          className="citations-toggle"
-                        >
-                          Sources ({aiMsg.citations.length})
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                          </svg>
-                        </button>
-                        {expandedSources.has(aiMsg.id) && (
-                          <div className="citations-list">
-                            {aiMsg.citations.map((url, index) => (
-                              <a 
-                                key={index}
-                                href={url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="citation-link"
+                  
+                                            <div className="text-sm">
+                          {message.type === 'ai' ? (
+                            <div className="prose prose-sm max-w-none prose-invert prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-gray-300 prose-code:bg-[#374151] prose-code:text-white prose-pre:bg-black prose-li:text-white prose-ul:text-white prose-ol:text-white">
+                              <ReactMarkdown
+                                components={{
+                                  p: ({ children }) => <p className="mb-2 text-white leading-relaxed">{children}</p>,
+                                  strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
+                                  em: ({ children }) => <em className="italic text-gray-300">{children}</em>,
+                                  ul: ({ children }) => <ul className="list-disc list-inside mb-2 text-white space-y-1">{children}</ul>,
+                                  ol: ({ children }) => <ol className="list-decimal list-inside mb-2 text-white space-y-1">{children}</ol>,
+                                  li: ({ children }) => <li className="text-white">{children}</li>,
+                                  code: ({ children }) => <code className="bg-[#374151] px-1.5 py-0.5 rounded text-sm text-white font-mono">{children}</code>,
+                                  pre: ({ children }) => <pre className="bg-black p-3 rounded-lg overflow-x-auto mb-2">{children}</pre>,
+                                  h1: ({ children }) => <h1 className="text-lg font-bold text-white mb-2">{children}</h1>,
+                                  h2: ({ children }) => <h2 className="text-base font-bold text-white mb-2">{children}</h2>,
+                                  h3: ({ children }) => <h3 className="text-sm font-bold text-white mb-1">{children}</h3>,
+                                }}
                               >
-                                {new URL(url).hostname}
-                              </a>
-                            ))}
+                                {message.message}
+                              </ReactMarkdown>
+                            </div>
+                          ) : (
+                            message.message
+                          )}
+                        </div>
+
+                    {/* Context indicators for AI messages */}
+                    {message.type === 'ai' && (message.usedContext || message.usedWebSearch) && (
+                      <div className="mt-2 pt-2 border-t border-border/50">
+                        <div className="flex flex-wrap gap-1">
+                          {message.usedContext && (
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                              📋 Context ({message.relevantTranscripts || 0})
+                            </span>
+                          )}
+                          {message.usedWebSearch && (
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                              🌐 Web
+                            </span>
+                          )}
+                        </div>
+                        
+                        {message.citations && message.citations.length > 0 && (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => toggleSources(message.id)}
+                              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+                            >
+                              Sources ({message.citations.length})
+                              <ChevronDown size={12} className={cn(
+                                "transition-transform",
+                                expandedSources.has(message.id) && "rotate-180"
+                              )} />
+                            </button>
+                            {expandedSources.has(message.id) && (
+                              <div className="mt-1 space-y-1">
+                                {message.citations.map((citation, idx) => (
+                                  <a
+                                    key={idx}
+                                    href={citation}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 truncate"
+                                  >
+                                    {citation}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     )}
                   </div>
-                ))}
-
-                {/* Always show question suggestions after messages */}
-                {aiChatHistory.length > 0 && (
-                  <div className="suggestion-list" style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid #333' }}>
-                    <p className="suggestion-title">Try asking:</p>
-                    <div className="suggestion-buttons">
-                      {questionSuggestions.slice(0, 3).map((suggestion, index) => (
-                        <button
-                          key={index}
-                          className="suggestion-button"
-                          onClick={() => handleAiChat(suggestion)}
-                          disabled={isAiProcessing}
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
+                </div>
+              ))}
+              
+              {/* Show suggestions after the last AI message */}
+              {(() => {
+                const lastMessage = aiChatHistory[aiChatHistory.length - 1];
+                const showSuggestions = lastMessage && lastMessage.type === 'ai' && !isAiProcessing;
+                
+                return showSuggestions && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Ask me more:</p>
+                    {questionSuggestions.slice(0, 3).map((suggestion, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleAiChat(suggestion.query)}
+                        className="w-full text-left p-2 text-xs text-foreground bg-muted/50 hover:bg-accent hover:text-accent-foreground rounded-md transition-colors"
+                        disabled={isAiProcessing}
+                      >
+                        {suggestion.display}
+                      </button>
+                    ))}
                   </div>
-                )}
-
+                );
+              })()}
+            </>
+          )}
+          
+                              {/* Streaming AI response */}
+                    {isAiProcessing && currentAiMessage && (
+                      <div className="bg-[#2a2a2a] text-white border border-[#374151] rounded-lg p-3 max-w-[85%]">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-xs font-medium">AI Assistant</span>
+                        </div>
+                        <div className="text-sm prose prose-sm max-w-none prose-invert prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-gray-300 prose-code:bg-[#374151] prose-code:text-white prose-pre:bg-black prose-li:text-white prose-ul:text-white prose-ol:text-white">
+                          <ReactMarkdown
+                            components={{
+                              p: ({ children }) => <p className="mb-2 text-white leading-relaxed">{children}</p>,
+                              strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
+                              em: ({ children }) => <em className="italic text-gray-300">{children}</em>,
+                              ul: ({ children }) => <ul className="list-disc list-inside mb-2 text-white space-y-1">{children}</ul>,
+                              ol: ({ children }) => <ol className="list-decimal list-inside mb-2 text-white space-y-1">{children}</ol>,
+                              li: ({ children }) => <li className="text-white">{children}</li>,
+                              code: ({ children }) => <code className="bg-[#374151] px-1.5 py-0.5 rounded text-sm text-white font-mono">{children}</code>,
+                              pre: ({ children }) => <pre className="bg-black p-3 rounded-lg overflow-x-auto mb-2">{children}</pre>,
+                              h1: ({ children }) => <h1 className="text-lg font-bold text-white mb-2">{children}</h1>,
+                              h2: ({ children }) => <h2 className="text-base font-bold text-white mb-2">{children}</h2>,
+                              h3: ({ children }) => <h3 className="text-sm font-bold text-white mb-1">{children}</h3>,
+                            }}
+                          >
+                            {currentAiMessage}
+                          </ReactMarkdown>
+                          <span className="inline-block w-2 h-4 bg-blue-600 animate-pulse ml-1"></span>
+                        </div>
+                      </div>
+                    )}
+          
+          {/* Thinking indicator */}
+          {isAiProcessing && !currentAiMessage && (
+            <div className="bg-muted text-foreground rounded-lg p-3 max-w-[85%]">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-medium">AI Assistant</span>
               </div>
-            )}
-          </div>
-
-          {/* Input */}
-          <div className="panel-input">
-            <form onSubmit={handleAiChatSubmit} className="input-form">
-              <div className="input-controls">
-                <button
-                  type="button"
-                  className={`control-button ${aiChatInput.toLowerCase().startsWith('@web ') ? 'active' : ''}`}
-                  onClick={() => {
-                    if (aiChatInput.toLowerCase().startsWith('@web ')) {
-                      setAiChatInput(aiChatInput.slice(5));
-                    } else {
-                      setAiChatInput(`@web ${aiChatInput}`);
-                    }
-                  }}
-                  disabled={isAiProcessing}
-                >
-                  Web Search
-                </button>
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground italic">Thinking</span>
+                <div className="flex gap-1">
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce"></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                </div>
               </div>
-              <div className="input-row">
+            </div>
+          )}
+        </div>
+
+                  {/* Input Area - Only show for authenticated users */}
+          {!isGuest && (
+            <div className="p-4 border-t border-[rgba(55,65,81,0.3)]">
+              <div className="flex gap-2">
                 <input
                   type="text"
-                  className="message-input"
-                  placeholder={aiChatInput.toLowerCase().startsWith('@web ') ? "Search the web..." : "Ask AI about the meeting..."}
                   value={aiChatInput}
                   onChange={(e) => setAiChatInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleAiChatSubmit(e)}
+                  placeholder="Ask AI about the meeting..."
+                  className="flex-1 px-3 py-2 bg-[#2a2a2a] border border-[#374151] rounded-md text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent"
                   disabled={isAiProcessing}
                 />
-                <button 
-                  type="submit" 
-                  className="send-button"
-                  disabled={isAiProcessing || !aiChatInput.trim()}
+                <Button
+                  onClick={handleAiChatSubmit}
+                  disabled={!aiChatInput.trim() || isAiProcessing}
+                  size="icon"
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                  {isAiProcessing ? (
-                    <div className="spinner"></div>
-                  ) : (
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="m5 12 14 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="m12 5 7 7-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </button>
+                  <Send size={16} />
+                </Button>
               </div>
-            </form>
-          </div>
-        </div>
-        )}
+            </div>
+          )}
       </div>
-    </>
+    </div>
   );
 } 

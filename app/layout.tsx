@@ -1,12 +1,9 @@
-import '../styles/globals.css';
-import '../styles/meeting-components.css';
-import '@livekit/components-styles';
-import '@livekit/components-styles/prefabs';
+import './globals.css';
+// Import LiveKit styles only when needed, not globally
 import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'react-hot-toast';
 import { ClerkProvider } from '@clerk/nextjs';
-import { dark } from '@clerk/themes';
-import { SubscriptionProvider } from './shared/contexts/SubscriptionContext';
+import { SubscriptionProvider } from './subscription/contexts/SubscriptionContext';
 
 export const metadata: Metadata = {
   title: 'Ohm',
@@ -19,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#070707',
+  themeColor: '#ffffff',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -29,19 +26,40 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       afterSignUpUrl="/"
       afterSignOutUrl="/"
       appearance={{
-        baseTheme: dark,
         variables: {
-          colorPrimary: '#8B5CF6',
-          colorBackground: '#070707',
-          colorInputBackground: '#1a1a1a',
-          colorInputText: '#ffffff',
+          colorPrimary: '#0a0a0a',
+          colorBackground: '#ffffff',
+          colorInputBackground: '#f8f9fa',
+          colorInputText: '#0a0a0a',
+          colorText: '#0a0a0a',
+          colorTextSecondary: '#6c757d',
+          colorNeutral: '#ffffff',
+          borderRadius: '0.5rem',
+        },
+        elements: {
+          formButtonPrimary: 'bg-black hover:bg-gray-800 text-white',
+          card: 'bg-white border border-gray-200 shadow-sm',
+          headerTitle: 'text-black',
+          headerSubtitle: 'text-gray-600',
+          socialButtonsBlockButton: 'bg-white border border-gray-200 text-black hover:bg-gray-50',
+          formFieldInput: 'bg-gray-50 border-gray-200 text-black',
+          footerActionLink: 'text-black hover:text-gray-700',
         }
       }}
     >
     <html lang="en">
-      <body data-lk-theme="default">
+      <body className="bg-white">
         <SubscriptionProvider>
-          <Toaster />
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: '#ffffff',
+                color: '#0a0a0a',
+                border: '1px solid #dee2e6',
+              },
+            }}
+          />
           {children}
         </SubscriptionProvider>
       </body>

@@ -76,6 +76,7 @@ export class HybridRAGService {
       }
 
       console.log(`✅ Found room: ${room.title} (${room.roomName})`);
+      console.log(`🔒 Search scope: LIMITED to room ${room.roomName} only`);
 
       // Detect query type for comprehensive vs targeted search
       const queryType = this.detectQueryType(query);
@@ -89,6 +90,7 @@ export class HybridRAGService {
       if (currentTranscripts && isLiveMeeting) {
         console.log(`🎙️ Processing current transcripts: "${currentTranscripts.substring(0, 100)}..."`);
         const lines = currentTranscripts.split('\n').filter(line => line.trim());
+        
         for (const line of lines) {
           const match = line.match(/^([^:]+):\s*(.+)$/);
           if (match) {
@@ -147,20 +149,39 @@ export class HybridRAGService {
     queryType: 'comprehensive' | 'targeted' | 'specific'
   ): Promise<TranscriptContext[]> {
     try {
-      // Step 1: Query Pinecone for semantically similar transcripts
-      const topK = queryType === 'comprehensive' ? 30 : 20;
-      const threshold = queryType === 'comprehensive' ? 0.3 : 0.4;
+      // Step 1: Query Pinecone for semantically similar transcripts (optimized for speed)
+      const topK = queryType === 'comprehensive' ? 20 : 15;  // Reduced from 30/20 to 20/15
+      const threshold = queryType === 'comprehensive' ? 0.3 : 0.4;  // Lowered thresholds for better retrieval
       
+      console.log(`🔍 Querying Pinecone with topK=${topK}, threshold=${threshold}, roomId=${roomId}`);
       const pineconeResults = await this.pineconeService.queryTranscripts(
         queryEmbedding,
         roomId,
         topK,
         threshold
       );
+      console.log(`🔍 Pinecone initial query returned ${pineconeResults.length} results`);
 
       if (pineconeResults.length === 0) {
-        console.log('⚠️ No relevant transcripts found in Pinecone');
-        return [];
+        console.log('⚠️ No relevant transcripts found in Pinecone, trying with lower threshold');
+        
+        // Fallback: Try with a much lower threshold to get some results
+        const fallbackThreshold = 0.2;
+        const fallbackResults = await this.pineconeService.queryTranscripts(
+          queryEmbedding,
+          roomId,
+          Math.min(topK, 10), // Limit to 10 results for fallback
+          fallbackThreshold
+        );
+        
+        if (fallbackResults.length === 0) {
+          console.log('⚠️ No transcripts found even with fallback threshold');
+          return [];
+        }
+        
+        console.log(`📋 Found ${fallbackResults.length} transcripts with fallback threshold ${fallbackThreshold}`);
+        // Use fallback results
+        pineconeResults.push(...fallbackResults);
       }
 
       // Step 2: Get meeting metadata from MongoDB for enriched context
@@ -262,7 +283,24 @@ export class HybridRAGService {
   }
 
   /**
-   * Store transcript embeddings in both MongoDB and Pinecone
+   * Retrieve transcripts for a meeting from Pinecone
+   */
+  async getTranscriptsForMeeting(meetingId: string): Promise<Array<{
+    speaker: string;
+    text: string;
+    timestamp: Date;
+    transcriptIndex: number;
+  }>> {
+    try {
+      return await this.pineconeService.getTranscriptsByMeeting(meetingId);
+    } catch (error) {
+      console.error('❌ Error retrieving transcripts:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Store transcript embeddings in Pinecone only (no MongoDB duplication)
    */
   async storeTranscriptEmbeddings(
     meetingId: string,

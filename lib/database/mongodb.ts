@@ -267,9 +267,29 @@ const MeetingSchema = new mongoose.Schema({
   
   // AI-generated content
   summary: {
+    title: { type: String }, // Add title field
     content: { type: String },
-    keyPoints: [{ type: String }],
-    actionItems: [{ type: String }],
+    sections: [{
+      title: { type: String },
+      points: [{
+        text: { type: String },
+        speaker: { type: String },
+        context: {
+          speaker: { type: String }, // Who said this
+          reasoning: { type: String }, // Why they said it / context around it
+          transcriptExcerpt: { type: String }, // The actual transcript excerpt
+          relatedDiscussion: { type: String } // Surrounding discussion for context
+        }
+      }]
+    }],
+    keyPoints: [{ type: String }], // Keep for backward compatibility
+    actionItems: [{ 
+      title: { type: String },
+      owner: { type: String },
+      priority: { type: String },
+      dueDate: { type: String }, // Store as string since it can be null
+      context: { type: String }
+    }],
     decisions: [{ type: String }],
     generatedAt: { type: Date }
   },
@@ -284,6 +304,14 @@ const MeetingSchema = new mongoose.Schema({
   embeddingsGeneratedAt: { type: Date }, // When embeddings were last generated
   embeddingError: { type: String }, // Error message if embedding generation failed
   embeddingErrorAt: { type: Date }, // When embedding generation failed
+  
+  // Processing status for async background processing
+  processingStatus: { type: String, enum: ['pending', 'in_progress', 'summary_completed', 'completed', 'failed'] },
+  processingStartedAt: { type: Date },
+  summaryGeneratedAt: { type: Date },
+  processingCompletedAt: { type: Date },
+  processingFailedAt: { type: Date },
+  processingError: { type: String }
 }, {
   timestamps: true
 });
@@ -299,6 +327,13 @@ const TaskSchema = new mongoose.Schema({
   status: { type: String, enum: ['TODO', 'IN_PROGRESS', 'DONE'], default: 'TODO' },
   priority: { type: String, enum: ['HIGH', 'MEDIUM', 'LOW'], default: 'MEDIUM' },
   
+  // Review status for AI-generated tasks
+  reviewStatus: { type: String, enum: ['pending_review', 'reviewed', 'exported'], default: 'pending_review' },
+  reviewedAt: { type: Date },
+  reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  exportedAt: { type: Date },
+  exportedTo: { type: String }, // 'jira', 'linear', 'asana', 'csv', etc.
+  
   // Assignment
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   assignedToName: { type: String }, // Store name directly for easier access
@@ -312,6 +347,10 @@ const TaskSchema = new mongoose.Schema({
   // Dates
   dueDate: { type: Date },
   completedAt: { type: Date },
+  
+  // Meeting metadata (for display)
+  meetingTitle: { type: String },
+  meetingDate: { type: Date },
   
   // Comments/updates
   comments: [{
@@ -428,14 +467,35 @@ export interface IMeeting {
     isLocal?: boolean;
   }>;
   summary?: {
+    title?: string;
     content: string;
-    keyPoints: string[];
-    actionItems: string[];
+    sections?: Array<{
+      title: string;
+      points: Array<{
+        text: string;
+        speaker?: string;
+        context?: {
+          speaker: string; // Who said this
+          reasoning: string; // Why they said it / context around it
+          transcriptExcerpt: string; // The actual transcript excerpt
+          relatedDiscussion: string; // Surrounding discussion for context
+        };
+      }>;
+    }>;
+    keyPoints: string[]; // Keep for backward compatibility
+    actionItems: Array<{
+      title: string;
+      owner: string;
+      priority: string;
+      dueDate?: string;
+      context: string;
+    }>;
     decisions: string[];
     generatedAt: Date;
   };
   isRecording: boolean;
   recordingUrl?: string;
+  isLive?: boolean; // Flag to indicate if meeting is currently in progress
   
   // Performance metadata
   transcriptCount?: number; // Cache transcript count
@@ -443,6 +503,14 @@ export interface IMeeting {
   embeddingsGeneratedAt?: Date; // When embeddings were last generated
   embeddingError?: string; // Error message if embedding generation failed
   embeddingErrorAt?: Date; // When embedding generation failed
+  
+  // Processing status for async background processing
+  processingStatus?: 'pending' | 'in_progress' | 'summary_completed' | 'completed' | 'failed';
+  processingStartedAt?: Date;
+  summaryGeneratedAt?: Date;
+  processingCompletedAt?: Date;
+  processingFailedAt?: Date;
+  processingError?: string;
   
   createdAt: Date;
   updatedAt: Date;
@@ -456,6 +524,11 @@ export interface ITask {
   description?: string;
   status: 'TODO' | 'IN_PROGRESS' | 'DONE';
   priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  reviewStatus?: 'pending_review' | 'reviewed' | 'exported';
+  reviewedAt?: Date;
+  reviewedBy?: string;
+  exportedAt?: Date;
+  exportedTo?: string;
   assignedTo?: string;
   assignedToName?: string;
   createdBy?: string;
@@ -464,6 +537,8 @@ export interface ITask {
   aiConfidence?: number;
   dueDate?: Date;
   completedAt?: Date;
+  meetingTitle?: string;
+  meetingDate?: Date;
   comments: Array<{
     userId?: string;
     userName: string;
@@ -479,6 +554,7 @@ export interface ITask {
 // Transform database MeetingRoom to frontend MeetingRoomCard format
 export function toMeetingRoomCard(room: IMeetingRoom, meetingCount?: number): {
   id: string;
+  objectId: string; // Add MongoDB ObjectId for database queries
   title: string;
   type: string;
   description?: string;
@@ -489,6 +565,7 @@ export function toMeetingRoomCard(room: IMeetingRoom, meetingCount?: number): {
 } {
   return {
     id: room.roomName, // Use roomName as id for URLs
+    objectId: room._id.toString(), // MongoDB ObjectId for database queries
     title: room.title,
     type: room.type,
     description: room.description,
@@ -1008,6 +1085,83 @@ export class DatabaseService {
     return task as unknown as ITask | null;
   }
 
+  // Get all tasks for a user across all their workspaces
+  async getTasksByUser(userId: string, options?: {
+    reviewStatus?: 'pending_review' | 'reviewed' | 'exported';
+    status?: 'TODO' | 'IN_PROGRESS' | 'DONE';
+    priority?: 'HIGH' | 'MEDIUM' | 'LOW';
+    limit?: number;
+    skip?: number;
+  }): Promise<ITask[]> {
+    await this.ensureConnection();
+    
+    // First find the user by Clerk ID to get their ObjectId
+    const user = await User.findOne({ clerkId: userId }).select('_id');
+    if (!user) {
+      console.log(`👤 User not found for Clerk ID: ${userId}`);
+      return [];
+    }
+    
+    // Then get all rooms where user is participant or creator
+    const userRooms = await MeetingRoom.find({
+      $or: [
+        { createdBy: user._id },
+        { 'participants.userId': user._id }
+      ]
+    }).select('_id').lean();
+    
+    const roomIds = userRooms.map(room => room._id);
+    
+    // Build query for tasks
+    const query: any = { roomId: { $in: roomIds } };
+    
+    if (options?.reviewStatus) {
+      query.reviewStatus = options.reviewStatus;
+    }
+    if (options?.status) {
+      query.status = options.status;
+    }
+    if (options?.priority) {
+      query.priority = options.priority;
+    }
+    
+    const tasksQuery = Task.find(query)
+      .sort({ createdAt: -1 })
+      .populate('meetingId', 'title startedAt')
+      .populate('roomId', 'title');
+    
+    if (options?.skip) {
+      tasksQuery.skip(options.skip);
+    }
+    if (options?.limit) {
+      tasksQuery.limit(options.limit);
+    }
+    
+    const tasks = await tasksQuery.lean();
+    
+    // Enhance tasks with meeting metadata
+    return tasks.map(task => {
+      const enhancedTask = task as unknown as ITask;
+      if (task.meetingId && typeof task.meetingId === 'object') {
+        enhancedTask.meetingTitle = (task.meetingId as any).title;
+        enhancedTask.meetingDate = (task.meetingId as any).startedAt;
+      }
+      return enhancedTask;
+    });
+  }
+
+  // Bulk update tasks (for marking as reviewed/exported)
+  async bulkUpdateTasks(taskIds: string[], updates: Partial<ITask>): Promise<number> {
+    await this.ensureConnection();
+    
+    const result = await Task.updateMany(
+      { _id: { $in: taskIds } },
+      { $set: updates }
+    );
+    
+    return result.modifiedCount || 0;
+  }
+
   // ===== USER OPERATIONS =====
 
   async createUser(userData: {
@@ -1129,21 +1283,117 @@ export class DatabaseService {
     return meeting as unknown as IMeeting | null;
   }
   
+
+  
+  // Get monthly meeting count for a user
+  async getMonthlyMeetingCount(userId: string, year?: number, month?: number): Promise<number> {
+    await this.ensureConnection();
+    
+    try {
+      const now = new Date();
+      const targetYear = year || now.getFullYear();
+      const targetMonth = month || now.getMonth(); // 0-based month
+      
+      // Get start and end of the target month
+      const startOfMonth = new Date(targetYear, targetMonth, 1);
+      const endOfMonth = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59, 999);
+      
+      // Get all meeting rooms for this user
+      const userRooms = await MeetingRoom.find({ createdBy: userId }).select('_id').lean();
+      const roomIds = userRooms.map(room => room._id);
+      
+      // Count meetings in user's rooms for this month
+      const count = await Meeting.countDocuments({
+        roomId: { $in: roomIds },
+        startedAt: {
+          $gte: startOfMonth,
+          $lte: endOfMonth
+        }
+      });
+      
+      return count;
+    } catch (error) {
+      console.error('Error getting monthly meeting count:', error);
+      return 0;
+    }
+  }
+
+  // Check if user has exceeded monthly meeting limit
+  async hasExceededMeetingLimit(userId: string, limit: number = 10): Promise<{
+    exceeded: boolean;
+    currentCount: number;
+    limit: number;
+    remaining: number;
+  }> {
+    await this.ensureConnection();
+    
+    try {
+      const currentCount = await this.getMonthlyMeetingCount(userId);
+      const exceeded = currentCount >= limit;
+      const remaining = Math.max(0, limit - currentCount);
+      
+      return {
+        exceeded,
+        currentCount,
+        limit,
+        remaining
+      };
+    } catch (error) {
+      console.error('Error checking meeting limit:', error);
+      return {
+        exceeded: false,
+        currentCount: 0,
+        limit,
+        remaining: limit
+      };
+    }
+  }
+  
   async deleteMeeting(meetingId: string): Promise<boolean> {
     await this.ensureConnection();
     
     try {
-      // Embeddings are now stored in Pinecone only - no MongoDB cleanup needed
-      
-      // Delete the meeting itself
+      // First, get the meeting to know which room it belongs to
+      const meeting = await Meeting.findById(meetingId);
+      if (!meeting) {
+        console.log(`⚠️ Meeting not found for deletion: ${meetingId}`);
+        return false;
+      }
+
+      console.log(`🗑️ Starting comprehensive deletion of meeting: ${meetingId}`);
+
+      // Step 1: Delete all tasks associated with this meeting
+      const taskDeleteResult = await Task.deleteMany({ meetingId });
+      console.log(`✅ Deleted ${taskDeleteResult.deletedCount} tasks for meeting ${meetingId}`);
+
+      // Step 2: Delete transcript embeddings from Pinecone
+      try {
+        const { HybridRAGService } = await import('@/lib/ai/hybrid-rag');
+        const hybridRAG = HybridRAGService.getInstance();
+        await hybridRAG.deleteEmbeddings(meetingId);
+        console.log(`✅ Deleted embeddings from Pinecone for meeting ${meetingId}`);
+      } catch (embeddingError) {
+        console.error(`⚠️ Error deleting embeddings for meeting ${meetingId}:`, embeddingError);
+        // Don't fail the entire operation if embedding deletion fails
+      }
+
+      // Step 3: Remove the meeting from the meeting room's meetings array
+      await MeetingRoom.findByIdAndUpdate(
+        meeting.roomId,
+        { $pull: { meetings: meetingId } },
+        { new: true }
+      );
+      console.log(`✅ Removed meeting ${meetingId} from room ${meeting.roomId}`);
+
+      // Step 4: Delete the meeting document itself
       const deleteResult = await Meeting.findByIdAndDelete(meetingId);
       
       if (deleteResult) {
-        console.log(`✅ Deleted meeting and associated embeddings: ${meetingId}`);
+        console.log(`✅ Successfully deleted meeting and all associated data: ${meetingId}`);
         return true;
       }
       
-      console.log(`⚠️ Meeting not found for deletion: ${meetingId}`);
+      console.log(`⚠️ Failed to delete meeting document: ${meetingId}`);
       return false;
     } catch (error) {
       console.error(`❌ Error deleting meeting ${meetingId}:`, error);

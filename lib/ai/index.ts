@@ -7,8 +7,7 @@ export { AiContextManager } from './context-manager';
 
 // Re-export types from chatbot
 export type { 
-  ChatMessage, 
-  AIChatResponse 
+  ChatMessage 
 } from './chatbot';
 
 // Re-export types from embeddings

@@ -11,6 +11,8 @@ export default function SignInPage() {
         </div>
         <div className={styles.clerkWrapper}>
           <SignIn 
+            redirectUrl="/"
+            signUpUrl="/sign-up"
             appearance={{
               elements: {
                 rootBox: "w-full",

@@ -4,8 +4,7 @@ import React, { useEffect, Suspense } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useSearchParams } from 'next/navigation';
 import { LandingPage } from '@/components/landing';
-import { Dashboard } from '@/components/dashboard';
-import styles from '@/styles/HomePage.module.css';
+import { SimplifiedDashboard } from '@/components/workspace/simplified-dashboard';
 
 function ReferralTracker() {
   const searchParams = useSearchParams();
@@ -31,13 +30,13 @@ function ReferralTracker() {
 export default function HomePage() {
   const { isSignedIn, isLoaded } = useUser();
 
-  // Show loading while Clerk is initializing
+  // Show loading while Clerk is initializing - consistent with workspace theme
   if (!isLoaded) {
   return (
-    <div className={styles.container}>
-      <div className={styles.loadingState}>
-        <div className={styles.loadingSpinner}></div>
-        <p>Loading...</p>
+      <div className="loading-container">
+        <div className="loading-content">
+          <div className="loading-spinner"></div>
+          <p className="text-sm font-medium">Loading...</p>
       </div>
     </div>
   );
@@ -49,7 +48,7 @@ export default function HomePage() {
       <Suspense fallback={null}>
         <ReferralTracker />
       </Suspense>
-      {isSignedIn ? <Dashboard /> : <LandingPage />}
+      {isSignedIn ? <SimplifiedDashboard /> : <LandingPage />}
     </>
   );
 }

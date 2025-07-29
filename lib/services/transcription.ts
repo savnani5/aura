@@ -133,7 +133,7 @@ export class TranscriptionService {
       console.log('🎤 Microphone permission status:', permission.state);
       
       if (permission.state === 'denied') {
-        throw new Error('Microphone permission denied. Please enable microphone access in your browser settings.');
+        throw new Error('Permission denied: Microphone access is required for transcription. Please enable microphone permissions in your browser settings.');
       }
     } catch (error) {
       console.log('⚠️ Could not check microphone permissions:', error);

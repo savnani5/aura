@@ -49,9 +49,21 @@ export async function GET(
       includeTranscripts: searchParams.get('includeTranscripts') === 'true'
     });
     
-    // Filter out meetings with no content (no transcripts and no summary)
+    // Check for active meetings (meetings that have started but not ended)
+    const activeMeetings = historicalMeetings.filter(meeting => 
+      meeting.startedAt && !meeting.endedAt
+    );
+    
+    // Filter out completed meetings with no content (no embeddings/transcripts and no summary)
+    // But keep active meetings regardless of content
     const meetingsWithContent = historicalMeetings.filter(meeting => {
-      const hasTranscripts = meeting.transcriptCount > 0;
+      // Always include active meetings
+      if (meeting.startedAt && !meeting.endedAt) {
+        return true;
+      }
+      
+      // For completed meetings, check if they have content
+      const hasTranscripts = meeting.hasEmbeddings || meeting.transcriptCount > 0;
       const hasSummary = meeting.summary && meeting.summary.content && meeting.summary.content.trim().length > 0;
       return hasTranscripts || hasSummary;
     });
@@ -83,25 +95,33 @@ export async function GET(
     }
     
     // Transform historical meetings to match frontend interface
-    const transformedHistoricalMeetings = meetingsWithContent.map(meeting => ({
-      id: meeting._id,
-      roomName: meeting.roomName,
-      title: meeting.title || meeting.type,
-      type: meeting.type,
-      startTime: meeting.startedAt.toISOString(),
-      endTime: meeting.endedAt?.toISOString(),
-      duration: meeting.duration,
-      isUpcoming: false,
-      participants: meeting.participants || [],
-      summary: meeting.summary ? {
-        content: meeting.summary.content,
-        keyPoints: meeting.summary.keyPoints || [],
-        actionItems: meeting.summary.actionItems || [],
-        decisions: meeting.summary.decisions || []
-      } : undefined,
-      // Only include transcripts if they were requested and available
-      transcripts: (meeting as any).transcripts || []
-    }));
+    const transformedHistoricalMeetings = meetingsWithContent.map(meeting => {
+      const isActive = meeting.startedAt && !meeting.endedAt;
+      const isProcessing = meeting.endedAt && meeting.processingStatus && meeting.processingStatus !== 'completed' && meeting.processingStatus !== 'failed';
+      
+      return {
+        id: meeting._id,
+        roomName: meeting.roomName,
+        title: meeting.title || meeting.type,
+        type: meeting.type,
+        startTime: meeting.startedAt.toISOString(),
+        endTime: meeting.endedAt?.toISOString(),
+        duration: meeting.duration,
+        isUpcoming: false,
+        isActive: isActive,
+        isProcessing: isProcessing,
+        processingStatus: meeting.processingStatus,
+        participants: meeting.participants || [],
+        summary: meeting.summary ? {
+          content: meeting.summary.content,
+          keyPoints: meeting.summary.keyPoints || [],
+          actionItems: meeting.summary.actionItems || [],
+          decisions: meeting.summary.decisions || []
+        } : undefined,
+        // Transcripts are stored in Pinecone, not returned by default
+        hasTranscripts: meeting.hasEmbeddings || meeting.transcriptCount > 0
+      };
+    });
     
     // Combine and sort all meetings (upcoming first, then historical by date)
     const allMeetings = [
