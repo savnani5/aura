@@ -285,7 +285,7 @@ function VideoConferenceComponent(props: {
               roomName: props.roomName,
               roomId: props.roomName, // Use roomName as roomId for now
               participantName: userName,
-              title: `Meeting in ${props.roomName}`,
+              title: 'Meeting in progress', // Temporary title - will be updated by AI
               type: 'Meeting'
             }),
           });
@@ -297,6 +297,24 @@ function VideoConferenceComponent(props: {
             
             // Store meeting ID in Zustand store (replaces localStorage)
             MeetingStorageUtils.setMeetingId(props.roomName, meetingId);
+            
+            // Track local participant joining
+            try {
+              await fetch(`/api/meetings/${props.roomName}/participants`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  meetingId,
+                  participantId: room.localParticipant?.sid || 'local',
+                  participantName: userName,
+                  action: 'join',
+                  timestamp: new Date().toISOString(),
+                  isGuest: false // This is always authenticated user creating meeting
+                })
+              });
+            } catch (error) {
+              console.error('Error tracking local participant join:', error);
+            }
           } else {
             console.error('❌ Failed to start meeting record:', await response.text());
           }
@@ -310,9 +328,11 @@ function VideoConferenceComponent(props: {
     
     room.on(RoomEvent.Connected, handleConnected);
 
-    // Add participant tracking to Zustand store
-    const handleParticipantConnected = (participant: any) => {
+    // Add participant tracking to Zustand store AND database
+    const handleParticipantConnected = async (participant: any) => {
       console.log('👥 Participant connected:', participant.identity);
+      
+      // Update Zustand store
       useMeetingStore.getState().addParticipant({
         id: participant.sid,
         name: participant.identity,
@@ -321,14 +341,60 @@ function VideoConferenceComponent(props: {
         isHost: participant === room.localParticipant,
         joinedAt: new Date()
       });
+      
+      // Update database participant tracking
+      const meetingId = MeetingStorageUtils.getMeetingId(props.roomName);
+      const trackingMeetingId = meetingId || `guest-${props.roomName}`;
+      const isGuestParticipant = !meetingId;
+      
+      try {
+        await fetch(`/api/meetings/${props.roomName}/participants`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            meetingId: trackingMeetingId,
+            participantId: participant.sid,
+            participantName: participant.identity,
+            action: 'join',
+            timestamp: new Date().toISOString(),
+            isGuest: isGuestParticipant
+          })
+        });
+      } catch (error) {
+        console.error('Error tracking participant join:', error);
+      }
     };
 
-    const handleParticipantDisconnected = (participant: any) => {
+    const handleParticipantDisconnected = async (participant: any) => {
       console.log('👥 Participant disconnected:', participant.identity);
+      
+      // Update Zustand store
       useMeetingStore.getState().updateParticipant(participant.sid, {
         isOnline: false,
         leftAt: new Date()
       });
+      
+      // Update database participant tracking
+      const meetingId = MeetingStorageUtils.getMeetingId(props.roomName);
+      const trackingMeetingId = meetingId || `guest-${props.roomName}`;
+      const isGuestParticipant = !meetingId;
+      
+      try {
+        await fetch(`/api/meetings/${props.roomName}/participants`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            meetingId: trackingMeetingId,
+            participantId: participant.sid,
+            participantName: participant.identity,
+            action: 'leave',
+            timestamp: new Date().toISOString(),
+            isGuest: isGuestParticipant
+          })
+        });
+      } catch (error) {
+        console.error('Error tracking participant leave:', error);
+      }
     };
 
     room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
@@ -471,6 +537,8 @@ function VideoConferenceComponent(props: {
   };
 
   // Store shared transcripts globally for meeting end
+  // These transcripts are collected from ALL participants via data channel
+  // from the moment the first participant joins until the last participant leaves
   const [sharedTranscripts, setSharedTranscripts] = React.useState<Transcript[]>([]);
   
   // Use ref to preserve transcripts during room cleanup
@@ -480,6 +548,7 @@ function VideoConferenceComponent(props: {
   const meetingEndTriggeredRef = React.useRef<boolean>(false);
   
   // Update ref whenever transcripts change
+  // Transcripts are continuously updated by EnhancedControlBar/TranscriptsPanel
   React.useEffect(() => {
     transcriptsRef.current = sharedTranscripts;
   }, [sharedTranscripts]);
@@ -507,70 +576,119 @@ function VideoConferenceComponent(props: {
       return;
     }
     
-    // Count total participants (local + remote)
-    const totalParticipants = 1 + room.remoteParticipants.size;
-    console.log(`👥 MEETING END PIPELINE: Total participants: ${totalParticipants} (1 local + ${room.remoteParticipants.size} remote)`);
+    // Get current participant counts for detailed logging
+    const currentRemoteParticipants = Array.from(room.remoteParticipants.values());
+    const totalCurrentParticipants = 1 + room.remoteParticipants.size; // 1 = local participant
     
-    // Only trigger meeting end if this is the last person leaving
+    console.log('👥 MEETING END PIPELINE: Current participant status:', {
+      localParticipant: room.localParticipant?.identity || 'Unknown',
+      remoteParticipants: currentRemoteParticipants.map(p => p.identity),
+      totalBeforeLeaving: totalCurrentParticipants,
+      remoteCount: room.remoteParticipants.size
+    });
+    
+    // Only trigger meeting end if NO remote participants remain (room will be empty after local leaves)
+    const remainingParticipants = room.remoteParticipants.size;
     let shouldEndMeeting = false;
-    if (totalParticipants === 1) {
-      // This is the last participant leaving
+    
+    if (remainingParticipants === 0) {
+      // This is the last participant leaving - room will be completely empty
       shouldEndMeeting = true;
-      console.log('👤 MEETING END PIPELINE: Last participant leaving - triggering meeting end');
+      console.log('👤 MEETING END PIPELINE: LAST PARTICIPANT LEAVING - Room will be empty - triggering meeting end');
     } else {
-      console.log('👥 MEETING END PIPELINE: Other participants still in room - not ending meeting');
+      console.log(`👥 MEETING END PIPELINE: NOT ENDING MEETING - ${remainingParticipants} participants will remain:`, 
+        currentRemoteParticipants.map(p => p.identity));
     }
     
     // Set flag immediately to prevent concurrent calls
     meetingEndTriggeredRef.current = true;
     
-    // Get transcripts immediately before any disconnection
-    const finalTranscripts = transcriptsRef.current;
+    // Get transcripts immediately before any disconnection (handle undefined case)
+    const finalTranscripts = transcriptsRef.current || [];
     console.log('🔍 MEETING END PIPELINE: Final transcript count:', finalTranscripts.length);
     
     // Get meeting ID for background processing from Zustand store (replaces localStorage)
     const meetingId = MeetingStorageUtils.getMeetingId(props.roomName);
     console.log('🆔 MEETING END PIPELINE: Meeting ID from storage:', meetingId);
     
-    // Immediately disconnect and redirect - don't wait for transcript processing
+    // Determine user type but don't exit early - all users need to be tracked for meeting end
+    const participantName = props.userChoices?.username || room?.localParticipant?.name || '';
+    const isGuest = !meetingId || (participantName && !participantName.includes('@'));
+    
+    console.log('👤 MEETING END PIPELINE: User type detection:', {
+      participantName,
+      meetingId: meetingId ? 'EXISTS' : 'NULL',
+      isGuest: isGuest ? 'YES - Guest user' : 'NO - Authenticated user'
+    });
+    
+        // Track ALL participants (guests and authenticated) leaving for accurate meeting end detection
+    let databaseSaysEndMeeting = shouldEndMeeting; // Default to LiveKit room check
+    
+    // For guests, we'll use a fallback meetingId if none exists (to track them in participant system)
+    const trackingMeetingId = meetingId || `guest-${props.roomName}`;
+    
     try {
-      // Transcription service is handled by MeetingAssistant component
-      console.log('🛑 Room is disconnecting...');
+      const response = await fetch(`/api/meetings/${props.roomName}/participants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meetingId: trackingMeetingId,
+          participantId: room.localParticipant?.sid || 'local',
+          participantName: participantName || 'Unknown',
+          action: 'leave',
+          timestamp: new Date().toISOString(),
+          isGuest: isGuest
+        })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        databaseSaysEndMeeting = data.data?.shouldEndMeeting || false;
+        console.log(`📊 Database participant tracking result for ${isGuest ? 'guest' : 'authenticated'} user:`, {
+          totalParticipants: data.data?.totalParticipants,
+          activeParticipants: data.data?.activeParticipants,
+          shouldEndMeeting: databaseSaysEndMeeting
+        });
+      }
+    } catch (error) {
+      console.error(`Error tracking ${isGuest ? 'guest' : 'authenticated'} participant leave:`, error);
+    }
+    
+    // Use database decision if available, otherwise fall back to LiveKit room check
+    const finalShouldEndMeeting = databaseSaysEndMeeting;
+    
+    // Immediately disconnect user and redirect based on type - don't wait for transcript processing
+    try {
+      console.log(`🛑 ${isGuest ? 'Guest' : 'Authenticated'} user room is disconnecting...`);
       
       if (room.state === 'connected') {
-        console.log('🔌 Disconnecting from room immediately...');
+        console.log(`🔌 Disconnecting ${isGuest ? 'guest' : 'authenticated'} user from room immediately...`);
         await room.disconnect();
       }
     } catch (error) {
-      console.error('Error during immediate disconnect:', error);
+      console.error(`Error during ${isGuest ? 'guest' : 'authenticated'} user disconnect:`, error);
     }
 
-    // Check if user is a guest by checking if there's no meeting ID stored
-    // Authenticated users creating meetings will have a meetingId stored in localStorage
-    // Guests joining via direct room links won't have this
-    const participantName = props.userChoices?.username || room?.localParticipant?.name || '';
-    const participantIdentity = room?.localParticipant?.identity || '';
-    
-    // Guests are users who don't have a meetingId (they joined via direct link)
-    // Or users whose username doesn't match a typical authenticated user pattern
-    const isGuest = !meetingId || (participantName && !participantName.includes('@'));
-    
+    // Redirect based on user type
     if (isGuest) {
-      console.log('🚪 Guest user detected - redirecting to landing page...');
+      console.log('🚪 Guest user - redirecting to landing page...');
       router.push('/');
     } else {
       console.log('🏃 Authenticated user - redirecting to dashboard...');
       router.push(`/meetingroom/${props.roomName}`);
     }
 
-    // Only process transcripts and end meeting if this is the last person leaving
-    console.log('🔍 MEETING END PIPELINE: Checking conditions for meeting end processing:', {
-      shouldEndMeeting,
+    console.log('🔍 MEETING END PIPELINE: Final decision for meeting end processing:', {
+      liveKitCheck: shouldEndMeeting ? 'YES - No remote participants' : 'NO - Remote participants remain',
+      databaseCheck: databaseSaysEndMeeting ? 'YES - No active participants' : 'NO - Active participants remain',
+      finalDecision: finalShouldEndMeeting ? 'END MEETING' : 'KEEP MEETING ACTIVE',
       transcriptCount: finalTranscripts.length,
-      hasMeetingId: !!meetingId
+      hasMeetingId: !!meetingId,
+      remainingParticipants
     });
     
-    if (shouldEndMeeting && meetingId) {
+    // Only process meetings that have a real meetingId (not guest-only meetings)
+    if (finalShouldEndMeeting && meetingId) {
       console.log('🔄 MEETING END PIPELINE: Starting background transcript processing for meeting end...');
       console.log('📊 MEETING END PIPELINE: Transcript count:', finalTranscripts.length);
       
@@ -596,14 +714,17 @@ function VideoConferenceComponent(props: {
         });
     } else {
       console.log('🔍 MEETING END PIPELINE: Skipping meeting end processing because:', {
-        shouldEndMeeting: shouldEndMeeting ? '✅' : '❌ Not last participant',
+        liveKitCheck: shouldEndMeeting ? '✅' : `❌ ${remainingParticipants} participants will remain`,
+        databaseCheck: databaseSaysEndMeeting ? '✅' : '❌ Active participants remain',
+        finalDecision: finalShouldEndMeeting ? (meetingId ? '❌ Meeting processing will run' : '❌ Guest-only meeting') : '❌ MEETING STAYS ACTIVE',
         transcriptCount: finalTranscripts.length,
-        hasMeetingId: meetingId ? '✅' : '❌ No meeting ID'
+        hasMeetingId: meetingId ? '✅' : '❌ No meeting ID (guest-only or no authenticated users)',
+        isGuestOnlyMeeting: !meetingId ? '✅ Guest-only meeting - no processing needed' : '❌ Has authenticated users'
       });
       
       // If we have a meetingId but no transcripts and this is the last participant,
       // we should still call the end API to clean up the empty meeting
-      if (shouldEndMeeting && meetingId && finalTranscripts.length === 0) {
+      if (finalShouldEndMeeting && meetingId && finalTranscripts.length === 0) {
         console.log('🗑️ MEETING END PIPELINE: Cleaning up empty meeting...');
         processTranscriptsInBackground([], meetingId, props.roomName, [])
           .then(() => {

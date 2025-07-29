@@ -121,9 +121,10 @@ export async function POST(request: NextRequest) {
       const meetingData = {
         roomId: meetingRoom._id,
         roomName: roomName,
-        title: title || meetingRoom.title || 'Meeting',
+        title: 'Meeting in progress', // Temporary title - will be updated by AI after meeting ends
         type: type || meetingRoom.type || 'Meeting',
         startedAt: new Date(),
+        isActive: true, // Mark as active meeting
         participants: participantName ? [{
           name: participantName,
           joinedAt: new Date(),

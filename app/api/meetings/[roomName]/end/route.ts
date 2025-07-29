@@ -121,7 +121,8 @@ export async function POST(
       // Update meeting with basic end data first
       const updateData: any = {
         endedAt: meetingEndedAt,
-        duration: calculatedDuration
+        duration: calculatedDuration,
+        isActive: false // Mark meeting as inactive
       };
 
       if (participants.length > 0) {

@@ -418,7 +418,7 @@ export function MeetingDatabase({
               ) : (
                 <>
                   <Link size={16} />
-                  Copy Link
+                  Copy Meeting Link
                 </>
               )}
             </Button>
@@ -508,7 +508,7 @@ export function MeetingDatabase({
                   ) : (
                     <>
                       <Link size={16} />
-                      Copy Link
+                      Copy Meeting Link
                     </>
                   )}
                 </Button>

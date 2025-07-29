@@ -97,7 +97,17 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
   };
 
   const handleBack = () => {
-    router.back();
+    // Check if we have workspace in URL params to navigate back properly
+    const urlParams = new URLSearchParams(window.location.search);
+    const workspaceId = urlParams.get('workspace');
+    
+    if (workspaceId) {
+      // Navigate back to dashboard with workspace parameter
+      router.push(`/?workspace=${workspaceId}`);
+    } else {
+      // Fallback to browser back
+      router.back();
+    }
   };
 
   const handleCopy = async () => {

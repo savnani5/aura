@@ -87,6 +87,32 @@ export function SimplifiedDashboard() {
   const [isCurrentUserHost, setIsCurrentUserHost] = useState(false);
   const [participantRefreshTrigger, setParticipantRefreshTrigger] = useState(0);
   
+  // Persistent caching state using sessionStorage
+  const [lastWorkspacesFetch, setLastWorkspacesFetch] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      return parseInt(sessionStorage.getItem('ohm-workspaces-fetch-time') || '0', 10);
+    }
+    return 0;
+  });
+  const [lastMeetingsFetch, setLastMeetingsFetch] = useState<{[key: string]: number}>(() => {
+    if (typeof window !== 'undefined') {
+      return JSON.parse(sessionStorage.getItem('ohm-meetings-fetch-times') || '{}');
+    }
+    return {};
+  });
+  const [workspacesCache, setWorkspacesCache] = useState<Workspace[]>(() => {
+    if (typeof window !== 'undefined') {
+      return JSON.parse(sessionStorage.getItem('ohm-workspaces-cache') || '[]');
+    }
+    return [];
+  });
+  const [meetingsCache, setMeetingsCache] = useState<{[key: string]: Meeting[]}>(() => {
+    if (typeof window !== 'undefined') {
+      return JSON.parse(sessionStorage.getItem('ohm-meetings-cache') || '{}');
+    }
+    return {};
+  });
+  
   // Usage tracking
   const { usageData, loading: usageLoading, checkBeforeMeeting, refetch: refetchUsage } = useUsageTracking();
   
@@ -98,6 +124,41 @@ export function SimplifiedDashboard() {
   // Sidebar constraints
   const MIN_SIDEBAR_WIDTH = 250;
   const MAX_SIDEBAR_WIDTH = 400;
+  
+  // Cache settings (5 minutes for workspaces, 2 minutes for meetings)
+  const WORKSPACE_CACHE_DURATION = 5 * 60 * 1000;
+  const MEETINGS_CACHE_DURATION = 2 * 60 * 1000;
+  
+  // Cache invalidation helper
+  const invalidateCache = useCallback((type: 'workspaces' | 'meetings' | 'all', workspaceId?: string) => {
+    if (type === 'workspaces' || type === 'all') {
+      setLastWorkspacesFetch(0);
+      setWorkspacesCache([]);
+      // Clear sessionStorage
+      sessionStorage.removeItem('ohm-workspaces-cache');
+      sessionStorage.removeItem('ohm-workspaces-fetch-time');
+    }
+    if (type === 'meetings' || type === 'all') {
+      if (workspaceId) {
+        const newFetchTimes = { ...lastMeetingsFetch, [workspaceId]: 0 };
+        const newCache = { ...meetingsCache };
+        delete newCache[workspaceId];
+        
+        setLastMeetingsFetch(newFetchTimes);
+        setMeetingsCache(newCache);
+        
+        // Update sessionStorage
+        sessionStorage.setItem('ohm-meetings-fetch-times', JSON.stringify(newFetchTimes));
+        sessionStorage.setItem('ohm-meetings-cache', JSON.stringify(newCache));
+      } else {
+        setLastMeetingsFetch({});
+        setMeetingsCache({});
+        // Clear sessionStorage
+        sessionStorage.removeItem('ohm-meetings-cache');
+        sessionStorage.removeItem('ohm-meetings-fetch-times');
+      }
+    }
+  }, [lastMeetingsFetch, meetingsCache]);
 
   // Load sidebar width from localStorage on mount
   useEffect(() => {
@@ -157,14 +218,107 @@ export function SimplifiedDashboard() {
 
   useEffect(() => {
     if (isLoaded && user) {
-      fetchWorkspaces();
+      // Check if we have valid cached data first
+      const now = Date.now();
+      const cacheValid = workspacesCache.length > 0 && (now - lastWorkspacesFetch) < WORKSPACE_CACHE_DURATION;
+      
+      console.log('🔍 Dashboard mount - Cache check:', {
+        hasCache: workspacesCache.length > 0,
+        lastFetch: lastWorkspacesFetch,
+        timeSinceLastFetch: now - lastWorkspacesFetch,
+        cacheDuration: WORKSPACE_CACHE_DURATION,
+        cacheValid,
+        cacheData: workspacesCache.map(w => w.name)
+      });
+      
+      if (cacheValid) {
+        console.log('✅ Using cached workspaces data on mount - NO API CALL');
+        setWorkspaces(workspacesCache);
+        setLoading(false);
+      } else {
+        console.log('❌ Cache invalid or empty - Making API call');
+        fetchWorkspaces();
+      }
     }
   }, [isLoaded, user]);
 
+  // Handle workspace selection from URL params or localStorage
+  useEffect(() => {
+    if (workspaces.length > 0 && !selectedWorkspace) {
+      // Check URL params first
+      const urlParams = new URLSearchParams(window.location.search);
+      const workspaceFromUrl = urlParams.get('workspace');
+      
+      // Check localStorage second
+      const workspaceFromStorage = localStorage.getItem('ohm-selected-workspace');
+      
+      // Find workspace by ID from URL or localStorage
+      const targetWorkspaceId = workspaceFromUrl || workspaceFromStorage;
+      const targetWorkspace = targetWorkspaceId 
+        ? workspaces.find(w => w.id === targetWorkspaceId)
+        : null;
+      
+      if (targetWorkspace) {
+        console.log('Restoring workspace selection:', targetWorkspace.name);
+        setSelectedWorkspace(targetWorkspace);
+        
+        // Clean up URL params after restoration
+        if (workspaceFromUrl) {
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.delete('workspace');
+          window.history.replaceState({}, '', newUrl.toString());
+        }
+      } else {
+        // Fallback to first workspace
+        setSelectedWorkspace(workspaces[0]);
+      }
+    }
+  }, [workspaces, selectedWorkspace]);
+
+  // Cleanup cache when user navigates away from the app entirely
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Clear sessionStorage when user closes tab/window
+      sessionStorage.removeItem('ohm-workspaces-cache');
+      sessionStorage.removeItem('ohm-workspaces-fetch-time');
+      sessionStorage.removeItem('ohm-meetings-cache');
+      sessionStorage.removeItem('ohm-meetings-fetch-times');
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
   useEffect(() => {
     if (selectedWorkspace) {
-      fetchMeetingsForWorkspace(selectedWorkspace.id);
+      // Check if we have valid cached meetings first
+      const now = Date.now();
+      const lastFetch = lastMeetingsFetch[selectedWorkspace.id] || 0;
+      const cacheValid = meetingsCache[selectedWorkspace.id] && (now - lastFetch) < MEETINGS_CACHE_DURATION;
+      
+      console.log('🔍 Workspace selection - Meetings cache check:', {
+        workspaceId: selectedWorkspace.id,
+        hasCache: !!meetingsCache[selectedWorkspace.id],
+        lastFetch,
+        timeSinceLastFetch: now - lastFetch,
+        cacheDuration: MEETINGS_CACHE_DURATION,
+        cacheValid
+      });
+      
+      if (cacheValid) {
+        console.log('✅ Using cached meetings data - NO API CALL');
+        setMeetings(meetingsCache[selectedWorkspace.id]);
+      } else {
+        console.log('❌ Meetings cache invalid or empty - Making API call');
+        fetchMeetingsForWorkspace(selectedWorkspace.id);
+      }
+      
       checkIfUserIsHost(selectedWorkspace.id);
+      // Persist selected workspace to localStorage
+      localStorage.setItem('ohm-selected-workspace', selectedWorkspace.id);
     }
   }, [selectedWorkspace]);
 
@@ -196,9 +350,32 @@ export function SimplifiedDashboard() {
     }
   };
 
-  const fetchWorkspaces = async () => {
+  const fetchWorkspaces = async (forceRefresh = false) => {
+    console.log('🚀 fetchWorkspaces called with forceRefresh:', forceRefresh);
+    
+    // Check cache first
+    const now = Date.now();
+    const cacheValid = !forceRefresh && workspacesCache.length > 0 && (now - lastWorkspacesFetch) < WORKSPACE_CACHE_DURATION;
+    
+    console.log('🔍 fetchWorkspaces - Cache check:', {
+      forceRefresh,
+      hasCache: workspacesCache.length > 0,
+      lastFetch: lastWorkspacesFetch,
+      timeSinceLastFetch: now - lastWorkspacesFetch,
+      cacheDuration: WORKSPACE_CACHE_DURATION,
+      cacheValid
+    });
+    
+    if (cacheValid) {
+      console.log('✅ fetchWorkspaces - Using cached data - NO API CALL');
+      setWorkspaces(workspacesCache);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      console.log('Fetching fresh workspaces data');
       const response = await fetch('/api/meetings');
       
       if (!response.ok) throw new Error('Failed to fetch workspaces');
@@ -220,12 +397,15 @@ export function SimplifiedDashboard() {
         
         console.log('Transformed workspaces with participant counts:', transformedWorkspaces.map(w => ({ name: w.name, participantCount: w.participantCount })));
         
-        setWorkspaces(transformedWorkspaces);
+        // Update cache and persist to sessionStorage
+        setWorkspacesCache(transformedWorkspaces);
+        setLastWorkspacesFetch(now);
         
-        // Auto-select first workspace if none selected
-        if (!selectedWorkspace && transformedWorkspaces.length > 0) {
-          setSelectedWorkspace(transformedWorkspaces[0]);
-        }
+        // Persist to sessionStorage
+        sessionStorage.setItem('ohm-workspaces-cache', JSON.stringify(transformedWorkspaces));
+        sessionStorage.setItem('ohm-workspaces-fetch-time', now.toString());
+        
+        setWorkspaces(transformedWorkspaces);
       }
     } catch (error) {
       console.error('Error fetching workspaces:', error);
@@ -234,8 +414,32 @@ export function SimplifiedDashboard() {
     }
   };
 
-  const fetchMeetingsForWorkspace = async (workspaceId: string) => {
+  const fetchMeetingsForWorkspace = async (workspaceId: string, forceRefresh = false) => {
+    console.log('🚀 fetchMeetingsForWorkspace called:', { workspaceId, forceRefresh });
+    
+    // Check cache first
+    const now = Date.now();
+    const lastFetch = lastMeetingsFetch[workspaceId] || 0;
+    const cacheValid = !forceRefresh && meetingsCache[workspaceId] && (now - lastFetch) < MEETINGS_CACHE_DURATION;
+    
+    console.log('🔍 fetchMeetingsForWorkspace - Cache check:', {
+      workspaceId,
+      forceRefresh,
+      hasCache: !!meetingsCache[workspaceId],
+      lastFetch,
+      timeSinceLastFetch: now - lastFetch,
+      cacheDuration: MEETINGS_CACHE_DURATION,
+      cacheValid
+    });
+    
+    if (cacheValid) {
+      console.log(`✅ fetchMeetingsForWorkspace - Using cached data - NO API CALL for: ${workspaceId}`);
+      setMeetings(meetingsCache[workspaceId]);
+      return;
+    }
+
     try {
+      console.log(`Fetching fresh meetings data for workspace: ${workspaceId}`);
       const response = await fetch(`/api/meetings/${workspaceId}/history`);
       
       if (!response.ok) throw new Error('Failed to fetch meetings');
@@ -264,6 +468,23 @@ export function SimplifiedDashboard() {
                    meeting.endedAt ? 'completed' : 'in_progress'
         }));
         
+        // Update cache and persist to sessionStorage
+        const newMeetingsCache = {
+          ...meetingsCache,
+          [workspaceId]: transformedMeetings
+        };
+        const newFetchTimes = {
+          ...lastMeetingsFetch,
+          [workspaceId]: now
+        };
+        
+        setMeetingsCache(newMeetingsCache);
+        setLastMeetingsFetch(newFetchTimes);
+        
+        // Persist to sessionStorage
+        sessionStorage.setItem('ohm-meetings-cache', JSON.stringify(newMeetingsCache));
+        sessionStorage.setItem('ohm-meetings-fetch-times', JSON.stringify(newFetchTimes));
+        
         setMeetings(transformedMeetings);
       }
     } catch (error) {
@@ -278,8 +499,9 @@ export function SimplifiedDashboard() {
   };
 
   const handleMeetingClick = (meeting: Meeting) => {
-    // Navigate to meeting summary view
-    router.push(`/meeting/${meeting.id}`);
+    // Navigate to meeting summary view with workspace context
+    const workspaceParam = selectedWorkspace ? `?workspace=${selectedWorkspace.id}` : '';
+    router.push(`/meeting/${meeting.id}${workspaceParam}`);
   };
 
   const handleJoinWorkspace = async (workspaceId: string) => {
@@ -325,9 +547,15 @@ export function SimplifiedDashboard() {
         <WorkspaceSidebar
           workspaces={workspaces}
           selectedWorkspace={selectedWorkspace}
-          onSelectWorkspace={setSelectedWorkspace}
+          onSelectWorkspace={(workspace) => {
+            setSelectedWorkspace(workspace);
+            // Also persist the selection immediately
+            if (workspace) {
+              localStorage.setItem('ohm-selected-workspace', workspace.id);
+            }
+          }}
           onCreateWorkspace={handleCreateWorkspace}
-          onWorkspaceCreated={fetchWorkspaces}
+          onWorkspaceCreated={() => fetchWorkspaces(true)}
           loading={loading}
         />
         
@@ -351,7 +579,7 @@ export function SimplifiedDashboard() {
           onJoinWorkspace={handleJoinWorkspace}
           onOpenSettings={() => setIsWorkspaceSettingsOpen(true)}
           onOpenTasks={() => setIsTasksOpen(true)}
-          onRefreshMeetings={() => selectedWorkspace && fetchMeetingsForWorkspace(selectedWorkspace.id)}
+          onRefreshMeetings={() => selectedWorkspace && fetchMeetingsForWorkspace(selectedWorkspace.id, true)}
           loading={loading}
           isCurrentUserHost={isCurrentUserHost}
           refreshTrigger={participantRefreshTrigger}
@@ -421,17 +649,17 @@ export function SimplifiedDashboard() {
           workspace={selectedWorkspace}
           onClose={() => setIsWorkspaceSettingsOpen(false)}
           onWorkspaceUpdated={() => {
-            fetchWorkspaces();
+            fetchWorkspaces(true); // Force refresh workspaces
             // Also refresh the current workspace meetings and participants
             if (selectedWorkspace) {
-              fetchMeetingsForWorkspace(selectedWorkspace.id);
+              fetchMeetingsForWorkspace(selectedWorkspace.id, true); // Force refresh meetings
               setParticipantRefreshTrigger(prev => prev + 1);
             }
             setIsWorkspaceSettingsOpen(false);
           }}
           onWorkspaceDeleted={() => {
             setSelectedWorkspace(null);
-            fetchWorkspaces();
+            fetchWorkspaces(true); // Force refresh workspaces
             setIsWorkspaceSettingsOpen(false);
           }}
         />

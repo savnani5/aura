@@ -24,27 +24,27 @@
   --radius: 0.5rem;
 }
 
-/* Dark theme specifically for live meetings - Pure black/grey only */
+/* Dark theme specifically for live meetings */
 [data-theme="meeting"] {
-  --color-background: #000000;
-  --color-foreground: #ffffff;
-  --color-card: #1a1a1a;
-  --color-card-foreground: #ffffff;
-  --color-popover: #1a1a1a;
-  --color-popover-foreground: #ffffff;
-  --color-primary: #6b7280;
+  --color-background: #0f172a;
+  --color-foreground: #f8fafc;
+  --color-card: #1e293b;
+  --color-card-foreground: #f8fafc;
+  --color-popover: #1e293b;
+  --color-popover-foreground: #f8fafc;
+  --color-primary: #64748b;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #2a2a2a;
-  --color-secondary-foreground: #ffffff;
-  --color-muted: #2a2a2a;
-  --color-muted-foreground: #9ca3af;
-  --color-accent: #374151;
-  --color-accent-foreground: #ffffff;
+  --color-secondary: #334155;
+  --color-secondary-foreground: #f8fafc;
+  --color-muted: #334155;
+  --color-muted-foreground: #94a3b8;
+  --color-accent: #334155;
+  --color-accent-foreground: #f8fafc;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
-  --color-border: #374151;
-  --color-input: #2a2a2a;
-  --color-ring: #6b7280;
+  --color-border: #334155;
+  --color-input: #334155;
+  --color-ring: #64748b;
 }
 
 /* Import simplified meeting styles */
@@ -56,12 +56,11 @@ body, html {
   color: hsl(var(--foreground));
 }
 
-/* Fix for meeting backgrounds - Force pure black */
+/* Fix for meeting backgrounds */
 [data-theme="meeting"] body,
-[data-theme="meeting"] html,
-[data-theme="meeting"] {
-  background-color: #000000 !important;
-  color: #ffffff !important;
+[data-theme="meeting"] html {
+  background-color: #0f172a !important;
+  color: #f8fafc !important;
 }
 
 /* Custom scrollbar styles for consistency */

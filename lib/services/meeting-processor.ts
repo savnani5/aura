@@ -162,10 +162,14 @@ export class MeetingProcessor {
           summaryGeneratedAt: new Date()
         };
 
-        // Update meeting title from AI if available
-        if (summary.title && summary.title !== meeting.type) {
+        // Update meeting title from AI if available (replace temporary title)
+        if (summary.title && summary.title.trim() !== '') {
           updateData.title = summary.title;
-          console.log(`📝 FULL BACKGROUND PROCESSING: Updating meeting title to: "${summary.title}"`);
+          console.log(`📝 FULL BACKGROUND PROCESSING: Updating meeting title from "${meeting.title}" to: "${summary.title}"`);
+        } else {
+          // Fallback title if AI doesn't generate one
+          updateData.title = meeting.type || 'Meeting';
+          console.log(`📝 FULL BACKGROUND PROCESSING: Using fallback title: "${updateData.title}"`);
         }
 
         await dbService.updateMeeting(meetingId, updateData);
