@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { X, Plus, Trash2, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -81,14 +81,7 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
     })) || [],
   });
 
-  // Initialize form with workspace data and fetch detailed workspace info
-  useEffect(() => {
-    if (workspace) {
-      fetchWorkspaceDetails();
-    }
-  }, [workspace]);
-
-  const fetchWorkspaceDetails = async () => {
+  const fetchWorkspaceDetails = useCallback(async () => {
     try {
       const response = await fetch(`/api/meetings/${workspace.id}`);
       if (response.ok) {
@@ -118,7 +111,14 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
         participants: [],
       });
     }
-  };
+  }, [workspace]);
+
+  // Initialize form with workspace data and fetch detailed workspace info
+  useEffect(() => {
+    if (workspace) {
+      fetchWorkspaceDetails();
+    }
+  }, [workspace, fetchWorkspaceDetails]);
 
   const handleInputChange = (field: keyof WorkspaceSettingsForm, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }));

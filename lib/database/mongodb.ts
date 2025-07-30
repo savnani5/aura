@@ -311,7 +311,10 @@ const MeetingSchema = new mongoose.Schema({
   summaryGeneratedAt: { type: Date },
   processingCompletedAt: { type: Date },
   processingFailedAt: { type: Date },
-  processingError: { type: String }
+  processingError: { type: String },
+  
+  // Meeting status
+  isActive: { type: Boolean, default: false } // Whether the meeting is currently active
 }, {
   timestamps: true
 });
@@ -510,6 +513,9 @@ export interface IMeeting {
   processingCompletedAt?: Date;
   processingFailedAt?: Date;
   processingError?: string;
+  
+  // Meeting status
+  isActive?: boolean; // Whether the meeting is currently active
   
   createdAt: Date;
   updatedAt: Date;

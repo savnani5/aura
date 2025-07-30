@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, CheckSquare, AlertCircle, Clock, User, Calendar, Download, Filter, Search, ChevronDown, Check, Trash2, Undo2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -50,13 +50,62 @@ export function TaskManagementPanel({ workspaceId, workspaceName, onClose }: Tas
   });
   const modalRef = useRef<HTMLDivElement>(null);
 
+  const fetchTasks = useCallback(async () => {
+    try {
+      // Fetch tasks only for the current workspace
+      const response = await fetch(`/api/tasks?roomId=${workspaceId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setTasks(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [workspaceId]);
+
+  const filterTasks = useCallback(() => {
+    let filtered = [...tasks];
+
+    // Filter by active/archived tab
+    if (activeTab === 'active') {
+      filtered = filtered.filter(task => task.reviewStatus !== 'reviewed');
+    } else {
+      filtered = filtered.filter(task => task.reviewStatus === 'reviewed');
+    }
+
+    // Filter by review status (only for active tab)
+    if (activeTab === 'active' && filterStatus !== 'all') {
+      filtered = filtered.filter(task => task.reviewStatus === filterStatus);
+    }
+
+    // Filter by priority
+    if (filterPriority !== 'all') {
+      filtered = filtered.filter(task => task.priority === filterPriority);
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(task => 
+        task.title.toLowerCase().includes(query) ||
+        task.description?.toLowerCase().includes(query) ||
+        task.assignedToName?.toLowerCase().includes(query)
+      );
+    }
+
+    setFilteredTasks(filtered);
+  }, [tasks, filterStatus, filterPriority, searchQuery, activeTab]);
+
   useEffect(() => {
     fetchTasks();
-  }, []);
+  }, [fetchTasks]);
 
   useEffect(() => {
     filterTasks();
-  }, [tasks, filterStatus, filterPriority, searchQuery, activeTab]);
+  }, [filterTasks]);
 
   // Handle click outside to close modal and keyboard shortcuts
   useEffect(() => {
@@ -93,55 +142,6 @@ export function TaskManagementPanel({ workspaceId, workspaceName, onClose }: Tas
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [onClose, showCreateForm, editingTask]);
-
-  const fetchTasks = async () => {
-    try {
-      // Fetch tasks only for the current workspace
-      const response = await fetch(`/api/tasks?roomId=${workspaceId}`);
-      const data = await response.json();
-      
-      if (data.success) {
-        setTasks(data.data);
-      }
-    } catch (error) {
-      console.error('Error fetching tasks:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filterTasks = () => {
-    let filtered = [...tasks];
-
-    // Filter by active/archived tab
-    if (activeTab === 'active') {
-      filtered = filtered.filter(task => task.reviewStatus !== 'reviewed');
-    } else {
-      filtered = filtered.filter(task => task.reviewStatus === 'reviewed');
-    }
-
-    // Filter by review status (only for active tab)
-    if (activeTab === 'active' && filterStatus !== 'all') {
-      filtered = filtered.filter(task => task.reviewStatus === filterStatus);
-    }
-
-    // Filter by priority
-    if (filterPriority !== 'all') {
-      filtered = filtered.filter(task => task.priority === filterPriority);
-    }
-
-    // Filter by search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(task => 
-        task.title.toLowerCase().includes(query) ||
-        task.description?.toLowerCase().includes(query) ||
-        task.assignedToName?.toLowerCase().includes(query)
-      );
-    }
-
-    setFilteredTasks(filtered);
-  };
 
   const handleSelectAll = () => {
     if (selectedTasks.size === filteredTasks.length) {

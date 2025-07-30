@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar, Users, FileText, ArrowLeft, Copy, Share2, X, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -65,11 +65,7 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
   } | null>(null);
   const [showParticipants, setShowParticipants] = useState(false);
 
-  useEffect(() => {
-    fetchMeeting();
-  }, [meetingId, showTranscripts]);
-
-  const fetchMeeting = async () => {
+  const fetchMeeting = useCallback(async () => {
     try {
       // If we're fetching transcripts, set transcripts loading
       if (showTranscripts) {
@@ -94,7 +90,11 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
       setLoading(false);
       setTranscriptsLoading(false);
     }
-  };
+  }, [meetingId, showTranscripts]);
+
+  useEffect(() => {
+    fetchMeeting();
+  }, [fetchMeeting]);
 
   const handleBack = () => {
     // Check if we have workspace in URL params to navigate back properly

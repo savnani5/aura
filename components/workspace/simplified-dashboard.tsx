@@ -322,7 +322,7 @@ export function SimplifiedDashboard() {
     }
   }, [selectedWorkspace]);
 
-  const checkIfUserIsHost = async (workspaceId: string) => {
+  const checkIfUserIsHost = useCallback(async (workspaceId: string) => {
     if (!user) {
       setIsCurrentUserHost(false);
       return;
@@ -348,9 +348,9 @@ export function SimplifiedDashboard() {
       console.error('Error checking user host status:', error);
       setIsCurrentUserHost(false);
     }
-  };
+  }, [user]);
 
-  const fetchWorkspaces = async (forceRefresh = false) => {
+  const fetchWorkspaces = useCallback(async (forceRefresh = false) => {
     console.log('🚀 fetchWorkspaces called with forceRefresh:', forceRefresh);
     
     // Check cache first
@@ -412,9 +412,9 @@ export function SimplifiedDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [workspacesCache, lastWorkspacesFetch, WORKSPACE_CACHE_DURATION]);
 
-  const fetchMeetingsForWorkspace = async (workspaceId: string, forceRefresh = false) => {
+  const fetchMeetingsForWorkspace = useCallback(async (workspaceId: string, forceRefresh = false) => {
     console.log('🚀 fetchMeetingsForWorkspace called:', { workspaceId, forceRefresh });
     
     // Check cache first
@@ -491,7 +491,7 @@ export function SimplifiedDashboard() {
       console.error('Error fetching meetings:', error);
       setMeetings([]);
     }
-  };
+  }, [meetingsCache, lastMeetingsFetch, MEETINGS_CACHE_DURATION, checkIfUserIsHost]);
 
   const handleCreateWorkspace = () => {
     // TODO: Implement create workspace modal
