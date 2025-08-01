@@ -53,14 +53,14 @@ export function AuraLanding() {
       {/* Header */}
       <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-gray-200/50">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex h-24 items-center justify-between">
+          <div className="flex h-20 items-center justify-between">
             <div className="flex items-center gap-3">
               <Image 
                 src="/images/aura_full.svg" 
                 alt="Aura" 
-                width={500} 
-                height={125}
-                className="h-24 w-auto"
+                width={400} 
+                height={100}
+                className="h-20 w-auto"
               />
             </div>
             <div className="flex items-center gap-3">
@@ -80,7 +80,7 @@ export function AuraLanding() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative py-20 md:py-32">
+      <section className="relative pt-12 pb-20 md:pt-16 md:pb-32">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-5xl text-center">
             {/* Bubble */}
@@ -91,11 +91,11 @@ export function AuraLanding() {
             
             {/* Headlines */}
             <h1 className="mb-6 text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-slate-900 leading-tight">
-              It's time to ditch Zoom.
+              It&apos;s time to ditch Zoom.
             </h1>
             
             <p className="mb-12 text-lg md:text-xl text-slate-700 max-w-3xl mx-auto leading-relaxed">
-              Aura's AI-native video calls turn every meeting into a searchable, sharable, actionable workspace. Just one place for answers, notes, and next steps.
+              Aura&apos;s AI-native video calls turn every meeting into a searchable, sharable, actionable workspace. Just one place for answers, notes, and next steps.
             </p>
             
             {/* CTAs */}
@@ -163,13 +163,13 @@ export function AuraLanding() {
                   <div className="flex items-start gap-3">
                     <div className="mt-2 h-1.5 w-1.5 rounded-full bg-slate-500 flex-shrink-0" />
                     <p className="text-slate-700 leading-relaxed">
-                      You walk into meetings unsure what's still open or what was decided last time.
+                      You walk into meetings unsure what&apos;s still open or what was decided last time.
                     </p>
                   </div>
                   <div className="flex items-start gap-3">
                     <div className="mt-2 h-1.5 w-1.5 rounded-full bg-slate-500 flex-shrink-0" />
                     <p className="text-slate-700 leading-relaxed">
-                      You leave meetings overwhelmed and unsure who's doing what or what happens next.
+                      You leave meetings overwhelmed and unsure who&apos;s doing what or what happens next.
                     </p>
                   </div>
                   <div className="flex items-start gap-3">
@@ -196,7 +196,7 @@ export function AuraLanding() {
                   <div className="flex items-start gap-3">
                     <div className="mt-2 h-1.5 w-1.5 rounded-full bg-slate-300 flex-shrink-0" />
                     <p className="text-slate-200 leading-relaxed">
-                      You leave every call with clarity. You'll always know what was said, what's next, and who owns what.
+                      You leave every call with clarity. You&apos;ll always know what was said, what&apos;s next, and who owns what.
                     </p>
                   </div>
                   <div className="flex items-start gap-3">
@@ -230,7 +230,7 @@ export function AuraLanding() {
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 mb-3">Live Meeting Agent</h3>
                 <p className="text-slate-700 text-sm leading-relaxed">
-                  Ask about anything. Could be last week's decision, this week's pricing update, or live web info without leaving the call.
+                  Ask about anything. Could be last week&apos;s decision, this week&apos;s pricing update, or live web info without leaving the call.
                 </p>
               </div>
 
