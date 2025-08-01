@@ -40,6 +40,18 @@ export function SettingsMenu(props: SettingsMenuProps) {
   const layoutContext = useMaybeLayoutContext();
   const room = useRoomContext();
   const { localParticipant, cameraTrack } = useLocalParticipant();
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  // Mobile detection
+  React.useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Independent preview states (don't affect live meeting)
   const [previewCameraEnabled, setPreviewCameraEnabled] = React.useState(false);
@@ -479,28 +491,44 @@ export function SettingsMenu(props: SettingsMenuProps) {
 
   return (
     <div 
-      className="bg-[#1a1a1a] border border-[rgba(55,65,81,0.3)] rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl z-[3100] flex flex-col"
+      className={cn(
+        "bg-[#1a1a1a] border border-[rgba(55,65,81,0.3)] rounded-xl shadow-2xl z-[3100] flex flex-col",
+        isMobile 
+          ? "w-full h-full max-w-none max-h-none rounded-none" 
+          : "w-full max-w-2xl max-h-[80vh] overflow-hidden"
+      )}
       onClick={(e) => e.stopPropagation()}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-[rgba(55,65,81,0.3)]">
+      <div className={cn(
+        "flex items-center justify-between border-b border-[rgba(55,65,81,0.3)]",
+        isMobile ? "p-4" : "p-6"
+      )}>
         <div className="flex items-center gap-3">
-          <Settings size={20} className="text-gray-400" />
-          <h2 className="text-xl font-semibold text-white">Meeting Settings</h2>
+          <Settings size={isMobile ? 18 : 20} className="text-gray-400" />
+          <h2 className={cn(
+            "font-semibold text-white",
+            isMobile ? "text-lg" : "text-xl"
+          )}>Meeting Settings</h2>
         </div>
         <Button
           variant="ghost"
           size="icon"
           onClick={handleClose}
-          className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
+          className={cn(
+            "text-gray-400 hover:text-white hover:bg-white/10",
+            isMobile ? "h-9 w-9" : "h-8 w-8"
+          )}
         >
-          <X size={16} />
+          <X size={isMobile ? 18 : 16} />
         </Button>
       </div>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-6 space-y-8">
+        <div className={cn(
+          isMobile ? "p-4 space-y-6" : "p-6 space-y-8"
+        )}>
           
                       {/* Camera Section */}
             <div className="space-y-4">
@@ -536,17 +564,21 @@ export function SettingsMenu(props: SettingsMenuProps) {
             {/* Camera Controls */}
             <div className="space-y-3">
               {/* First Row: Camera toggle and device selection */}
-              <div className="flex items-center gap-3">
+              <div className={cn(
+                "flex gap-3",
+                isMobile ? "flex-col" : "items-center"
+              )}>
                 <Button
                   onClick={() => setPreviewCameraEnabled(!previewCameraEnabled)}
                   className={cn(
-                    "flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200",
+                    "flex items-center gap-2 rounded-lg transition-all duration-200",
+                    isMobile ? "px-3 py-2 text-sm" : "px-4 py-2",
                     previewCameraEnabled 
                       ? "bg-blue-600 hover:bg-blue-700 text-white" 
                       : "bg-transparent hover:bg-white/10 text-red-500 border border-[#374151]"
                   )}
                 >
-                  {previewCameraEnabled ? <Video size={16} /> : <VideoOff size={16} />}
+                  {previewCameraEnabled ? <Video size={isMobile ? 14 : 16} /> : <VideoOff size={isMobile ? 14 : 16} />}
                   {previewCameraEnabled ? 'Turn Off' : 'Turn On'}
                 </Button>
                 
@@ -576,11 +608,15 @@ export function SettingsMenu(props: SettingsMenuProps) {
               </div>
               
               {/* Second Row: Mirror and Blur controls */}
-              <div className="flex items-center gap-3">
+              <div className={cn(
+                "flex gap-3",
+                isMobile ? "flex-col" : "items-center"
+              )}>
                 <button
                   onClick={() => setPreviewIsMirrored(!previewIsMirrored)}
                   className={cn(
-                    "settings-btn flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 text-sm",
+                    "settings-btn flex items-center gap-2 rounded-lg transition-all duration-200",
+                    isMobile ? "px-3 py-2 text-sm justify-center" : "px-3 py-2 text-sm",
                     previewIsMirrored 
                       ? "bg-gray-600 hover:bg-gray-700 text-white" 
                       : "bg-transparent hover:bg-white/10 text-white border border-gray-600"
@@ -593,7 +629,8 @@ export function SettingsMenu(props: SettingsMenuProps) {
                 <button
                   onClick={() => setPreviewBlurEnabled(!previewBlurEnabled)}
                   className={cn(
-                    "settings-btn flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 text-sm",
+                    "settings-btn flex items-center gap-2 rounded-lg transition-all duration-200",
+                    isMobile ? "px-3 py-2 text-sm justify-center" : "px-3 py-2 text-sm",
                     previewBlurEnabled 
                       ? "bg-blue-600 hover:bg-blue-700 text-white" 
                       : "bg-transparent hover:bg-white/10 text-white border border-[rgba(55,65,81,0.3)]"
@@ -722,17 +759,26 @@ export function SettingsMenu(props: SettingsMenuProps) {
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-end gap-3 p-6 border-t border-[rgba(55,65,81,0.3)]">
-                  <Button
-            variant="outline"
-            onClick={handleClose}
-            className="bg-transparent border-[rgba(55,65,81,0.3)] text-white hover:bg-white/10"
-          >
+      <div className={cn(
+        "flex items-center gap-3 border-t border-[rgba(55,65,81,0.3)]",
+        isMobile ? "p-4 flex-col" : "p-6 justify-end"
+      )}>
+        <Button
+          variant="outline"
+          onClick={handleClose}
+          className={cn(
+            "bg-transparent border-[rgba(55,65,81,0.3)] text-white hover:bg-white/10",
+            isMobile && "w-full"
+          )}
+        >
           Cancel
         </Button>
         <Button
           onClick={handleSave}
-          className="bg-blue-600 hover:bg-blue-700 text-white"
+          className={cn(
+            "bg-blue-600 hover:bg-blue-700 text-white",
+            isMobile && "w-full"
+          )}
         >
           Apply Settings
         </Button>

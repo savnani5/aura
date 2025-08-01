@@ -15,7 +15,7 @@ import { PaywallModal } from './paywall-modal';
 import { TaskManagementPanel } from './task-management-panel';
 import { useUsageTracking } from '@/app/subscription/hooks/useUsageTracking';
 import { Button } from '@/components/ui/button';
-import { Plus, MessageSquare, Settings, User, Users, MoreHorizontal } from 'lucide-react';
+import { Plus, MessageSquare, Settings, User, Users, MoreHorizontal, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Workspace {
@@ -86,6 +86,8 @@ export function SimplifiedDashboard() {
   const [isTasksOpen, setIsTasksOpen] = useState(false);
   const [isCurrentUserHost, setIsCurrentUserHost] = useState(false);
   const [participantRefreshTrigger, setParticipantRefreshTrigger] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
   // Persistent caching state using sessionStorage
   const [lastWorkspacesFetch, setLastWorkspacesFetch] = useState<number>(() => {
@@ -120,6 +122,23 @@ export function SimplifiedDashboard() {
   const [sidebarWidth, setSidebarWidth] = useState(320); // Default 320px (80 * 4)
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  
+  // Mobile detection and responsive handling
+  useEffect(() => {
+    const handleResize = () => {
+      const isMobileView = window.innerWidth < 768;
+      setIsMobile(isMobileView);
+      
+      // Close mobile sidebar when switching to desktop
+      if (!isMobileView) {
+        setIsMobileSidebarOpen(false);
+      }
+    };
+
+    handleResize(); // Initial check
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Sidebar constraints
   const MIN_SIDEBAR_WIDTH = 250;
@@ -322,7 +341,7 @@ export function SimplifiedDashboard() {
     }
   }, [selectedWorkspace]);
 
-  const checkIfUserIsHost = useCallback(async (workspaceId: string) => {
+  const checkIfUserIsHost = async (workspaceId: string) => {
     if (!user) {
       setIsCurrentUserHost(false);
       return;
@@ -348,9 +367,9 @@ export function SimplifiedDashboard() {
       console.error('Error checking user host status:', error);
       setIsCurrentUserHost(false);
     }
-  }, [user]);
+  };
 
-  const fetchWorkspaces = useCallback(async (forceRefresh = false) => {
+  const fetchWorkspaces = async (forceRefresh = false) => {
     console.log('🚀 fetchWorkspaces called with forceRefresh:', forceRefresh);
     
     // Check cache first
@@ -412,9 +431,9 @@ export function SimplifiedDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [workspacesCache, lastWorkspacesFetch, WORKSPACE_CACHE_DURATION]);
+  };
 
-  const fetchMeetingsForWorkspace = useCallback(async (workspaceId: string, forceRefresh = false) => {
+  const fetchMeetingsForWorkspace = async (workspaceId: string, forceRefresh = false) => {
     console.log('🚀 fetchMeetingsForWorkspace called:', { workspaceId, forceRefresh });
     
     // Check cache first
@@ -491,7 +510,7 @@ export function SimplifiedDashboard() {
       console.error('Error fetching meetings:', error);
       setMeetings([]);
     }
-  }, [meetingsCache, lastMeetingsFetch, MEETINGS_CACHE_DURATION, checkIfUserIsHost]);
+  };
 
   const handleCreateWorkspace = () => {
     // TODO: Implement create workspace modal
@@ -537,41 +556,119 @@ export function SimplifiedDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Left Sidebar - Workspaces with Resizable Handle */}
-      <div 
-        ref={sidebarRef}
-        className="bg-card border-r border-border flex flex-col relative"
-        style={{ width: `${sidebarWidth}px` }}
-      >
-        <WorkspaceSidebar
-          workspaces={workspaces}
-          selectedWorkspace={selectedWorkspace}
-          onSelectWorkspace={(workspace) => {
-            setSelectedWorkspace(workspace);
-            // Also persist the selection immediately
-            if (workspace) {
-              localStorage.setItem('ohm-selected-workspace', workspace.id);
-            }
-          }}
-          onCreateWorkspace={handleCreateWorkspace}
-          onWorkspaceCreated={() => fetchWorkspaces(true)}
-          loading={loading}
-        />
-        
-        {/* Resize Handle */}
-        <div
-          className={cn(
-            "absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-border transition-colors",
-            isResizing && "bg-primary"
-          )}
-          onMouseDown={handleResizeStart}
-          title="Drag to resize sidebar"
-        />
-      </div>
+    <div className="min-h-screen bg-background flex relative">
+      {/* Mobile Header */}
+      {isMobile && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-card border-b border-border px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsMobileSidebarOpen(true)}
+              className="h-8 w-8"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </Button>
+            <h1 className="text-lg font-semibold">
+              {selectedWorkspace?.name || 'Ohm'}
+            </h1>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsWorkspaceSettingsOpen(true)}
+            className="h-8 w-8"
+            title="Workspace Settings"
+          >
+            <MoreHorizontal size={16} />
+          </Button>
+        </div>
+      )}
+
+      {/* Mobile Sidebar Overlay */}
+      {isMobile && isMobileSidebarOpen && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+          onClick={() => setIsMobileSidebarOpen(false)}
+        >
+          <div 
+            className="fixed left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-card border-r border-border shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <h2 className="text-lg font-semibold">Workspaces</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="h-8 w-8"
+              >
+                <X size={16} />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <WorkspaceSidebar
+                workspaces={workspaces}
+                selectedWorkspace={selectedWorkspace}
+                onSelectWorkspace={(workspace) => {
+                  setSelectedWorkspace(workspace);
+                  if (workspace) {
+                    localStorage.setItem('ohm-selected-workspace', workspace.id);
+                  }
+                  setIsMobileSidebarOpen(false); // Close mobile sidebar after selection
+                }}
+                onCreateWorkspace={handleCreateWorkspace}
+                onWorkspaceCreated={() => fetchWorkspaces(true)}
+                loading={loading}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar - Hidden on mobile */}
+      {!isMobile && (
+        <div 
+          ref={sidebarRef}
+          className="bg-card border-r border-border flex flex-col relative"
+          style={{ width: `${sidebarWidth}px` }}
+        >
+          <WorkspaceSidebar
+            workspaces={workspaces}
+            selectedWorkspace={selectedWorkspace}
+            onSelectWorkspace={(workspace) => {
+              setSelectedWorkspace(workspace);
+              // Also persist the selection immediately
+              if (workspace) {
+                localStorage.setItem('ohm-selected-workspace', workspace.id);
+              }
+            }}
+            onCreateWorkspace={handleCreateWorkspace}
+            onWorkspaceCreated={() => fetchWorkspaces(true)}
+            loading={loading}
+          />
+          
+          {/* Resize Handle - Desktop only */}
+          <div
+            className={cn(
+              "absolute top-0 right-0 w-1 h-full cursor-col-resize bg-transparent hover:bg-border transition-colors",
+              isResizing && "bg-primary"
+            )}
+            onMouseDown={handleResizeStart}
+            title="Drag to resize sidebar"
+          />
+        </div>
+      )}
 
       {/* Main Content Area - Meeting Database */}
-      <div className="flex-1 flex flex-col">
+      <div className={cn(
+        "flex-1 flex flex-col",
+        isMobile && "pt-16" // Add top padding for mobile header
+      )}>
         <MeetingDatabase
           workspace={selectedWorkspace}
           meetings={meetings}
@@ -586,35 +683,53 @@ export function SimplifiedDashboard() {
         />
       </div>
 
-      {/* Bottom Right - AI Chat Bubble */}
-      <div className="fixed bottom-6 right-6 z-50">
+      {/* AI Chat Bubble - Responsive */}
+      <div className={cn(
+        "fixed z-50",
+        isMobile ? "bottom-6 right-4" : "bottom-6 right-6"
+      )}>
         <Button
           onClick={() => setIsAiChatOpen(!isAiChatOpen)}
-          size="lg"
-          className="rounded-full px-4 py-3 h-auto shadow-lg flex items-center gap-2"
-          title="Ask Ohm AI Assistant"
+          size={isMobile ? "icon" : "lg"}
+          className={cn(
+            "rounded-full shadow-lg flex items-center gap-2",
+            isMobile ? "h-12 w-12" : "px-4 py-3 h-auto"
+          )}
+          title="Ask Aura AI Assistant"
         >
-          <MessageSquare size={20} />
-          <span className="text-sm font-medium">Ask Ohm</span>
+          <MessageSquare size={isMobile ? 20 : 20} />
+          {!isMobile && <span className="text-sm font-medium">Ask Aura</span>}
         </Button>
       </div>
 
-      {/* Bottom Left - User Settings Bubble */}
-      <div className="fixed bottom-6 left-6 z-50">
+      {/* User Settings Bubble - Responsive positioning */}
+      <div className={cn(
+        "fixed z-50",
+        isMobile ? "bottom-6 left-4" : "bottom-6 left-6"
+      )}>
         <Button
           variant="outline"
           onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-          className="rounded-full p-3 shadow-lg flex items-center gap-2"
+          className={cn(
+            "rounded-full shadow-lg flex items-center gap-2",
+            isMobile ? "p-2" : "p-3"
+          )}
           title={user.fullName || 'User Settings'}
         >
           {user.imageUrl ? (
             <img 
               src={user.imageUrl} 
               alt={user.fullName || 'User'} 
-              className="w-6 h-6 rounded-full object-cover"
+              className={cn(
+                "rounded-full object-cover",
+                isMobile ? "w-8 h-8" : "w-6 h-6"
+              )}
             />
           ) : (
-          <div className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium">
+          <div className={cn(
+            "bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium",
+            isMobile ? "w-8 h-8" : "w-6 h-6"
+          )}>
             {user.firstName?.charAt(0) || user.emailAddresses[0]?.emailAddress.charAt(0).toUpperCase()}
           </div>
           )}

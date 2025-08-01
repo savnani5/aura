@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { X, Plus, Trash2, Star } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -63,6 +63,18 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
   const [isLoading, setIsLoading] = useState(false);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   
   // Delete functionality states
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -81,7 +93,14 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
     })) || [],
   });
 
-  const fetchWorkspaceDetails = useCallback(async () => {
+  // Initialize form with workspace data and fetch detailed workspace info
+  useEffect(() => {
+    if (workspace) {
+      fetchWorkspaceDetails();
+    }
+  }, [workspace]);
+
+  const fetchWorkspaceDetails = async () => {
     try {
       const response = await fetch(`/api/meetings/${workspace.id}`);
       if (response.ok) {
@@ -111,14 +130,7 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
         participants: [],
       });
     }
-  }, [workspace]);
-
-  // Initialize form with workspace data and fetch detailed workspace info
-  useEffect(() => {
-    if (workspace) {
-      fetchWorkspaceDetails();
-    }
-  }, [workspace, fetchWorkspaceDetails]);
+  };
 
   const handleInputChange = (field: keyof WorkspaceSettingsForm, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }));
@@ -268,7 +280,10 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
   const regularParticipants = form.participants.filter(p => p.role !== 'host');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className={cn(
+      "fixed inset-0 z-50 flex items-center justify-center",
+      isMobile ? "p-0" : "p-4"
+    )}>
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -276,33 +291,66 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
       />
       
       {/* Modal */}
-      <Card className="relative w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div className="space-y-1">
-            <CardTitle className="text-xl">Workspace Settings</CardTitle>
-            <p className="text-sm text-muted-foreground">
+      <Card className={cn(
+        "relative w-full overflow-hidden",
+        isMobile 
+          ? "h-full rounded-none max-w-none flex flex-col" 
+          : "max-w-2xl max-h-[90vh] rounded-lg"
+      )}>
+        <CardHeader className={cn(
+          "flex items-center justify-between space-y-0",
+          isMobile ? "p-4 pb-3 flex-col gap-3" : "flex-row pb-4"
+        )}>
+          <div className={cn(
+            "space-y-1",
+            isMobile && "w-full text-center"
+          )}>
+            <CardTitle className={cn(
+              isMobile ? "text-lg" : "text-xl"
+            )}>Workspace Settings</CardTitle>
+            <p className={cn(
+              "text-muted-foreground",
+              isMobile ? "text-xs" : "text-sm"
+            )}>
               Manage your workspace details and participants
             </p>
           </div>
-          {hasChanges && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-              <span>Unsaved changes</span>
-            </div>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onClose}
-          >
-            <X size={20} />
-          </Button>
+          <div className={cn(
+            "flex items-center gap-2",
+            isMobile && "w-full justify-between"
+          )}>
+            {hasChanges && (
+              <div className={cn(
+                "flex items-center gap-2 text-muted-foreground",
+                isMobile ? "text-xs" : "text-sm"
+              )}>
+                <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                <span>Unsaved changes</span>
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className={cn(isMobile && "h-8 w-8")}
+            >
+              <X size={isMobile ? 16 : 20} />
+            </Button>
+          </div>
         </CardHeader>
 
-        <CardContent className="overflow-y-auto max-h-[calc(90vh-200px)] space-y-6">
+        <CardContent className={cn(
+          "overflow-y-auto space-y-6",
+          isMobile 
+            ? "p-4 flex-1 min-h-0" 
+            : "max-h-[calc(90vh-200px)]"
+        )}>
           {/* Basic Information */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium">Basic Information</h3>
+            <h3 className={cn(
+              "font-medium",
+              isMobile ? "text-base" : "text-lg"
+            )}>Basic Information</h3>
             
             <div className="space-y-2">
               <label htmlFor="name" className="text-sm font-medium">
@@ -384,17 +432,32 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
 
           {/* Participants */}
           <div className="space-y-4">
-            <h3 className="text-lg font-medium">Participants</h3>
+            <h3 className={cn(
+              "font-medium",
+              isMobile ? "text-base" : "text-lg"
+            )}>Participants</h3>
             
             <div className="space-y-3">
               {/* Host participant - Read-only */}
               {hostParticipant && (
-                <div className="flex items-center gap-3 p-3 bg-muted rounded-lg border border-border">
-                  <div className="flex-1 flex gap-3">
-                    <div className="flex-1 px-3 py-2 bg-muted-foreground/5 border border-border rounded-md text-sm text-muted-foreground">
+                <div className={cn(
+                  "flex items-center gap-3 bg-muted rounded-lg border border-border",
+                  isMobile ? "p-2 flex-col" : "p-3"
+                )}>
+                  <div className={cn(
+                    "flex-1 flex gap-3",
+                    isMobile ? "w-full flex-col gap-2" : ""
+                  )}>
+                    <div className={cn(
+                      "flex-1 px-3 py-2 bg-muted-foreground/5 border border-border rounded-md text-muted-foreground",
+                      isMobile ? "text-xs" : "text-sm"
+                    )}>
                       {hostParticipant.name || 'Host'}
                     </div>
-                    <div className="flex-1 px-3 py-2 bg-muted-foreground/5 border border-border rounded-md text-sm text-muted-foreground">
+                    <div className={cn(
+                      "flex-1 px-3 py-2 bg-muted-foreground/5 border border-border rounded-md text-muted-foreground",
+                      isMobile ? "text-xs" : "text-sm"
+                    )}>
                       {hostParticipant.email || 'host@example.com'}
                     </div>
                   </div>
@@ -409,21 +472,33 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
               {regularParticipants.map((participant, index) => {
                 const actualIndex = form.participants.findIndex(p => p === participant);
                 return (
-                  <div key={actualIndex} className="flex items-center gap-3">
-                    <div className="flex-1 flex gap-3">
+                  <div key={actualIndex} className={cn(
+                    "flex items-center gap-3",
+                    isMobile && "flex-col gap-2"
+                  )}>
+                    <div className={cn(
+                      "flex-1 flex gap-3",
+                      isMobile ? "w-full flex-col gap-2" : ""
+                    )}>
                       <input
                         type="text"
                         value={participant.name}
                         onChange={(e) => updateParticipant(actualIndex, 'name', e.target.value)}
                         placeholder="Participant name"
-                        className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm"
+                        className={cn(
+                          "flex-1 px-3 py-2 bg-background border border-input rounded-md",
+                          isMobile ? "text-xs" : "text-sm"
+                        )}
                       />
                       <input
                         type="email"
                         value={participant.email}
                         onChange={(e) => updateParticipant(actualIndex, 'email', e.target.value)}
                         placeholder="participant@example.com"
-                        className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm"
+                        className={cn(
+                          "flex-1 px-3 py-2 bg-background border border-input rounded-md",
+                          isMobile ? "text-xs" : "text-sm"
+                        )}
                         autoComplete="off"
                       />
                     </div>
@@ -432,8 +507,9 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
                       variant="ghost"
                       size="icon"
                       onClick={() => removeParticipant(actualIndex)}
+                      className={cn(isMobile && "h-8 w-8 self-end")}
                     >
-                      <X size={16} />
+                      <X size={isMobile ? 14 : 16} />
                     </Button>
                   </div>
                 );
@@ -480,12 +556,16 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
         </CardContent>
 
         {/* Actions */}
-        <div className="flex justify-between p-6 border-t border-border">
+        <div className={cn(
+          "flex justify-between border-t border-border",
+          isMobile ? "p-4 gap-3" : "p-6"
+        )}>
           <Button
             type="button"
             variant="outline"
             onClick={handleReset}
             disabled={!hasChanges}
+            className={cn(isMobile && "text-xs px-3 py-2")}
           >
             Reset Changes
           </Button>
@@ -493,6 +573,7 @@ export function WorkspaceSettings({ workspace, onClose, onWorkspaceUpdated, onWo
             type="button"
             onClick={handleSave}
             disabled={isLoading || !hasChanges || !form.name.trim() || !form.type.trim()}
+            className={cn(isMobile && "text-xs px-3 py-2")}
           >
             {isLoading ? 'Saving...' : 'Save Changes'}
           </Button>

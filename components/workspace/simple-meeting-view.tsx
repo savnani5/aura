@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Calendar, Users, FileText, ArrowLeft, Copy, Share2, X, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface Meeting {
   id: string;
@@ -64,8 +65,24 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
     relatedDiscussion: string;
   } | null>(null);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  const fetchMeeting = useCallback(async () => {
+  // Mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    fetchMeeting();
+  }, [meetingId, showTranscripts]);
+
+  const fetchMeeting = async () => {
     try {
       // If we're fetching transcripts, set transcripts loading
       if (showTranscripts) {
@@ -90,11 +107,7 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
       setLoading(false);
       setTranscriptsLoading(false);
     }
-  }, [meetingId, showTranscripts]);
-
-  useEffect(() => {
-    fetchMeeting();
-  }, [fetchMeeting]);
+  };
 
   const handleBack = () => {
     // Check if we have workspace in URL params to navigate back properly
@@ -249,24 +262,44 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b border-border bg-card">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={handleBack}>
-                <ArrowLeft className="h-5 w-5" />
+        <div className={cn(
+          "max-w-4xl mx-auto",
+          isMobile ? "px-4 py-3" : "px-6 py-4"
+        )}>
+          <div className={cn(
+            "flex items-center justify-between",
+            isMobile && "flex-col gap-3"
+          )}>
+            <div className={cn(
+              "flex items-center gap-4",
+              isMobile && "w-full"
+            )}>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleBack}
+                className={isMobile ? "h-8 w-8" : ""}
+              >
+                <ArrowLeft className={isMobile ? "h-4 w-4" : "h-5 w-5"} />
               </Button>
-              <div>
-                <h1 className="text-2xl font-semibold text-foreground">{meeting.title}</h1>
-                <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+              <div className="flex-1">
+                <h1 className={cn(
+                  "font-semibold text-foreground",
+                  isMobile ? "text-lg" : "text-2xl"
+                )}>{meeting.title}</h1>
+                <div className={cn(
+                  "flex items-center mt-1 text-muted-foreground",
+                  isMobile ? "gap-3 text-xs flex-wrap" : "gap-4 text-sm"
+                )}>
                   <span className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
+                    <Calendar className="h-3 w-3" />
                     {meeting.date}
                   </span>
                   <button 
                     onClick={() => setShowParticipants(true)}
                     className="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer"
                   >
-                    <Users className="h-4 w-4" />
+                    <Users className="h-3 w-3" />
                     {meeting.participants.length} participants
                   </button>
                 </div>
@@ -274,13 +307,26 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
             </div>
             
             {/* Actions */}
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleCopy}>
-                <Copy className="h-4 w-4 mr-2" />
+            <div className={cn(
+              "flex items-center gap-2",
+              isMobile && "w-full"
+            )}>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleCopy}
+                className={cn(isMobile && "flex-1 text-xs")}
+              >
+                <Copy className={cn(isMobile ? "h-3 w-3 mr-1" : "h-4 w-4 mr-2")} />
                 Copy
               </Button>
-              <Button variant="outline" size="sm" onClick={handleShare}>
-                <Share2 className="h-4 w-4 mr-2" />
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleShare}
+                className={cn(isMobile && "flex-1 text-xs")}
+              >
+                <Share2 className={cn(isMobile ? "h-3 w-3 mr-1" : "h-4 w-4 mr-2")} />
                 Share
               </Button>
             </div>
@@ -289,15 +335,27 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
       </div>
 
       {/* Content */}
-      <div className="max-w-4xl mx-auto px-6 py-8">
-        <div className="space-y-8">
+      <div className={cn(
+        "max-w-4xl mx-auto",
+        isMobile ? "px-4 py-6 space-y-6" : "px-6 py-8 space-y-8"
+      )}>
+        <div className={cn(isMobile ? "space-y-6" : "space-y-8")}>
 
 
           {/* AI-Generated Summary */}
           {meeting.summary && (
-            <div className="bg-card rounded-lg border border-border p-6">
-              <h2 className="text-lg font-semibold text-foreground mb-4">Meeting Summary</h2>
-              <div className="prose prose-sm max-w-none">
+            <div className={cn(
+              "bg-card rounded-lg border border-border",
+              isMobile ? "p-4" : "p-6"
+            )}>
+              <h2 className={cn(
+                "font-semibold text-foreground mb-4",
+                isMobile ? "text-base" : "text-lg"
+              )}>Meeting Summary</h2>
+              <div className={cn(
+                "prose max-w-none",
+                isMobile ? "prose-sm text-sm" : "prose-sm"
+              )}>
                 <p className="text-foreground leading-relaxed whitespace-pre-wrap">
                   {meeting.summary.content}
                 </p>
@@ -305,10 +363,13 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
 
               {/* Detailed Sections */}
               {meeting.summary.sections && meeting.summary.sections.length > 0 && (
-                <div className="mt-6 space-y-6">
+                <div className={cn(isMobile ? "mt-4 space-y-4" : "mt-6 space-y-6")}>
                   {meeting.summary.sections.map((section, sectionIndex) => (
                     <div key={sectionIndex}>
-                      <h3 className="text-md font-medium text-foreground mb-3"># {section.title}</h3>
+                      <h3 className={cn(
+                        "font-medium text-foreground mb-3",
+                        isMobile ? "text-sm" : "text-md"
+                      )}># {section.title}</h3>
                       <ul className="space-y-2">
                         {section.points.map((point, pointIndex) => (
                           <li key={pointIndex} className="flex items-start gap-2">
@@ -316,9 +377,11 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
                             <div className="flex-1">
                               <button
                                 onClick={() => point.context && setSelectedContext(point.context)}
-                                className={`text-sm text-foreground text-left hover:text-primary transition-colors ${
+                                className={cn(
+                                  "text-foreground text-left hover:text-primary transition-colors",
+                                  isMobile ? "text-xs" : "text-sm",
                                   point.context ? 'cursor-pointer hover:underline' : 'cursor-default'
-                                }`}
+                                )}
                                 disabled={!point.context}
                               >
                                 {point.text}
@@ -349,18 +412,33 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
 
               {/* Action Items */}
               {meeting.summary.actionItems && meeting.summary.actionItems.length > 0 && meeting.summary.actionItems.some(item => item.title && item.title.trim()) && (
-                <div className="mt-6">
-                  <h3 className="text-md font-medium text-foreground mb-3">Action Items</h3>
+                <div className={cn(isMobile ? "mt-4" : "mt-6")}>
+                  <h3 className={cn(
+                    "font-medium text-foreground mb-3",
+                    isMobile ? "text-sm" : "text-md"
+                  )}>Action Items</h3>
                   <div className="space-y-3">
                     {meeting.summary.actionItems.filter(item => item.title && item.title.trim()).map((item, index) => (
-                      <div key={index} className="flex items-start gap-3 p-3 bg-orange-50 rounded-lg border border-orange-200">
+                      <div key={index} className={cn(
+                        "flex items-start gap-3 bg-orange-50 rounded-lg border border-orange-200",
+                        isMobile ? "p-2" : "p-3"
+                      )}>
                         <div className="w-1.5 h-1.5 bg-orange-500 rounded-full mt-2 flex-shrink-0"></div>
                         <div className="flex-1">
-                          <h4 className="text-sm font-medium text-foreground">{item.title}</h4>
+                          <h4 className={cn(
+                            "font-medium text-foreground",
+                            isMobile ? "text-xs" : "text-sm"
+                          )}>{item.title}</h4>
                           {item.context && (
-                            <p className="text-xs text-muted-foreground mt-1">{item.context}</p>
+                            <p className={cn(
+                              "text-muted-foreground mt-1",
+                              isMobile ? "text-xs" : "text-xs"
+                            )}>{item.context}</p>
                           )}
-                          <div className="flex items-center gap-4 mt-2 text-xs">
+                          <div className={cn(
+                            "flex items-center mt-2 text-xs",
+                            isMobile ? "gap-2 flex-wrap" : "gap-4"
+                          )}>
                             {item.owner && item.owner !== 'Unassigned' && (
                               <span className="flex items-center gap-1">
                                 <Users className="h-3 w-3" />
@@ -416,28 +494,55 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
 
           {/* Transcripts */}
           {showTranscripts && (
-            <div className="bg-card rounded-lg border border-border p-6">
-              <h2 className="text-lg font-semibold text-foreground mb-4">Transcripts</h2>
+            <div className={cn(
+              "bg-card rounded-lg border border-border",
+              isMobile ? "p-4" : "p-6"
+            )}>
+              <h2 className={cn(
+                "font-semibold text-foreground mb-4",
+                isMobile ? "text-base" : "text-lg"
+              )}>Transcripts</h2>
               {transcriptsLoading ? (
-                <div className="flex items-center justify-center py-8">
+                <div className={cn(
+                  "flex items-center justify-center",
+                  isMobile ? "py-6" : "py-8"
+                )}>
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                  <span className="ml-3 text-muted-foreground">Loading transcripts from Pinecone...</span>
+                  <span className={cn(
+                    "ml-3 text-muted-foreground",
+                    isMobile && "text-sm"
+                  )}>Loading transcripts from Pinecone...</span>
                 </div>
               ) : meeting.transcripts && meeting.transcripts.length > 0 ? (
-              <div className="space-y-4">
+              <div className={cn(isMobile ? "space-y-3" : "space-y-4")}>
                   {collateTranscriptsBySpeaker(meeting.transcripts).map((section, index) => (
                     <div 
                       key={index} 
-                      className={`rounded-lg p-4 border-l-4 ${getSpeakerColor(section.speaker)}`}
+                      className={cn(
+                        `rounded-lg border-l-4 ${getSpeakerColor(section.speaker)}`,
+                        isMobile ? "p-3" : "p-4"
+                      )}
                     >
-                      <div className="flex items-center justify-between mb-3">
+                      <div className={cn(
+                        "flex items-center justify-between mb-3",
+                        isMobile && "flex-col items-start gap-2"
+                      )}>
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-sm font-medium">
+                          <div className={cn(
+                            "bg-primary text-primary-foreground rounded-full flex items-center justify-center font-medium",
+                            isMobile ? "w-6 h-6 text-xs" : "w-8 h-8 text-sm"
+                          )}>
                             {getInitials(section.speaker)}
                           </div>
-                          <span className="text-sm font-semibold text-foreground">{section.speaker}</span>
+                          <span className={cn(
+                            "font-semibold text-foreground",
+                            isMobile ? "text-xs" : "text-sm"
+                          )}>{section.speaker}</span>
                         </div>
-                        <div className="text-xs text-muted-foreground">
+                        <div className={cn(
+                          "text-muted-foreground",
+                          isMobile ? "text-xs" : "text-xs"
+                        )}>
                           {new Date(section.startTime).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit'
@@ -453,7 +558,10 @@ export function SimpleMeetingView({ meetingId }: SimpleMeetingViewProps) {
                           )}
                         </div>
                       </div>
-                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                      <p className={cn(
+                        "text-foreground leading-relaxed whitespace-pre-wrap",
+                        isMobile ? "text-xs" : "text-sm"
+                      )}>
                         {section.text}
                       </p>
                     </div>

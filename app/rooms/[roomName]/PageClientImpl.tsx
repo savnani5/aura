@@ -112,17 +112,20 @@ export function PageClientImpl(props: {
     <main 
       data-theme="meeting" 
       data-lk-theme="default"
-      className="fixed inset-0 overflow-hidden" 
+      className="fixed inset-0 overflow-hidden touch-none select-none" 
       style={{
-        background: '#000000'
+        background: '#000000',
+        WebkitTouchCallout: 'none',
+        WebkitUserSelect: 'none',
+        userSelect: 'none'
       }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
-        <div className="fixed inset-0 flex items-center justify-center p-8" style={{
+        <div className="fixed inset-0 flex items-center justify-center p-4 sm:p-8" style={{
           background: '#000000'
         }}>
-          <div className="relative z-10 bg-black/40 backdrop-blur-md rounded-2xl border border-white/10 p-6 max-w-lg w-full shadow-2xl">
+          <div className="relative z-10 bg-black/40 backdrop-blur-md rounded-2xl border border-white/10 p-4 sm:p-6 max-w-lg w-full shadow-2xl">
             <div className="text-center mb-6">
-              <h1 className="text-2xl font-bold text-white mb-2">Join Meeting</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">Join Meeting</h1>
               <p className="text-gray-400 text-sm">{roomTitle}</p>
             </div>
             <div className="prejoin-wrapper">

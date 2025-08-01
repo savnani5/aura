@@ -24,7 +24,8 @@ import {
   Bot, 
   PhoneOff,
   X,
-  FileText
+  FileText,
+  MoreHorizontal
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -58,6 +59,8 @@ export function EnhancedControlBar({
   const [showSettings, setShowSettings] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const [currentTranscripts, setCurrentTranscripts] = useState<string>('');
+  const [isMobile, setIsMobile] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [panelWidth, setPanelWidth] = useState(() => {
     // Load saved width from localStorage or use percentage-based default
     if (typeof window !== 'undefined') {
@@ -78,25 +81,39 @@ export function EnhancedControlBar({
   const layoutContext = useLayoutContext();
   const participants = useParticipants();
 
-    // Handle window resize to keep panel proportional
+  // Handle mobile detection and window resize
   useEffect(() => {
     const handleResize = () => {
       if (typeof window !== 'undefined') {
-        const maxAllowed = Math.min(800, window.innerWidth * 0.7);
-        const minAllowed = Math.max(300, window.innerWidth * 0.2);
+        const isMobileView = window.innerWidth < 768;
+        setIsMobile(isMobileView);
         
-        const savedWidth = localStorage.getItem('ohm-panel-width');
-        if (savedWidth) {
-          const currentWidth = parseInt(savedWidth, 10);
-          if (currentWidth > maxAllowed || currentWidth < minAllowed) {
-            const adjustedWidth = Math.max(minAllowed, Math.min(maxAllowed, currentWidth));
-            setPanelWidth(adjustedWidth);
-            localStorage.setItem('ohm-panel-width', adjustedWidth.toString());
+        // Close mobile menu on desktop
+        if (!isMobileView) {
+          setShowMobileMenu(false);
+        }
+        
+        // Handle panel width for desktop
+        if (!isMobileView) {
+          const maxAllowed = Math.min(800, window.innerWidth * 0.7);
+          const minAllowed = Math.max(300, window.innerWidth * 0.2);
+          
+          const savedWidth = localStorage.getItem('ohm-panel-width');
+          if (savedWidth) {
+            const currentWidth = parseInt(savedWidth, 10);
+            if (currentWidth > maxAllowed || currentWidth < minAllowed) {
+              const adjustedWidth = Math.max(minAllowed, Math.min(maxAllowed, currentWidth));
+              setPanelWidth(adjustedWidth);
+              localStorage.setItem('ohm-panel-width', adjustedWidth.toString());
+            }
           }
         }
       }
     };
 
+    // Initial check
+    handleResize();
+    
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -421,6 +438,42 @@ export function EnhancedControlBar({
     // Don't redirect immediately - let the RoomEvent.Disconnected handler take care of it
   };
 
+  // Mobile-specific handlers
+  const handleMobileMenuToggle = () => {
+    setShowMobileMenu(!showMobileMenu);
+  };
+
+  const handleMobilePanelOpen = (panelType: 'chat' | 'ai' | 'participants' | 'transcripts' | 'settings') => {
+    // Close mobile menu first
+    setShowMobileMenu(false);
+    
+    // Close all panels first
+    setShowChat(false);
+    setShowAI(false);
+    setShowParticipants(false);
+    setShowTranscripts(false);
+    setShowSettings(false);
+    
+    // Open the selected panel
+    switch (panelType) {
+      case 'chat':
+        setShowChat(true);
+        break;
+      case 'ai':
+        setShowAI(true);
+        break;
+      case 'participants':
+        setShowParticipants(true);
+        break;
+      case 'transcripts':
+        setShowTranscripts(true);
+        break;
+      case 'settings':
+        setShowSettings(true);
+        break;
+    }
+  };
+
   // Debug: Log button states
   console.log('🎛️ Control bar render - Button states:', {
     camera: isCameraEnabled,
@@ -430,180 +483,269 @@ export function EnhancedControlBar({
 
   return (
     <>
-      {/* Modern Control Bar */}
-      <div className="custom-control-bar">
-        {/* Camera Button */}
-        {(controls.camera ?? true) && (
-          <Button
-            size="icon"
-            onClick={toggleCamera}
-            title={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
-            className={cn(
-              "h-12 w-12 rounded-full transition-all duration-200",
-              isCameraEnabled 
-                ? "bg-blue-600 hover:bg-blue-700 text-white" 
-                : "bg-transparent hover:bg-white/10 text-red-500"
-            )}
-          >
-            {isCameraEnabled ? <Video size={20} /> : <VideoOff size={20} />}
-          </Button>
-        )}
+      {/* Mobile Control Bar */}
+      {isMobile ? (
+        /* Simplified Mobile Control Bar - Only Essential Controls */
+        <div className="custom-control-bar mobile-control-bar">
+          {/* Camera Button */}
+          {(controls.camera ?? true) && (
+            <Button
+              size="icon"
+              onClick={toggleCamera}
+              title={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+              className={cn(
+                "min-h-touch min-w-touch rounded-full transition-all duration-200",
+                isCameraEnabled 
+                  ? "bg-blue-600 active:bg-blue-700 text-white" 
+                  : "bg-transparent active:bg-white/10 text-red-500"
+              )}
+            >
+              {isCameraEnabled ? <Video size={24} /> : <VideoOff size={24} />}
+            </Button>
+          )}
 
-        {/* Microphone Button */}
-        {(controls.microphone ?? true) && (
-          <Button
-            size="icon"
-            onClick={toggleMicrophone}
-            title={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
-            className={cn(
-              "h-12 w-12 rounded-full transition-all duration-200",
-              isMicEnabled 
-                ? "bg-blue-600 hover:bg-blue-700 text-white" 
-                : "bg-transparent hover:bg-white/10 text-red-500"
-            )}
-          >
-            {isMicEnabled ? <Mic size={20} /> : <MicOff size={20} />}
-          </Button>
-        )}
+          {/* Microphone Button */}
+          {(controls.microphone ?? true) && (
+            <Button
+              size="icon"
+              onClick={toggleMicrophone}
+              title={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
+              className={cn(
+                "min-h-touch min-w-touch rounded-full transition-all duration-200",
+                isMicEnabled 
+                  ? "bg-blue-600 active:bg-blue-700 text-white" 
+                  : "bg-transparent active:bg-white/10 text-red-500"
+              )}
+            >
+              {isMicEnabled ? <Mic size={24} /> : <MicOff size={24} />}
+            </Button>
+          )}
 
-        {/* Screen Share Button */}
-        {(controls.screenShare ?? true) && (
+          {/* Settings Button */}
+          {(controls.settings ?? true) && (
+            <Button
+              size="icon"
+              onClick={handleSettingsToggle}
+              title="Settings"
+              className={cn(
+                "min-h-touch min-w-touch rounded-full transition-all duration-200",
+                showSettings 
+                  ? "bg-blue-600 active:bg-blue-700 text-white" 
+                  : "bg-transparent active:bg-white/10 text-white"
+              )}
+            >
+              <Settings size={24} />
+            </Button>
+          )}
+
+          {/* Leave Button */}
+          {(controls.leave ?? true) && (
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={handleLeave}
+              title="Leave Meeting"
+              className="min-h-touch min-w-touch rounded-full"
+            >
+              <PhoneOff size={24} />
+            </Button>
+          )}
+        </div>
+      ) : (
+        /* Desktop Control Bar - Original layout */
+        <div className="custom-control-bar">
+          {/* Camera Button */}
+          {(controls.camera ?? true) && (
+            <Button
+              size="icon"
+              onClick={toggleCamera}
+              title={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
+              className={cn(
+                "h-12 w-12 rounded-full transition-all duration-200",
+                isCameraEnabled 
+                  ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                  : "bg-transparent hover:bg-white/10 text-red-500"
+              )}
+            >
+              {isCameraEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+            </Button>
+          )}
+
+          {/* Microphone Button */}
+          {(controls.microphone ?? true) && (
+            <Button
+              size="icon"
+              onClick={toggleMicrophone}
+              title={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
+              className={cn(
+                "h-12 w-12 rounded-full transition-all duration-200",
+                isMicEnabled 
+                  ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                  : "bg-transparent hover:bg-white/10 text-red-500"
+              )}
+            >
+              {isMicEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+            </Button>
+          )}
+
+          {/* Screen Share Button */}
+          {(controls.screenShare ?? true) && (
+            <Button
+              size="icon"
+              onClick={toggleScreenShare}
+              title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
+              className={cn(
+                "h-12 w-12 rounded-full transition-all duration-200",
+                isScreenSharing 
+                  ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                  : "bg-transparent hover:bg-white/10 text-white"
+              )}
+            >
+              <Monitor size={20} />
+            </Button>
+          )}
+
+          {/* Divider */}
+          <div className="w-px h-8 bg-gray-600 mx-1" />
+
+          {/* Settings Button */}
+          {(controls.settings ?? true) && (
+            <Button
+              size="icon"
+              onClick={handleSettingsToggle}
+              title="Settings"
+              className={cn(
+                "h-12 w-12 rounded-full transition-all duration-200",
+                showSettings 
+                  ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                  : "bg-transparent hover:bg-white/10 text-white"
+              )}
+            >
+              <Settings size={20} />
+            </Button>
+          )}
+
+          {/* Participants Button */}
           <Button
             size="icon"
-            onClick={toggleScreenShare}
-            title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
+            onClick={handleParticipantsToggle}
+            title="Participants"
             className={cn(
-              "h-12 w-12 rounded-full transition-all duration-200",
-              isScreenSharing 
+              "h-12 w-12 rounded-full relative transition-all duration-200",
+              showParticipants 
                 ? "bg-blue-600 hover:bg-blue-700 text-white" 
                 : "bg-transparent hover:bg-white/10 text-white"
             )}
           >
-            <Monitor size={20} />
+            <Users size={20} />
           </Button>
-        )}
 
-        {/* Divider */}
-        <div className="w-px h-8 bg-gray-600 mx-1" />
-
-        {/* Settings Button */}
-        {(controls.settings ?? true) && (
+          {/* Chat Button */}
           <Button
             size="icon"
-            onClick={handleSettingsToggle}
-            title="Settings"
+            onClick={handleChatToggle}
+            title="Chat"
             className={cn(
-              "h-12 w-12 rounded-full transition-all duration-200",
-              showSettings 
+              "h-12 w-12 rounded-full relative transition-all duration-200",
+              showChat 
                 ? "bg-blue-600 hover:bg-blue-700 text-white" 
                 : "bg-transparent hover:bg-white/10 text-white"
             )}
           >
-            <Settings size={20} />
+            <MessageSquare size={20} />
+            {hasUnreadMessages && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
+            )}
           </Button>
-        )}
 
-        {/* Participants Button */}
-        <Button
-          size="icon"
-          onClick={handleParticipantsToggle}
-          title="Participants"
-          className={cn(
-            "h-12 w-12 rounded-full relative transition-all duration-200",
-            showParticipants 
-              ? "bg-blue-600 hover:bg-blue-700 text-white" 
-              : "bg-transparent hover:bg-white/10 text-white"
-          )}
-        >
-          <Users size={20} />
-        </Button>
-
-        {/* Chat Button */}
-        <Button
-          size="icon"
-          onClick={handleChatToggle}
-          title="Chat"
-          className={cn(
-            "h-12 w-12 rounded-full relative transition-all duration-200",
-            showChat 
-              ? "bg-blue-600 hover:bg-blue-700 text-white" 
-              : "bg-transparent hover:bg-white/10 text-white"
-          )}
-        >
-          <MessageSquare size={20} />
-          {hasUnreadMessages && (
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full" />
-          )}
-        </Button>
-
-        {/* AI Assistant Button */}
-        <Button
-          size="icon"
-          onClick={handleAIToggle}
-          title="AI Assistant"
-          className={cn(
-            "h-12 w-12 rounded-full transition-all duration-200",
-            showAI 
-              ? "bg-blue-600 hover:bg-blue-700 text-white" 
-              : "bg-transparent hover:bg-white/10 text-white"
-          )}
-        >
-          <Bot size={20} />
-        </Button>
-
-        {/* Transcripts Button */}
-        <Button
-          size="icon"
-          onClick={handleTranscriptsToggle}
-          title="Transcripts"
-          className={cn(
-            "h-12 w-12 rounded-full transition-all duration-200",
-            showTranscripts 
-              ? "bg-blue-600 hover:bg-blue-700 text-white" 
-              : "bg-transparent hover:bg-white/10 text-white"
-          )}
-        >
-          <FileText size={20} />
-        </Button>
-
-        {/* Divider */}
-        <div className="w-px h-8 bg-gray-600 mx-1" />
-
-        {/* Leave Button */}
-        {(controls.leave ?? true) && (
+          {/* AI Assistant Button */}
           <Button
-            variant="destructive"
             size="icon"
-            onClick={handleLeave}
-            title="Leave Meeting"
-            className="h-12 w-12 rounded-full"
+            onClick={handleAIToggle}
+            title="AI Assistant"
+            className={cn(
+              "h-12 w-12 rounded-full transition-all duration-200",
+              showAI 
+                ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                : "bg-transparent hover:bg-white/10 text-white"
+            )}
           >
-            <PhoneOff size={20} />
+            <Bot size={20} />
           </Button>
-        )}
-      </div>
+
+          {/* Transcripts Button */}
+          <Button
+            size="icon"
+            onClick={handleTranscriptsToggle}
+            title="Transcripts"
+            className={cn(
+              "h-12 w-12 rounded-full transition-all duration-200",
+              showTranscripts 
+                ? "bg-blue-600 hover:bg-blue-700 text-white" 
+                : "bg-transparent hover:bg-white/10 text-white"
+            )}
+          >
+            <FileText size={20} />
+          </Button>
+
+          {/* Divider */}
+          <div className="w-px h-8 bg-gray-600 mx-1" />
+
+          {/* Leave Button */}
+          {(controls.leave ?? true) && (
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={handleLeave}
+              title="Leave Meeting"
+              className="h-12 w-12 rounded-full"
+            >
+              <PhoneOff size={20} />
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Chat Panel */}
       <div 
         className={cn(
-          "fixed right-0 top-0 h-full border-l border-gray-700 shadow-lg transition-all duration-300 z-40",
+          "fixed top-0 h-full border-l border-gray-700 shadow-lg transition-all duration-300 z-40",
+          isMobile 
+            ? "left-0 w-full bg-black/95 backdrop-blur-sm" 
+            : "right-0",
           showChat ? "translate-x-0" : "translate-x-full"
         )}
         style={{ 
-          width: showChat ? `${panelWidth}px` : '0'
+          width: !isMobile && showChat ? `${panelWidth}px` : isMobile ? '100%' : '0'
         }}
       >
         {showChat && (
-          <div 
-            className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
-            onMouseDown={handleMouseDown}
-            onDoubleClick={handleDoubleClick}
-            title="Drag to resize panel (double-click to reset)"
-          >
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
-            </div>
-          </div>
+          <>
+            {/* Mobile Close Button */}
+            {isMobile && (
+              <Button
+                size="icon"
+                onClick={() => setShowChat(false)}
+                className="absolute top-4 right-4 z-50 min-h-touch min-w-touch bg-white/10 hover:bg-white/20 text-white rounded-full"
+              >
+                <X size={20} />
+              </Button>
+            )}
+            
+            {/* Desktop Resize Handle */}
+            {!isMobile && (
+              <div 
+                className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
+                onMouseDown={handleMouseDown}
+                onDoubleClick={handleDoubleClick}
+                title="Drag to resize panel (double-click to reset)"
+              >
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
+                </div>
+              </div>
+            )}
+          </>
         )}
         <ControlBarChat 
           isOpen={showChat} 
@@ -619,24 +761,43 @@ export function EnhancedControlBar({
       {/* AI Assistant Panel */}
       <div 
         className={cn(
-          "fixed right-0 top-0 h-full border-l border-gray-700 shadow-lg transition-all duration-300 z-40",
+          "fixed top-0 h-full border-l border-gray-700 shadow-lg transition-all duration-300 z-40",
+          isMobile 
+            ? "left-0 w-full bg-black/95 backdrop-blur-sm" 
+            : "right-0",
           showAI ? "translate-x-0" : "translate-x-full"
         )}
         style={{ 
-          width: showAI ? `${panelWidth}px` : '0'
+          width: !isMobile && showAI ? `${panelWidth}px` : isMobile ? '100%' : '0'
         }}
       >
         {showAI && (
-          <div 
-            className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
-            onMouseDown={handleMouseDown}
-            onDoubleClick={handleDoubleClick}
-            title="Drag to resize panel (double-click to reset)"
-          >
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
-            </div>
-          </div>
+          <>
+            {/* Mobile Close Button */}
+            {isMobile && (
+              <Button
+                size="icon"
+                onClick={() => setShowAI(false)}
+                className="absolute top-4 right-4 z-50 min-h-touch min-w-touch bg-white/10 hover:bg-white/20 text-white rounded-full"
+              >
+                <X size={20} />
+              </Button>
+            )}
+            
+            {/* Desktop Resize Handle */}
+            {!isMobile && (
+              <div 
+                className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
+                onMouseDown={handleMouseDown}
+                onDoubleClick={handleDoubleClick}
+                title="Drag to resize panel (double-click to reset)"
+              >
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
+                </div>
+              </div>
+            )}
+          </>
         )}
         <SimpleAIAssistant 
           isOpen={showAI} 
@@ -648,24 +809,43 @@ export function EnhancedControlBar({
       {/* Transcripts Panel */}
       <div 
         className={cn(
-          "fixed right-0 top-0 h-full border-l border-gray-700 shadow-lg transition-all duration-300 z-40",
+          "fixed top-0 h-full border-l border-gray-700 shadow-lg transition-all duration-300 z-40",
+          isMobile 
+            ? "left-0 w-full bg-black/95 backdrop-blur-sm" 
+            : "right-0",
           showTranscripts ? "translate-x-0" : "translate-x-full"
         )}
         style={{ 
-          width: showTranscripts ? `${panelWidth}px` : '0'
+          width: !isMobile && showTranscripts ? `${panelWidth}px` : isMobile ? '100%' : '0'
         }}
       >
         {showTranscripts && (
-          <div 
-            className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
-            onMouseDown={handleMouseDown}
-            onDoubleClick={handleDoubleClick}
-            title="Drag to resize panel (double-click to reset)"
-          >
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
-            </div>
-          </div>
+          <>
+            {/* Mobile Close Button */}
+            {isMobile && (
+              <Button
+                size="icon"
+                onClick={() => setShowTranscripts(false)}
+                className="absolute top-4 right-4 z-50 min-h-touch min-w-touch bg-white/10 hover:bg-white/20 text-white rounded-full"
+              >
+                <X size={20} />
+              </Button>
+            )}
+            
+            {/* Desktop Resize Handle */}
+            {!isMobile && (
+              <div 
+                className="absolute left-0 top-0 w-1 h-full bg-slate-700 hover:bg-gray-600 cursor-col-resize transition-colors"
+                onMouseDown={handleMouseDown}
+                onDoubleClick={handleDoubleClick}
+                title="Drag to resize panel (double-click to reset)"
+              >
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-0.5 h-8 bg-slate-400 rounded-full" />
+                </div>
+              </div>
+            )}
+          </>
         )}
         <TranscriptsPanel 
           isOpen={showTranscripts} 

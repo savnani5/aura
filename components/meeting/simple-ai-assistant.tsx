@@ -37,9 +37,21 @@ interface ChatMessage {
 export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: SimpleAIAssistantProps) {
   const { user, isLoaded } = useUser();
   const room = useRoomContext();
+  const [isMobile, setIsMobile] = useState(false);
 
   // Check if user is a guest (not authenticated)
   const isGuest = !isLoaded || !user;
+
+  // Mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // AI Chat functionality
   const [aiChatHistory, setAiChatHistory] = useState<ChatMessage[]>([]);
@@ -249,16 +261,31 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
   if (!isOpen) return null;
 
   return (
-    <div className="h-full flex flex-col bg-[#1a1a1a] text-white border-l border-[rgba(55,65,81,0.3)] shadow-lg">
+    <div className={cn(
+      "h-full flex flex-col bg-[#1a1a1a] text-white shadow-lg",
+      !isMobile && "border-l border-[rgba(55,65,81,0.3)]"
+    )}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-[rgba(55,65,81,0.3)]">
+      <div className={cn(
+        "flex items-center justify-between border-b border-[rgba(55,65,81,0.3)]",
+        isMobile ? "p-3" : "p-4"
+      )}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 text-white rounded-lg flex items-center justify-center">
-            <Bot size={16} />
+          <div className={cn(
+            "bg-blue-600 text-white rounded-lg flex items-center justify-center",
+            isMobile ? "w-7 h-7" : "w-8 h-8"
+          )}>
+            <Bot size={isMobile ? 14 : 16} />
           </div>
           <div>
-            <h3 className="font-medium text-white">AI Assistant</h3>
-            <p className="text-sm text-gray-400">Meeting insights & chat</p>
+            <h3 className={cn(
+              "font-medium text-white",
+              isMobile && "text-sm"
+            )}>AI Assistant</h3>
+            <p className={cn(
+              "text-gray-400",
+              isMobile ? "text-xs" : "text-sm"
+            )}>Meeting insights & chat</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -267,17 +294,23 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
             size="icon"
             onClick={clearChat}
             title="New Chat"
-            className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
+            className={cn(
+              "text-gray-400 hover:text-white hover:bg-white/10",
+              isMobile ? "h-7 w-7" : "h-8 w-8"
+            )}
           >
-            <Plus size={16} />
+            <Plus size={isMobile ? 14 : 16} />
           </Button>
           <Button
             variant="ghost"
             size="icon"
             onClick={onClose}
-            className="h-8 w-8 text-gray-400 hover:text-white hover:bg-white/10"
+            className={cn(
+              "text-gray-400 hover:text-white hover:bg-white/10",
+              isMobile ? "h-7 w-7" : "h-8 w-8"
+            )}
           >
-            <X size={16} />
+            <X size={isMobile ? 14 : 16} />
           </Button>
         </div>
       </div>
@@ -287,7 +320,10 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
         {/* Chat Messages */}
         <div 
           ref={chatMessagesRef}
-          className="flex-1 overflow-y-auto p-4 space-y-4"
+          className={cn(
+            "flex-1 overflow-y-auto space-y-4 custom-scrollbar",
+            isMobile ? "p-3" : "p-4"
+          )}
         >
           {aiChatHistory.length === 0 ? (
             <div className="text-center py-8">
@@ -347,7 +383,8 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
                 <div key={message.id} className="group">
                                       <div
                       className={cn(
-                        "rounded-lg p-3 max-w-[85%] relative",
+                        "rounded-lg relative",
+                        isMobile ? "p-2 max-w-[90%] text-sm" : "p-3 max-w-[85%]",
                         message.type === 'user' 
                           ? "bg-blue-600 text-white ml-auto" 
                           : "bg-[#2a2a2a] text-white border border-[#374151]"
@@ -532,7 +569,10 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
 
                   {/* Input Area - Only show for authenticated users */}
           {!isGuest && (
-            <div className="p-4 border-t border-[rgba(55,65,81,0.3)]">
+            <div className={cn(
+              "border-t border-[rgba(55,65,81,0.3)]",
+              isMobile ? "p-3" : "p-4"
+            )}>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -540,16 +580,22 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
                   onChange={(e) => setAiChatInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleAiChatSubmit(e)}
                   placeholder="Ask AI about the meeting..."
-                  className="flex-1 px-3 py-2 bg-[#2a2a2a] border border-[#374151] rounded-md text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+                  className={cn(
+                    "flex-1 bg-[#2a2a2a] border border-[#374151] rounded-md text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent",
+                    isMobile ? "px-2 py-2 text-sm" : "px-3 py-2 text-sm"
+                  )}
                   disabled={isAiProcessing}
                 />
                 <Button
                   onClick={handleAiChatSubmit}
                   disabled={!aiChatInput.trim() || isAiProcessing}
                   size="icon"
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  className={cn(
+                    "bg-blue-600 hover:bg-blue-700 text-white",
+                    isMobile && "h-9 w-9"
+                  )}
                 >
-                  <Send size={16} />
+                  <Send size={isMobile ? 14 : 16} />
                 </Button>
               </div>
             </div>

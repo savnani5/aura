@@ -98,6 +98,18 @@ export function MeetingDatabase({
   const [editingMeeting, setEditingMeeting] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
   const [displayLimit, setDisplayLimit] = useState(30); // Initial limit of 30 meetings
   const [showAll, setShowAll] = useState(false);
 
@@ -362,13 +374,25 @@ export function MeetingDatabase({
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="border-b border-border p-6">
-        <div className="flex items-center justify-between">
-          <div>
+      <div className={cn(
+        "border-b border-border",
+        isMobile ? "p-4" : "p-6"
+      )}>
+        <div className={cn(
+          "flex items-center justify-between",
+          isMobile && "flex-col gap-4"
+        )}>
+          <div className={cn(isMobile && "w-full")}>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold text-foreground">{workspace.name}</h1>
+              <h1 className={cn(
+                "font-semibold text-foreground",
+                isMobile ? "text-lg" : "text-2xl"
+              )}>{workspace.name}</h1>
             </div>
-            <div className="flex items-center gap-4 mt-1">
+            <div className={cn(
+              "flex items-center gap-4 mt-1",
+              isMobile && "flex-wrap"
+            )}>
               <p className="text-sm text-muted-foreground">
                 {workspace.type} • {workspace.participantCount} participant{workspace.participantCount !== 1 ? 's' : ''}
               </p>
@@ -377,11 +401,12 @@ export function MeetingDatabase({
               {participants.length > 0 && (
                 <div className="flex items-center gap-2">
                   <div className="flex -space-x-1">
-                    {participants.slice(0, 3).map((participant) => (
+                    {participants.slice(0, isMobile ? 2 : 3).map((participant) => (
                       <div
                         key={participant.id}
                         className={cn(
-                          "w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium border border-background",
+                          "rounded-full flex items-center justify-center text-xs font-medium border border-background",
+                          isMobile ? "w-5 h-5" : "w-6 h-6",
                           participant.isOnline 
                             ? "bg-green-100 text-green-800" 
                             : "bg-muted text-muted-foreground"
@@ -391,9 +416,12 @@ export function MeetingDatabase({
                         {getInitials(participant.name)}
                       </div>
                     ))}
-                    {participants.length > 3 && (
-                      <div className="w-6 h-6 bg-muted text-muted-foreground rounded-full flex items-center justify-center text-xs font-medium border border-background">
-                        +{participants.length - 3}
+                    {participants.length > (isMobile ? 2 : 3) && (
+                      <div className={cn(
+                        "bg-muted text-muted-foreground rounded-full flex items-center justify-center text-xs font-medium border border-background",
+                        isMobile ? "w-5 h-5" : "w-6 h-6"
+                      )}>
+                        +{participants.length - (isMobile ? 2 : 3)}
                       </div>
                     )}
                   </div>
@@ -402,23 +430,29 @@ export function MeetingDatabase({
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className={cn(
+            "flex items-center",
+            isMobile ? "w-full gap-2 flex-wrap" : "gap-3"
+          )}>
             {/* Copy Meeting Link Button */}
             <Button
               variant="outline"
               onClick={() => copyMeetingLink(workspace.id)}
-              className="gap-2"
+              className={cn(
+                "gap-2",
+                isMobile && "flex-1 text-xs"
+              )}
               title="Copy meeting link"
             >
               {copiedLink === workspace.id ? (
                 <>
-                  <Check size={16} className="text-green-600" />
-                  Copied!
+                  <Check size={isMobile ? 14 : 16} className="text-green-600" />
+                  {isMobile ? "Copied!" : "Copied!"}
                 </>
               ) : (
                 <>
-                  <Link size={16} />
-                  Copy Meeting Link
+                  <Link size={isMobile ? 14 : 16} />
+                  {isMobile ? "Copy Link" : "Copy Meeting Link"}
                 </>
               )}
             </Button>
@@ -428,10 +462,13 @@ export function MeetingDatabase({
               <Button
                 variant="outline"
                 onClick={onOpenTasks}
-                className="gap-2"
+                className={cn(
+                  "gap-2",
+                  isMobile && "flex-1 text-xs"
+                )}
                 title="Manage tasks"
               >
-                <CheckSquare size={16} />
+                <CheckSquare size={isMobile ? 14 : 16} />
                 Tasks
               </Button>
             )}
@@ -439,10 +476,13 @@ export function MeetingDatabase({
             {/* Join Meeting Button */}
             <Button
               onClick={() => onJoinWorkspace(workspace.id)}
-              className="gap-2"
+              className={cn(
+                "gap-2",
+                isMobile && "flex-1 text-xs"
+              )}
             >
-              <Video size={16} />
-              Join Meeting
+              <Video size={isMobile ? 14 : 16} />
+              {isMobile ? "Join" : "Join Meeting"}
             </Button>
             
             {/* Workspace Settings - Only show for hosts */}
@@ -452,8 +492,9 @@ export function MeetingDatabase({
               size="icon"
               onClick={onOpenSettings}
               title="Workspace settings"
+              className={isMobile ? "h-8 w-8" : ""}
             >
-              <MoreHorizontal size={20} />
+              <MoreHorizontal size={isMobile ? 16 : 20} />
             </Button>
             )}
           </div>
@@ -523,12 +564,15 @@ export function MeetingDatabase({
             </div>
           </div>
         ) : (
-          <div className="p-6">
+          <div className={cn(isMobile ? "p-4" : "p-6")}>
             <div className="space-y-6">
               {displayedDateGroups.map((dateGroup) => (
                 <div key={dateGroup}>
                   {/* Date Header */}
-                  <div className="text-sm font-medium text-muted-foreground mb-3">
+                  <div className={cn(
+                    "font-medium text-muted-foreground mb-3",
+                    isMobile ? "text-xs" : "text-sm"
+                  )}>
                     {dateGroup}
                   </div>
                   
@@ -537,12 +581,18 @@ export function MeetingDatabase({
                     {groupedMeetings[dateGroup].map((meeting) => (
                 <div
                   key={meeting.id}
-                        className="flex items-center space-x-3 py-2 px-3 rounded-lg hover:bg-accent/50 transition-all duration-200 group cursor-pointer"
+                        className={cn(
+                          "flex items-center rounded-lg hover:bg-accent/50 transition-all duration-200 group cursor-pointer",
+                          isMobile ? "space-x-2 py-3 px-2" : "space-x-3 py-2 px-3"
+                        )}
                         onClick={() => editingMeeting !== meeting.id && onMeetingClick(meeting)}
                 >
                     {/* Meeting Icon */}
-                        <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-muted/80 transition-colors">
-                          <FileText size={14} className="text-muted-foreground" />
+                        <div className={cn(
+                          "bg-muted rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-muted/80 transition-colors",
+                          isMobile ? "w-6 h-6" : "w-8 h-8"
+                        )}>
+                          <FileText size={isMobile ? 12 : 14} className="text-muted-foreground" />
                     </div>
                     
                     {/* Meeting Info */}
@@ -595,43 +645,56 @@ export function MeetingDatabase({
                           ) : (
                             <div className="flex items-center gap-2">
                               <div className="flex-1">
-                                <h3 className="text-sm font-medium text-foreground truncate">
+                                <h3 className={cn(
+                                  "font-medium text-foreground truncate",
+                                  isMobile ? "text-xs" : "text-sm"
+                                )}>
                                   {generateSmartTitle(meeting)}
                       </h3>
-                                <p className="text-xs text-muted-foreground truncate">
+                                <p className={cn(
+                                  "text-muted-foreground truncate",
+                                  isMobile ? "text-xs" : "text-xs"
+                                )}>
                                   {meeting.participants.map(p => p.name).join(', ')}
                                 </p>
                               </div>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditTitle(meeting);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
-                                title="Edit title"
-                              >
-                                <Edit2 size={12} />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleDeleteMeeting(meeting.id, generateSmartTitle(meeting));
-                                }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                title="Delete meeting"
-                              >
-                                <Trash2 size={12} />
-                              </Button>
+                              {!isMobile && (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditTitle(meeting);
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0"
+                                    title="Edit title"
+                                  >
+                                    <Edit2 size={12} />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteMeeting(meeting.id, generateSmartTitle(meeting));
+                                    }}
+                                    className="opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 p-0 text-destructive hover:text-destructive"
+                                    title="Delete meeting"
+                                  >
+                                    <Trash2 size={12} />
+                                  </Button>
+                                </>
+                              )}
                             </div>
                           )}
                         </div>
                         
                         {/* Time */}
-                        <div className="text-xs text-muted-foreground font-medium flex-shrink-0">
+                        <div className={cn(
+                          "text-muted-foreground font-medium flex-shrink-0",
+                          isMobile ? "text-xs" : "text-xs"
+                        )}>
                           {formatTime(meeting)}
                           </div>
                       </div>

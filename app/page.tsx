@@ -3,7 +3,7 @@
 import React, { useEffect, Suspense } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useSearchParams } from 'next/navigation';
-import { LandingPage } from '@/components/landing';
+import { AuraLanding } from '@/components/landing/aura-landing';
 import { SimplifiedDashboard } from '@/components/workspace/simplified-dashboard';
 
 function ReferralTracker() {
@@ -48,7 +48,7 @@ export default function HomePage() {
       <Suspense fallback={null}>
         <ReferralTracker />
       </Suspense>
-      {isSignedIn ? <SimplifiedDashboard /> : <LandingPage />}
+      {isSignedIn ? <SimplifiedDashboard /> : <AuraLanding />}
     </>
   );
 }

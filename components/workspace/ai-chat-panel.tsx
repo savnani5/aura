@@ -43,8 +43,20 @@ export function AiChatPanel({ workspace, onClose }: AiChatPanelProps) {
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const aiContextManager = new AiContextManager();
+
+  // Mobile detection
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Get question suggestions from AiContextManager
   const questionSuggestions = aiContextManager.getQuestionSuggestions(false);
@@ -269,18 +281,35 @@ export function AiChatPanel({ workspace, onClose }: AiChatPanelProps) {
   };
 
   return (
-    <div className="fixed right-6 top-6 bottom-6 w-96 bg-card rounded-lg shadow-2xl border border-border z-50 flex flex-col">
+    <div className={cn(
+      "fixed bg-card shadow-2xl border border-border z-50 flex flex-col",
+      isMobile 
+        ? "inset-0 rounded-none" 
+        : "right-6 top-6 bottom-6 w-96 rounded-lg"
+    )}>
         {/* Header */}
-        <div className="p-4 border-b border-border">
+        <div className={cn(
+          "border-b border-border",
+          isMobile ? "p-3" : "p-4"
+        )}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary text-primary-foreground rounded-lg flex items-center justify-center">
-                <Sparkles size={16} />
+              <div className={cn(
+                "bg-primary text-primary-foreground rounded-lg flex items-center justify-center",
+                isMobile ? "w-7 h-7" : "w-8 h-8"
+              )}>
+                <Sparkles size={isMobile ? 14 : 16} />
               </div>
               <div>
-                <h3 className="font-medium text-foreground">AI Assistant</h3>
+                <h3 className={cn(
+                  "font-medium text-foreground",
+                  isMobile ? "text-sm" : "text-base"
+                )}>AI Assistant</h3>
                 {workspace && (
-                  <p className="text-sm text-muted-foreground">{workspace.name}</p>
+                  <p className={cn(
+                    "text-muted-foreground",
+                    isMobile ? "text-xs" : "text-sm"
+                  )}>{workspace.name}</p>
                 )}
               </div>
             </div>
@@ -294,15 +323,17 @@ export function AiChatPanel({ workspace, onClose }: AiChatPanelProps) {
                   setCurrentAiMessage('');
                 }}
                 title="New Chat"
+                className={cn(isMobile && "h-8 w-8")}
               >
-                <Plus size={20} />
+                <Plus size={isMobile ? 16 : 20} />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
+                className={cn(isMobile && "h-8 w-8")}
               >
-                <X size={20} />
+                <X size={isMobile ? 16 : 20} />
               </Button>
             </div>
           </div>
@@ -312,7 +343,10 @@ export function AiChatPanel({ workspace, onClose }: AiChatPanelProps) {
         <div className="flex-1 flex flex-col min-h-0">
           <div 
             ref={chatMessagesRef}
-            className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar"
+            className={cn(
+              "flex-1 overflow-y-auto space-y-4 custom-scrollbar",
+              isMobile ? "p-3" : "p-4"
+            )}
           >
             {chatHistory.length === 0 ? (
               <div className="text-center py-8">
@@ -496,7 +530,10 @@ export function AiChatPanel({ workspace, onClose }: AiChatPanelProps) {
           </div>
 
           {/* Input Area */}
-          <div className="p-4 border-t border-border">
+          <div className={cn(
+            "border-t border-border",
+            isMobile ? "p-3" : "p-4"
+          )}>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -504,15 +541,19 @@ export function AiChatPanel({ workspace, onClose }: AiChatPanelProps) {
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                 placeholder={aiContextManager.getPlaceholderText(chatInput, false)}
-                className="flex-1 px-3 py-2 bg-background border border-input rounded-md text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                className={cn(
+                  "flex-1 bg-background border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                  isMobile ? "px-2 py-2 text-sm" : "px-3 py-2 text-sm"
+                )}
                 disabled={isProcessing}
               />
               <Button
                 onClick={handleSendMessage}
                 disabled={!chatInput.trim() || isProcessing}
                 size="icon"
+                className={cn(isMobile && "h-9 w-9")}
               >
-                <Send size={16} />
+                <Send size={isMobile ? 14 : 16} />
               </Button>
             </div>
           </div>

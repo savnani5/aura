@@ -6,17 +6,25 @@ import { ClerkProvider } from '@clerk/nextjs';
 import { SubscriptionProvider } from './subscription/contexts/SubscriptionContext';
 
 export const metadata: Metadata = {
-  title: 'Ohm',
-  description: 'AI first Video Conferencing App',
+  title: 'Aura',
+  description: 'AI-native video calls that turn every meeting into a searchable, sharable, actionable workspace',
   icons: {
-    icon: '/images/ohm-icon.svg',
-    shortcut: '/images/ohm-icon.svg',
-    apple: '/images/ohm-icon.svg',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/images/aura.svg', type: 'image/svg+xml' }
+    ],
+    shortcut: '/favicon.svg',
+    apple: '/images/aura.svg',
   },
 };
 
 export const viewport: Viewport = {
   themeColor: '#ffffff',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, // Prevents zoom on form inputs
+  viewportFit: 'cover', // For iPhone X+ safe areas
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

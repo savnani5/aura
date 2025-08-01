@@ -1,15 +1,25 @@
 import { SignUp } from '@clerk/nextjs';
-import styles from '@/styles/auth.module.css';
+import Image from 'next/image';
 
 export default function SignUpPage() {
   return (
-    <div className={styles.authContainer}>
-      <div className={styles.authCard}>
-        <div className={styles.authHeader}>
-          <h1 className={styles.authTitle}>Join Ohm</h1>
-          <p className={styles.authSubtitle}>Your AI meeting copilot</p>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-slate-100 to-blue-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="mb-6">
+            <Image 
+              src="/images/aura_full.svg" 
+              alt="Aura" 
+              width={200} 
+              height={50}
+              className="h-12 w-auto mx-auto"
+            />
+          </div>
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">Join Aura</h1>
+          <p className="text-slate-600">Your AI-native video conferencing platform</p>
         </div>
-        <div className={styles.clerkWrapper}>
+        
+        <div className="bg-white/70 backdrop-blur-sm rounded-2xl border border-slate-300/50 shadow-xl p-6">
           <SignUp 
             redirectUrl="/"
             signInUrl="/sign-in"
@@ -17,17 +27,19 @@ export default function SignUpPage() {
               elements: {
                 rootBox: "w-full",
                 card: "bg-transparent border-0 shadow-none",
-                headerTitle: "text-white text-xl",
-                headerSubtitle: "text-gray-400",
-                socialButtonsBlockButton: "bg-gray-800 border-gray-600 text-white hover:bg-gray-700 transition-colors",
-                dividerLine: "bg-gray-600",
-                dividerText: "text-gray-400",
-                formFieldLabel: "text-gray-300",
-                formFieldInput: "bg-gray-800 text-white border-gray-600 focus:border-purple-500",
-                footerActionLink: "text-purple-400 hover:text-purple-300",
-                formButtonPrimary: "bg-purple-600 hover:bg-purple-700 text-white transition-colors",
-                footer: "text-gray-400",
-                footerActionText: "text-gray-400",
+                headerTitle: "hidden",
+                headerSubtitle: "hidden",
+                socialButtonsBlockButton: "bg-slate-800 border-slate-600 text-white hover:bg-slate-700 transition-colors rounded-lg",
+                dividerLine: "bg-slate-300",
+                dividerText: "text-slate-600",
+                formFieldLabel: "text-slate-700 font-medium",
+                formFieldInput: "bg-white/80 text-slate-800 border-slate-300 focus:border-slate-500 focus:ring-slate-500 rounded-lg",
+                footerActionLink: "text-slate-700 hover:text-slate-800 font-medium",
+                formButtonPrimary: "bg-slate-800 hover:bg-slate-700 text-white transition-colors rounded-lg font-medium",
+                footer: "text-slate-600",
+                footerActionText: "text-slate-600",
+                identityPreviewText: "text-slate-700",
+                identityPreviewEditButton: "text-slate-700 hover:text-slate-800",
               },
             }}
           />
