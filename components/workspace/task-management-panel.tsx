@@ -782,7 +782,7 @@ export function TaskManagementPanel({ workspaceId, workspaceName, onClose }: Tas
                               {/* Edit button on same line as title on mobile */}
                               {isMobile && (
                                 <Button
-                                  size="xs"
+                                  size="sm"
                                   variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation();
