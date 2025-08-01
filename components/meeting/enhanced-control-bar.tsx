@@ -64,7 +64,7 @@ export function EnhancedControlBar({
   const [panelWidth, setPanelWidth] = useState(() => {
     // Load saved width from localStorage or use percentage-based default
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('ohm-panel-width');
+      const saved = localStorage.getItem('aura-panel-width');
       if (saved) {
         return parseInt(saved, 10);
       }
@@ -98,13 +98,13 @@ export function EnhancedControlBar({
           const maxAllowed = Math.min(800, window.innerWidth * 0.7);
           const minAllowed = Math.max(300, window.innerWidth * 0.2);
           
-          const savedWidth = localStorage.getItem('ohm-panel-width');
+          const savedWidth = localStorage.getItem('aura-panel-width');
           if (savedWidth) {
             const currentWidth = parseInt(savedWidth, 10);
             if (currentWidth > maxAllowed || currentWidth < minAllowed) {
               const adjustedWidth = Math.max(minAllowed, Math.min(maxAllowed, currentWidth));
               setPanelWidth(adjustedWidth);
-              localStorage.setItem('ohm-panel-width', adjustedWidth.toString());
+              localStorage.setItem('aura-panel-width', adjustedWidth.toString());
             }
           }
         }
@@ -153,7 +153,7 @@ export function EnhancedControlBar({
     const defaultWidth = Math.max(350, Math.min(600, window.innerWidth * 0.35));
     const resetWidth = Math.round(defaultWidth);
     setPanelWidth(resetWidth);
-    localStorage.setItem('ohm-panel-width', resetWidth.toString());
+    localStorage.setItem('aura-panel-width', resetWidth.toString());
   };
 
   // Handle panel resizing
@@ -187,7 +187,7 @@ export function EnhancedControlBar({
       document.body.style.userSelect = '';
       
       // Save width to localStorage
-      localStorage.setItem('ohm-panel-width', panelWidth.toString());
+      localStorage.setItem('aura-panel-width', panelWidth.toString());
     };
     
     document.addEventListener('mousemove', handleMouseMove);

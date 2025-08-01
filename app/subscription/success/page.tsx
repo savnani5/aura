@@ -74,7 +74,7 @@ export default function SubscriptionSuccessPage() {
 
         {/* Main Message */}
         <h1 className="text-2xl font-bold text-gray-900 mb-4">
-          Welcome to Ohm Pro!
+          Welcome to Aura Pro!
         </h1>
         
         <p className="text-gray-600 mb-8">
@@ -140,7 +140,7 @@ export default function SubscriptionSuccessPage() {
 
         {/* Help text */}
         <p className="text-xs text-gray-400 mt-6">
-          Need help? Contact us at support@tryohm.com
+          Need help? Contact us at support@tryaura.com
             </p>
           </div>
     </div>

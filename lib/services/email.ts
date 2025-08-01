@@ -28,7 +28,7 @@ export class EmailService {
     try {
       const { title, recurringPattern } = room;
       // Updated to point to meeting prep section instead of direct meeting room
-      const meetingPrepUrl = `https://www.tryohm.com/meetingroom/${room.roomName}`;
+      const meetingPrepUrl = `https://www.tryaura.com/meetingroom/${room.roomName}`;
       
       if (!recurringPattern?.frequency || !recurringPattern?.time) {
         console.warn('Missing recurring pattern for calendar invite');
@@ -116,8 +116,8 @@ export class EmailService {
       }
 
       const event = {
-        title: `${title} - Ohm Meeting`,
-        description: `Join your Ohm video meeting: ${meetingPrepUrl}\n\nMeeting Room: ${title}\nType: ${room.type}\nTimezone: ${timezone}\n\nThis is a recurring ${recurringPattern.frequency} meeting. Access your meeting room dashboard to prepare and join when it's time.\n\nNote: This meeting will appear in your local timezone in your calendar application.`,
+        title: `${title} - Aura Meeting`,
+        description: `Join your Aura video meeting: ${meetingPrepUrl}\n\nMeeting Room: ${title}\nType: ${room.type}\nTimezone: ${timezone}\n\nThis is a recurring ${recurringPattern.frequency} meeting. Access your meeting room dashboard to prepare and join when it's time.\n\nNote: This meeting will appear in your local timezone in your calendar application.`,
         start: [
           startDate.getFullYear(),
           startDate.getMonth() + 1,
@@ -137,7 +137,7 @@ export class EmailService {
         location: meetingPrepUrl,
         url: meetingPrepUrl,
         recurrenceRule: rrule,
-        organizer: { name: 'Ohm', email: 'notifications@tryohm.com' },
+        organizer: { name: 'Aura', email: 'notifications@tryaura.com' },
         attendees: room.participants.map(p => ({
           name: p.name,
           email: p.email,
@@ -181,7 +181,7 @@ export class EmailService {
       const host = room.participants.find(p => p.role === 'host');
       
       // Updated to point to meeting prep section instead of direct meeting room
-      const meetingPrepUrl = `https://www.tryohm.com/meetingroom/${room.roomName}`;
+      const meetingPrepUrl = `https://www.tryaura.com/meetingroom/${room.roomName}`;
       
       // Create attachments if calendar invite was generated
       const attachments = calendarInvite ? [{
@@ -195,9 +195,9 @@ export class EmailService {
       for (const participant of participants) {
         try {
           await this.resend.emails.send({
-            from: 'Ohm <notifications@tryohm.com>',
+            from: 'Aura <notifications@tryaura.com>',
             to: [participant.email],
-            subject: `🎥 You're invited to join "${room.title}" on Ohm`,
+            subject: `🎥 You're invited to join "${room.title}" on Aura`,
             html: this.generateParticipantInviteEmail(room, participant, hostName, meetingPrepUrl),
             attachments
           });
@@ -214,9 +214,9 @@ export class EmailService {
       if (host) {
         try {
           await this.resend.emails.send({
-            from: 'Ohm <notifications@tryohm.com>',
+            from: 'Aura <notifications@tryaura.com>',
             to: [host.email],
-            subject: `🎥 Your meeting room "${room.title}" is ready on Ohm`,
+            subject: `🎥 Your meeting room "${room.title}" is ready on Aura`,
             html: this.generateHostConfirmationEmail(room, host, meetingPrepUrl),
             attachments
           });
@@ -277,7 +277,7 @@ export class EmailService {
     <!-- Header -->
     <div style="text-align: center; margin-bottom: 40px;">
       <div style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; margin-bottom: 16px;">
-        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 600;">🎥 Ohm</h1>
+        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 600;">🎥 Aura</h1>
       </div>
     </div>
 
@@ -292,7 +292,7 @@ export class EmailService {
       </p>
       
       <p style="margin: 16px 0; color: #4b5563; font-size: 16px;">
-        ${hostName} has invited you to join a recurring meeting room on Ohm. This is your space for ongoing collaboration with AI-powered meeting assistance.
+        ${hostName} has invited you to join a recurring meeting room on Aura. This is your space for ongoing collaboration with AI-powered meeting assistance.
       </p>
 
       <div style="background: #f3f4f6; border-radius: 12px; padding: 24px; margin: 24px 0;">
@@ -326,7 +326,7 @@ export class EmailService {
     <!-- Footer -->
     <div style="text-align: center; color: #9ca3af; font-size: 12px;">
       <p style="margin: 8px 0;">
-        Powered by <strong>Ohm</strong> - AI-first video conferencing
+        Powered by <strong>Aura</strong> - AI-first video conferencing
       </p>
       <p style="margin: 8px 0;">
         This email was sent because you were invited to a meeting room.
@@ -371,7 +371,7 @@ export class EmailService {
     <!-- Header -->
     <div style="text-align: center; margin-bottom: 40px;">
       <div style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; margin-bottom: 16px;">
-        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 600;">🎥 Ohm</h1>
+        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 600;">🎥 Aura</h1>
       </div>
     </div>
 
@@ -424,10 +424,10 @@ export class EmailService {
     <!-- Footer -->
     <div style="text-align: center; color: #9ca3af; font-size: 12px;">
       <p style="margin: 8px 0;">
-        Powered by <strong>Ohm</strong> - AI-first video conferencing
+        Powered by <strong>Aura</strong> - AI-first video conferencing
       </p>
       <p style="margin: 8px 0;">
-        Manage your meeting rooms at <a href="https://www.tryohm.com" style="color: #667eea;">tryohm.com</a>
+        Manage your meeting rooms at <a href="https://www.tryaura.com" style="color: #667eea;">tryaura.com</a>
       </p>
     </div>
   </div>
@@ -470,7 +470,7 @@ export class EmailService {
       for (const participant of participants) {
         try {
           await this.resend.emails.send({
-            from: 'Ohm <notifications@tryohm.com>',
+            from: 'Aura <notifications@tryaura.com>',
             to: [participant.email],
             subject: `📝 Meeting Summary: ${roomTitle} - ${meetingDate}`,
             html: this.generateMeetingSummaryEmail(meeting, roomTitle, participant, duration)
@@ -566,7 +566,7 @@ export class EmailService {
     <!-- Header -->
     <div style="text-align: center; margin-bottom: 40px;">
       <div style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; margin-bottom: 16px;">
-        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 600;">🎥 Ohm</h1>
+        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 600;">🎥 Aura</h1>
       </div>
     </div>
 
@@ -648,7 +648,7 @@ export class EmailService {
 
       <!-- Action Button -->
       <div style="text-align: center; margin: 32px 0;">
-        <a href="https://www.tryohm.com/meetingroom/${meeting.roomName}" style="display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; transition: transform 0.2s;">
+        <a href="https://www.tryaura.com/meetingroom/${meeting.roomName}" style="display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; transition: transform 0.2s;">
           📊 View Full Meeting Details
         </a>
       </div>
@@ -663,7 +663,7 @@ export class EmailService {
     <!-- Footer -->
     <div style="text-align: center; color: #9ca3af; font-size: 12px;">
       <p style="margin: 8px 0;">
-        Powered by <strong>Ohm</strong> - AI-first video conferencing
+        Powered by <strong>Aura</strong> - AI-first video conferencing
       </p>
       <p style="margin: 8px 0;">
         This summary was automatically generated by AI from your meeting transcript.
@@ -692,7 +692,7 @@ export class EmailService {
     const errors: string[] = [];
 
     try {
-      const meetingPrepUrl = `https://www.tryohm.com/meetingroom/${room.roomName}`;
+      const meetingPrepUrl = `https://www.tryaura.com/meetingroom/${room.roomName}`;
       
       // Generate calendar invite only if room has timing configured
       let calendarInvite = null;
@@ -716,11 +716,11 @@ export class EmailService {
       for (const participant of participantsToEmail) {
         try {
           const emailSubject = room.recurringPattern?.frequency && room.recurringPattern?.time
-            ? `🎥 You've been added to "${room.title}" on Ohm`
-            : `🎥 You've been added to "${room.title}" meeting room on Ohm`;
+            ? `🎥 You've been added to "${room.title}" on Aura`
+            : `🎥 You've been added to "${room.title}" meeting room on Aura`;
 
           await this.resend.emails.send({
-            from: 'Ohm <notifications@tryohm.com>',
+            from: 'Aura <notifications@tryaura.com>',
             to: [participant.email],
             subject: emailSubject,
             html: this.generateNewParticipantInviteEmail(room, participant, hostName, meetingPrepUrl),
@@ -797,7 +797,7 @@ export class EmailService {
     <!-- Header -->
     <div style="text-align: center; margin-bottom: 40px;">
       <div style="display: inline-block; padding: 12px 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; margin-bottom: 16px;">
-        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 600;">🎥 Ohm</h1>
+        <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 600;">🎥 Aura</h1>
       </div>
     </div>
 
@@ -812,7 +812,7 @@ export class EmailService {
       </p>
       
       <p style="margin: 16px 0; color: #4b5563; font-size: 16px;">
-        Great news! ${hostName} has added you to an existing meeting room on Ohm. You're now part of the team and can access all meeting history, shared tasks, and upcoming sessions.
+        Great news! ${hostName} has added you to an existing meeting room on Aura. You're now part of the team and can access all meeting history, shared tasks, and upcoming sessions.
       </p>
 
       <div style="background: #f3f4f6; border-radius: 12px; padding: 24px; margin: 24px 0;">
@@ -842,7 +842,7 @@ export class EmailService {
     <!-- Footer -->
     <div style="text-align: center; color: #9ca3af; font-size: 12px;">
       <p style="margin: 8px 0;">
-        Powered by <strong>Ohm</strong> - AI-first video conferencing
+        Powered by <strong>Aura</strong> - AI-first video conferencing
       </p>
       <p style="margin: 8px 0;">
         You received this email because you were added to a meeting room.

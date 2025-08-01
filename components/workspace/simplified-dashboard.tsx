@@ -92,25 +92,25 @@ export function SimplifiedDashboard() {
   // Persistent caching state using sessionStorage
   const [lastWorkspacesFetch, setLastWorkspacesFetch] = useState<number>(() => {
     if (typeof window !== 'undefined') {
-      return parseInt(sessionStorage.getItem('ohm-workspaces-fetch-time') || '0', 10);
+      return parseInt(sessionStorage.getItem('aura-workspaces-fetch-time') || '0', 10);
     }
     return 0;
   });
   const [lastMeetingsFetch, setLastMeetingsFetch] = useState<{[key: string]: number}>(() => {
     if (typeof window !== 'undefined') {
-      return JSON.parse(sessionStorage.getItem('ohm-meetings-fetch-times') || '{}');
+      return JSON.parse(sessionStorage.getItem('aura-meetings-fetch-times') || '{}');
     }
     return {};
   });
   const [workspacesCache, setWorkspacesCache] = useState<Workspace[]>(() => {
     if (typeof window !== 'undefined') {
-      return JSON.parse(sessionStorage.getItem('ohm-workspaces-cache') || '[]');
+      return JSON.parse(sessionStorage.getItem('aura-workspaces-cache') || '[]');
     }
     return [];
   });
   const [meetingsCache, setMeetingsCache] = useState<{[key: string]: Meeting[]}>(() => {
     if (typeof window !== 'undefined') {
-      return JSON.parse(sessionStorage.getItem('ohm-meetings-cache') || '{}');
+      return JSON.parse(sessionStorage.getItem('aura-meetings-cache') || '{}');
     }
     return {};
   });
@@ -154,8 +154,8 @@ export function SimplifiedDashboard() {
       setLastWorkspacesFetch(0);
       setWorkspacesCache([]);
       // Clear sessionStorage
-      sessionStorage.removeItem('ohm-workspaces-cache');
-      sessionStorage.removeItem('ohm-workspaces-fetch-time');
+      sessionStorage.removeItem('aura-workspaces-cache');
+      sessionStorage.removeItem('aura-workspaces-fetch-time');
     }
     if (type === 'meetings' || type === 'all') {
       if (workspaceId) {
@@ -167,21 +167,21 @@ export function SimplifiedDashboard() {
         setMeetingsCache(newCache);
         
         // Update sessionStorage
-        sessionStorage.setItem('ohm-meetings-fetch-times', JSON.stringify(newFetchTimes));
-        sessionStorage.setItem('ohm-meetings-cache', JSON.stringify(newCache));
+        sessionStorage.setItem('aura-meetings-fetch-times', JSON.stringify(newFetchTimes));
+        sessionStorage.setItem('aura-meetings-cache', JSON.stringify(newCache));
       } else {
         setLastMeetingsFetch({});
         setMeetingsCache({});
         // Clear sessionStorage
-        sessionStorage.removeItem('ohm-meetings-cache');
-        sessionStorage.removeItem('ohm-meetings-fetch-times');
+        sessionStorage.removeItem('aura-meetings-cache');
+        sessionStorage.removeItem('aura-meetings-fetch-times');
       }
     }
   }, [lastMeetingsFetch, meetingsCache]);
 
   // Load sidebar width from localStorage on mount
   useEffect(() => {
-    const savedWidth = localStorage.getItem('ohm-sidebar-width');
+    const savedWidth = localStorage.getItem('aura-sidebar-width');
     if (savedWidth) {
       const width = parseInt(savedWidth, 10);
       if (width >= MIN_SIDEBAR_WIDTH && width <= MAX_SIDEBAR_WIDTH) {
@@ -192,7 +192,7 @@ export function SimplifiedDashboard() {
 
   // Save sidebar width to localStorage
   const saveSidebarWidth = useCallback((width: number) => {
-    localStorage.setItem('ohm-sidebar-width', width.toString());
+    localStorage.setItem('aura-sidebar-width', width.toString());
   }, []);
 
   // Handle mouse down on resize handle
@@ -269,7 +269,7 @@ export function SimplifiedDashboard() {
       const workspaceFromUrl = urlParams.get('workspace');
       
       // Check localStorage second
-      const workspaceFromStorage = localStorage.getItem('ohm-selected-workspace');
+      const workspaceFromStorage = localStorage.getItem('aura-selected-workspace');
       
       // Find workspace by ID from URL or localStorage
       const targetWorkspaceId = workspaceFromUrl || workspaceFromStorage;
@@ -298,10 +298,10 @@ export function SimplifiedDashboard() {
   useEffect(() => {
     const handleBeforeUnload = () => {
       // Clear sessionStorage when user closes tab/window
-      sessionStorage.removeItem('ohm-workspaces-cache');
-      sessionStorage.removeItem('ohm-workspaces-fetch-time');
-      sessionStorage.removeItem('ohm-meetings-cache');
-      sessionStorage.removeItem('ohm-meetings-fetch-times');
+      sessionStorage.removeItem('aura-workspaces-cache');
+      sessionStorage.removeItem('aura-workspaces-fetch-time');
+      sessionStorage.removeItem('aura-meetings-cache');
+      sessionStorage.removeItem('aura-meetings-fetch-times');
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -337,7 +337,7 @@ export function SimplifiedDashboard() {
       
       checkIfUserIsHost(selectedWorkspace.id);
       // Persist selected workspace to localStorage
-      localStorage.setItem('ohm-selected-workspace', selectedWorkspace.id);
+      localStorage.setItem('aura-selected-workspace', selectedWorkspace.id);
     }
   }, [selectedWorkspace]);
 
@@ -421,8 +421,8 @@ export function SimplifiedDashboard() {
         setLastWorkspacesFetch(now);
         
         // Persist to sessionStorage
-        sessionStorage.setItem('ohm-workspaces-cache', JSON.stringify(transformedWorkspaces));
-        sessionStorage.setItem('ohm-workspaces-fetch-time', now.toString());
+        sessionStorage.setItem('aura-workspaces-cache', JSON.stringify(transformedWorkspaces));
+        sessionStorage.setItem('aura-workspaces-fetch-time', now.toString());
         
         setWorkspaces(transformedWorkspaces);
       }
@@ -501,8 +501,8 @@ export function SimplifiedDashboard() {
         setLastMeetingsFetch(newFetchTimes);
         
         // Persist to sessionStorage
-        sessionStorage.setItem('ohm-meetings-cache', JSON.stringify(newMeetingsCache));
-        sessionStorage.setItem('ohm-meetings-fetch-times', JSON.stringify(newFetchTimes));
+        sessionStorage.setItem('aura-meetings-cache', JSON.stringify(newMeetingsCache));
+        sessionStorage.setItem('aura-meetings-fetch-times', JSON.stringify(newFetchTimes));
         
         setMeetings(transformedMeetings);
       }
@@ -574,7 +574,7 @@ export function SimplifiedDashboard() {
               </svg>
             </Button>
             <h1 className="text-lg font-semibold">
-              {selectedWorkspace?.name || 'Ohm'}
+              {selectedWorkspace?.name || 'Aura'}
             </h1>
           </div>
           <Button
@@ -617,7 +617,7 @@ export function SimplifiedDashboard() {
                 onSelectWorkspace={(workspace) => {
                   setSelectedWorkspace(workspace);
                   if (workspace) {
-                    localStorage.setItem('ohm-selected-workspace', workspace.id);
+                    localStorage.setItem('aura-selected-workspace', workspace.id);
                   }
                   setIsMobileSidebarOpen(false); // Close mobile sidebar after selection
                 }}
@@ -644,7 +644,7 @@ export function SimplifiedDashboard() {
               setSelectedWorkspace(workspace);
               // Also persist the selection immediately
               if (workspace) {
-                localStorage.setItem('ohm-selected-workspace', workspace.id);
+                localStorage.setItem('aura-selected-workspace', workspace.id);
               }
             }}
             onCreateWorkspace={handleCreateWorkspace}

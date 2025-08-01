@@ -1,4 +1,4 @@
-# Ohm - AI First Video Conferencing App
+# Aura - AI First Video Conferencing App
 
 An intelligent video conferencing application built with Next.js 15, React 18, TypeScript, and LiveKit. Features real-time video/audio communication, live transcription, chat functionality, and an integrated AI assistant powered by OpenAI.
 
@@ -12,22 +12,22 @@ An intelligent video conferencing application built with Next.js 15, React 18, T
 
 ## AI Assistant Features
 
-The integrated AI assistant (Ohm) provides intelligent meeting support:
+The integrated AI assistant (Aura) provides intelligent meeting support:
 
 - **Context Awareness**: Accesses current meeting transcripts and previous meeting history
 - **Vector Search**: Uses embeddings to find relevant information from past meetings
 - **Real-time Help**: Answers questions about ongoing discussions
 - **Meeting Insights**: Provides summaries, action items, and key points
-- **Easy Access**: Simply type `@ohm` followed by your question in the chat
+- **Easy Access**: Simply type `@aura` followed by your question in the chat
 
 ### Using the AI Assistant
 
-1. In the chat tab, type `@ohm` followed by your question
+1. In the chat tab, type `@aura` followed by your question
 2. Examples:
-   - `@ohm summarize the key points discussed so far`
-   - `@ohm what decisions were made in previous meetings about this topic?`
-   - `@ohm create action items from today's discussion`
-   - `@ohm who mentioned the budget requirements?`
+   - `@aura summarize the key points discussed so far`
+   - `@aura what decisions were made in previous meetings about this topic?`
+   - `@aura create action items from today's discussion`
+   - `@aura who mentioned the budget requirements?`
 
 The AI assistant will analyze current transcripts and search through previous meeting data to provide comprehensive, context-aware responses.
 
@@ -45,7 +45,7 @@ The AI assistant will analyze current transcripts and search through previous me
 1. Clone the repository:
 ```bash
 git clone <repository-url>
-cd ohm
+cd aura
 ```
 
 2. Install dependencies:
@@ -128,7 +128,7 @@ The application is ready for deployment on Vercel:
 2. **Video/Audio**: Use camera and microphone controls in the toolbar
 3. **Transcription**: Enable live transcription to see real-time captions
 4. **Chat**: Send messages to other participants
-5. **AI Assistant**: Use `@ohm` commands to interact with the AI assistant
+5. **AI Assistant**: Use `@aura` commands to interact with the AI assistant
 6. **Settings**: Customize camera settings including background effects
 
 ## AI Assistant Capabilities
@@ -146,7 +146,7 @@ MIT License - see LICENSE file for details.
 ## Project Structure
 
 ```
-ohm/
+aura/
 ├── app/                 # Next.js app directory
 │   ├── api/            # API routes
 │   ├── components/     # React components
@@ -169,4 +169,4 @@ ohm/
 
 ## Support
 
-For support and questions, please [open an issue](https://github.com/your-username/ohm/issues) on GitHub.
+For support and questions, please [open an issue](https://github.com/your-username/aura/issues) on GitHub.

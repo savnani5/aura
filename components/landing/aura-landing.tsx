@@ -52,7 +52,7 @@ export function AuraLanding() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-slate-100 to-blue-100">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-gray-200/50">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-2 sm:px-4 lg:px-6 xl:px-8">
           <div className="flex h-20 items-center justify-between">
             <div className="flex items-center gap-3">
               <Image 

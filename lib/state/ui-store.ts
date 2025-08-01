@@ -411,7 +411,7 @@ export const UIStorageUtils = {
     useUIStore.getState().removeProcessingSignal(`${type}-processing-${status}`)
   },
 
-  // Referral code (replaces localStorage.getItem('ohm_referral'))
+  // Referral code (replaces localStorage.getItem('aura_referral'))
   setReferralCode: (code: string) => {
     useUIStore.getState().setUserPreference('referralCode', code)
   },

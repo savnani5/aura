@@ -196,15 +196,15 @@ export class AiContextManager {
    */
   isAiCommand(message: string): boolean {
     const lowerMessage = message.toLowerCase().trim();
-    return lowerMessage.startsWith('@ohm ') || lowerMessage.startsWith('@web ');
+    return lowerMessage.startsWith('@aura ') || lowerMessage.startsWith('@web ');
   }
 
   /**
    * Extract AI message from command
    */
   extractAiMessage(message: string): string {
-    if (message.toLowerCase().startsWith('@ohm ')) {
-      return message.slice(message.toLowerCase().indexOf('@ohm ') + 5);
+    if (message.toLowerCase().startsWith('@aura ')) {
+      return message.slice(message.toLowerCase().indexOf('@aura ') + 6);
     } else if (message.toLowerCase().startsWith('@web ')) {
       return message; // Keep @web prefix for backend processing
     }
@@ -287,18 +287,18 @@ export class AiContextManager {
   /**
    * Toggle AI command prefix
    */
-  toggleAiPrefix(currentInput: string, prefix: '@ohm' | '@web'): string {
+  toggleAiPrefix(currentInput: string, prefix: '@aura' | '@web'): string {
     const lowerInput = currentInput.toLowerCase();
     
     if (lowerInput.startsWith(`${prefix} `)) {
       // Remove the prefix if already present
       return currentInput.slice(prefix.length + 1);
-    } else if (lowerInput.startsWith('@ohm ') && prefix === '@web') {
-      // Replace @ohm with @web
+    } else if (lowerInput.startsWith('@aura ') && prefix === '@web') {
+      // Replace @aura with @web
       return `@web ${currentInput.slice(5)}`;
-    } else if (lowerInput.startsWith('@web ') && prefix === '@ohm') {
-      // Replace @web with @ohm
-      return `@ohm ${currentInput.slice(5)}`;
+    } else if (lowerInput.startsWith('@web ') && prefix === '@aura') {
+      // Replace @web with @aura
+      return `@aura ${currentInput.slice(5)}`;
     } else {
       // Add the prefix
       return `${prefix} ${currentInput}`;
@@ -311,7 +311,7 @@ export class AiContextManager {
   getPlaceholderText(input: string, isLiveMeeting: boolean = false): string {
     const lowerInput = input.toLowerCase();
     
-    if (lowerInput.startsWith('@ohm ') || lowerInput.startsWith('@web ')) {
+    if (lowerInput.startsWith('@aura ') || lowerInput.startsWith('@web ')) {
       return isLiveMeeting 
         ? "Ask AI about the meeting or search the web..."
         : "Ask AI about the room or search the web...";

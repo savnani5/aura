@@ -34,7 +34,7 @@ export class AIChatbot {
 
   // System prompt for the AI assistant
   private getSystemPrompt(): string {
-    return `You are Ohm, a helpful AI assistant for video meetings. Be concise and direct in your responses.
+    return `You are Aura, a helpful AI assistant for video meetings. Be concise and direct in your responses.
 
 CAPABILITIES:
 - Meeting summaries, decisions, action items

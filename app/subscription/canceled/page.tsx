@@ -69,7 +69,7 @@ export default function SubscriptionCanceledPage() {
         
         <p className="text-gray-600 mb-8">
               No worries! Your payment was canceled and no charges were made. 
-          You can continue using Ohm with the free plan.
+          You can continue using Aura with the free plan.
             </p>
 
                 {/* Free Plan Features */}

@@ -1,32 +1,21 @@
 import { SignIn } from '@clerk/nextjs';
-import Image from 'next/image';
 
 export default function SignInPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-slate-100 to-blue-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md mx-auto">
         <div className="text-center mb-8">
-          <div className="mb-6">
-            <Image 
-              src="/images/aura_full.svg" 
-              alt="Aura" 
-              width={200} 
-              height={50}
-              className="h-12 w-auto mx-auto"
-            />
-          </div>
           <h1 className="text-3xl font-bold text-slate-800 mb-2">Welcome to Aura</h1>
           <p className="text-slate-600">Your AI-native video conferencing platform</p>
         </div>
         
-        <div className="bg-white/70 backdrop-blur-sm rounded-2xl border border-slate-300/50 shadow-xl p-6">
-          <SignIn 
-            redirectUrl="/"
-            signUpUrl="/sign-up"
-            appearance={{
+        <SignIn 
+          redirectUrl="/"
+          signUpUrl="/sign-up"
+                      appearance={{
               elements: {
                 rootBox: "w-full",
-                card: "bg-transparent border-0 shadow-none",
+                card: "bg-white/70 backdrop-blur-sm rounded-2xl border border-slate-300/50 shadow-xl p-6",
                 headerTitle: "hidden",
                 headerSubtitle: "hidden",
                 socialButtonsBlockButton: "bg-slate-800 border-slate-600 text-white hover:bg-slate-700 transition-colors rounded-lg",
@@ -42,8 +31,7 @@ export default function SignInPage() {
                 identityPreviewEditButton: "text-slate-700 hover:text-slate-800",
               },
             }}
-          />
-        </div>
+        />
       </div>
     </div>
   );

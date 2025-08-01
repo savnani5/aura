@@ -868,13 +868,13 @@ function VideoConferenceComponent(props: {
   };
 
   const shareViaEmail = () => {
-    const subject = encodeURIComponent('Join my Ohm video meeting');
-    const body = encodeURIComponent(`Hi! Join my video meeting on Ohm:\n\n${meetingUrl}\n\nSee you there!`);
+    const subject = encodeURIComponent('Join my Aura video meeting');
+    const body = encodeURIComponent(`Hi! Join my video meeting on Aura:\n\n${meetingUrl}\n\nSee you there!`);
     window.open(`mailto:?subject=${subject}&body=${body}`);
   };
 
   const shareViaWhatsApp = () => {
-    const text = encodeURIComponent(`Join my video meeting on Ohm: ${meetingUrl}`);
+    const text = encodeURIComponent(`Join my video meeting on Aura: ${meetingUrl}`);
     window.open(`https://wa.me/?text=${text}`);
   };
 

@@ -14,7 +14,7 @@ function ReferralTracker() {
     const referralCode = searchParams.get('ref');
     if (referralCode) {
       // Store referral code in localStorage for later use when user signs up
-      localStorage.setItem('ohm_referral', referralCode);
+      localStorage.setItem('aura_referral', referralCode);
       console.log('Stored referral code from landing page:', referralCode);
       
       // Optional: Clean URL by removing the ref parameter
