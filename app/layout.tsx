@@ -10,11 +10,11 @@ export const metadata: Metadata = {
   description: 'AI-native video calls that turn every meeting into a searchable, sharable, actionable workspace',
   icons: {
     icon: [
-      { url: '/favicon.svg', type: 'image/svg+xml' },
-      { url: '/images/aura.svg', type: 'image/svg+xml' }
+      { url: '/favicon.png', type: 'image/png' },
+      { url: '/favicon.ico', sizes: '32x32' }
     ],
-    shortcut: '/favicon.svg',
-    apple: '/images/aura.svg',
+    shortcut: '/favicon.png',
+    apple: '/favicon.png',
   },
 };
 
