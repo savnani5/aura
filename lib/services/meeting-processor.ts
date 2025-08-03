@@ -147,7 +147,16 @@ export class MeetingProcessor {
       // Step 2: Generate summary (only if we have transcripts)
       if (transcriptsStored > 0) {
         console.log(`🤖 FULL BACKGROUND PROCESSING STEP 2: Generating AI summary...`);
-        const summary = await this.generateSummaryQuick(meeting.type, transcripts, participants);
+        
+        // Start AI summary generation
+        const summaryPromise = this.generateSummaryQuick(meeting.type, transcripts, participants);
+        
+        // Update status to show we're generating summary
+        await dbService.updateMeeting(meetingId, { 
+          processingStatus: 'generating_summary'
+        });
+        
+        const summary = await summaryPromise;
         
         console.log(`🤖 FULL BACKGROUND PROCESSING STEP 2: Generated summary:`, {
           title: summary.title,
@@ -183,23 +192,27 @@ export class MeetingProcessor {
           actionItemsCount: summary.actionItems?.length || 0
         });
 
-        // Step 3: Send emails (only after summary is ready)
-        console.log(`📧 FULL BACKGROUND PROCESSING STEP 3: Sending emails...`);
-        try {
-          await this.sendEmails(meetingId, roomName, participants);
+        // Steps 3 & 4: Run emails and tasks in parallel for faster completion
+        console.log(`🚀 FULL BACKGROUND PROCESSING STEPS 3&4: Running emails and tasks in parallel...`);
+        const [emailResult, taskResult] = await Promise.allSettled([
+          // Step 3: Send emails
+          this.sendEmails(meetingId, roomName, participants),
+          // Step 4: Create tasks from action items
+          this.createTasks(meetingId, meeting.roomId)
+        ]);
+
+        // Log email results
+        if (emailResult.status === 'fulfilled') {
           console.log(`✅ FULL BACKGROUND PROCESSING STEP 3: Emails sent successfully`);
-        } catch (emailError) {
-          console.error('❌ FULL BACKGROUND PROCESSING STEP 3: Email sending failed:', emailError);
+        } else {
+          console.error('❌ FULL BACKGROUND PROCESSING STEP 3: Email sending failed:', emailResult.reason);
         }
 
-        // Step 4: Create tasks from action items (only after summary is ready)
-        console.log(`📋 FULL BACKGROUND PROCESSING STEP 4: Creating tasks from action items...`);
-        console.log(`📋 FULL BACKGROUND PROCESSING STEP 4: Action items to process:`, JSON.stringify(summary.actionItems, null, 2));
-        try {
-          const tasksCreated = await this.createTasks(meetingId, meeting.roomId);
-          console.log(`✅ FULL BACKGROUND PROCESSING STEP 4: Created ${tasksCreated} tasks`);
-        } catch (taskError) {
-          console.error('❌ FULL BACKGROUND PROCESSING STEP 4: Task creation failed:', taskError);
+        // Log task results
+        if (taskResult.status === 'fulfilled') {
+          console.log(`✅ FULL BACKGROUND PROCESSING STEP 4: Created ${taskResult.value} tasks`);
+        } else {
+          console.error('❌ FULL BACKGROUND PROCESSING STEP 4: Task creation failed:', taskResult.reason);
         }
 
         // Mark as fully completed
@@ -371,9 +384,10 @@ Transcript: ${limitedTranscript}
 Return only valid JSON.`;
 
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 800, // Reduced for faster response
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 600, // Further reduced for faster response on Vercel
       temperature: 0.1,
+      timeout: 25000, // 25 second timeout to avoid Vercel issues
       system: systemPrompt,
       messages: [
         { role: 'user', content: userPrompt },

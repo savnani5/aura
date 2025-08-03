@@ -146,7 +146,7 @@ export function SimplifiedDashboard() {
   
   // Cache settings (optimized for Vercel Free plan)
   const WORKSPACE_CACHE_DURATION = 5 * 60 * 1000;
-  const MEETINGS_CACHE_DURATION = 60 * 1000; // 60 seconds - balanced for Vercel Free plan limits
+  const MEETINGS_CACHE_DURATION = 30 * 1000; // 30 seconds - faster updates for processing meetings
   
   // Cache invalidation helper
   const invalidateCache = useCallback((type: 'workspaces' | 'meetings' | 'all', workspaceId?: string) => {
@@ -439,7 +439,15 @@ export function SimplifiedDashboard() {
     // Check cache first
     const now = Date.now();
     const lastFetch = lastMeetingsFetch[workspaceId] || 0;
-    const cacheValid = !forceRefresh && meetingsCache[workspaceId] && (now - lastFetch) < MEETINGS_CACHE_DURATION;
+    
+    // Check if any cached meeting is in processing state - bypass cache for faster updates
+    const hasProcessingMeeting = meetingsCache[workspaceId]?.some((meeting: Meeting) => 
+      meeting.status === 'processing'
+    );
+    
+    // Use shorter cache duration for processing meetings
+    const effectiveCacheDuration = hasProcessingMeeting ? 10 * 1000 : MEETINGS_CACHE_DURATION; // 10s for processing
+    const cacheValid = !forceRefresh && meetingsCache[workspaceId] && (now - lastFetch) < effectiveCacheDuration;
     
     console.log('🔍 fetchMeetingsForWorkspace - Cache check:', {
       workspaceId,
