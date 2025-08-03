@@ -50,7 +50,7 @@ interface Meeting {
     decisions?: string[];
   };
   hasTranscript: boolean;
-  status: 'completed' | 'upcoming' | 'in_progress';
+  status: 'completed' | 'upcoming' | 'in_progress' | 'processing';
   startTime?: string; // Add this for proper date parsing
 }
 
@@ -208,6 +208,38 @@ export function MeetingDatabase({
   useEffect(() => {
     setShowAll(false);
   }, [workspace]);
+
+  // Poll for meeting updates every 5 seconds when there are active or processing meetings
+  useEffect(() => {
+    if (!workspace || !onRefreshMeetings) return;
+
+    // Check if any meeting needs polling (in_progress, processing, or recently completed)
+    const needsPolling = meetings.some(meeting => 
+      meeting.status === 'in_progress' || 
+      meeting.status === 'processing' ||
+      // Also poll for recently completed meetings (within last 2 minutes) to catch status changes
+      (meeting.status === 'completed' && 
+       new Date().getTime() - new Date(meeting.date).getTime() < 2 * 60 * 1000)
+    );
+    
+    if (needsPolling) {
+      console.log('🔄 Active/processing meeting detected, starting polling...');
+      
+      // Use different intervals based on meeting status
+      const hasProcessingMeeting = meetings.some(meeting => meeting.status === 'processing');
+      const pollInterval = hasProcessingMeeting ? 3000 : 5000; // 3s for processing, 5s for active
+      
+      const interval = setInterval(() => {
+        console.log(`🔄 Polling for meeting updates... (${pollInterval/1000}s interval)`);
+        onRefreshMeetings();
+      }, pollInterval);
+
+      return () => {
+        console.log('🛑 Stopping meeting polling');
+        clearInterval(interval);
+      };
+    }
+  }, [workspace, meetings, onRefreshMeetings]);
 
   const fetchParticipants = async () => {
     if (!workspace) return;
@@ -589,10 +621,35 @@ export function MeetingDatabase({
                 >
                     {/* Meeting Icon */}
                         <div className={cn(
-                          "bg-muted rounded-lg flex items-center justify-center flex-shrink-0 group-hover:bg-muted/80 transition-colors",
-                          isMobile ? "w-6 h-6" : "w-8 h-8"
+                          "rounded-lg flex items-center justify-center flex-shrink-0 transition-colors relative",
+                          isMobile ? "w-6 h-6" : "w-8 h-8",
+                          meeting.status === 'in_progress' 
+                            ? "bg-green-100 group-hover:bg-green-200"
+                            : meeting.status === 'processing'
+                            ? "bg-yellow-100 group-hover:bg-yellow-200"
+                            : "bg-muted group-hover:bg-muted/80"
                         )}>
-                          <FileText size={isMobile ? 12 : 14} className="text-muted-foreground" />
+                          {meeting.status === 'in_progress' ? (
+                            <>
+                              <Video size={isMobile ? 12 : 14} className="text-green-700" />
+                              {/* Pulsing indicator for active meetings */}
+                              <div className="absolute -top-1 -right-1 w-2 h-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                              </div>
+                            </>
+                          ) : meeting.status === 'processing' ? (
+                            <>
+                              <Settings size={isMobile ? 12 : 14} className="text-yellow-700 animate-spin" />
+                              {/* Processing indicator */}
+                              <div className="absolute -top-1 -right-1 w-2 h-2">
+                                <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                              </div>
+                            </>
+                          ) : (
+                            <FileText size={isMobile ? 12 : 14} className="text-muted-foreground" />
+                          )}
                     </div>
                     
                     {/* Meeting Info */}
@@ -645,12 +702,24 @@ export function MeetingDatabase({
                           ) : (
                             <div className="flex items-center gap-2">
                               <div className="flex-1">
-                                <h3 className={cn(
-                                  "font-medium text-foreground truncate",
-                                  isMobile ? "text-xs" : "text-sm"
-                                )}>
-                                  {generateSmartTitle(meeting)}
-                      </h3>
+                                <div className="flex items-center gap-2">
+                                  <h3 className={cn(
+                                    "font-medium text-foreground truncate",
+                                    isMobile ? "text-xs" : "text-sm"
+                                  )}>
+                                    {generateSmartTitle(meeting)}
+                                  </h3>
+                                  {meeting.status === 'in_progress' && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                      Live
+                                    </span>
+                                  )}
+                                  {meeting.status === 'processing' && (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                      Processing
+                                    </span>
+                                  )}
+                                </div>
                                 <p className={cn(
                                   "text-muted-foreground truncate",
                                   isMobile ? "text-xs" : "text-xs"

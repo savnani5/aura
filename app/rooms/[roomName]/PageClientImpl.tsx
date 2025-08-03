@@ -301,23 +301,8 @@ function VideoConferenceComponent(props: {
             // Store meeting ID in Zustand store (replaces localStorage)
             MeetingStorageUtils.setMeetingId(props.roomName, meetingId);
             
-            // Track local participant joining
-            try {
-              await fetch(`/api/meetings/${props.roomName}/participants`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  meetingId,
-                  participantId: room.localParticipant?.sid || 'local',
-                  participantName: userName,
-                  action: 'join',
-                  timestamp: new Date().toISOString(),
-                  isGuest: false // This is always authenticated user creating meeting
-                })
-              });
-            } catch (error) {
-              console.error('Error tracking local participant join:', error);
-            }
+            // Participant tracking is now handled by the start route atomically
+            console.log('✅ Participant tracking handled by start route');
           } else {
             console.error('❌ Failed to start meeting record:', await response.text());
           }
@@ -350,22 +335,8 @@ function VideoConferenceComponent(props: {
       const trackingMeetingId = meetingId || `guest-${props.roomName}`;
       const isGuestParticipant = !meetingId;
       
-      try {
-        await fetch(`/api/meetings/${props.roomName}/participants`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            meetingId: trackingMeetingId,
-            participantId: participant.sid,
-            participantName: participant.identity,
-            action: 'join',
-            timestamp: new Date().toISOString(),
-            isGuest: isGuestParticipant
-          })
-        });
-      } catch (error) {
-        console.error('Error tracking participant join:', error);
-      }
+      // Participant tracking is handled by the backend when meeting starts
+      console.log(`✅ Participant ${participant.identity} connected`);
     };
 
     const handleParticipantDisconnected = async (participant: any) => {
@@ -382,22 +353,8 @@ function VideoConferenceComponent(props: {
       const trackingMeetingId = meetingId || `guest-${props.roomName}`;
       const isGuestParticipant = !meetingId;
       
-      try {
-        await fetch(`/api/meetings/${props.roomName}/participants`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            meetingId: trackingMeetingId,
-            participantId: participant.sid,
-            participantName: participant.identity,
-            action: 'leave',
-            timestamp: new Date().toISOString(),
-            isGuest: isGuestParticipant
-          })
-        });
-      } catch (error) {
-        console.error('Error tracking participant leave:', error);
-      }
+      // Participant leave tracking is handled when the meeting ends
+      console.log(`✅ Participant ${participant.identity} disconnected`);
     };
 
     room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
@@ -630,35 +587,17 @@ function VideoConferenceComponent(props: {
     // For guests, we'll use a fallback meetingId if none exists (to track them in participant system)
     const trackingMeetingId = meetingId || `guest-${props.roomName}`;
     
-    try {
-      const response = await fetch(`/api/meetings/${props.roomName}/participants`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          meetingId: trackingMeetingId,
-          participantId: room.localParticipant?.sid || 'local',
-          participantName: participantName || 'Unknown',
-          action: 'leave',
-          timestamp: new Date().toISOString(),
-          isGuest: isGuest
-        })
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        databaseSaysEndMeeting = data.data?.shouldEndMeeting || false;
-        console.log(`📊 Database participant tracking result for ${isGuest ? 'guest' : 'authenticated'} user:`, {
-          totalParticipants: data.data?.totalParticipants,
-          activeParticipants: data.data?.activeParticipants,
-          shouldEndMeeting: databaseSaysEndMeeting
-        });
-      }
-    } catch (error) {
-      console.error(`Error tracking ${isGuest ? 'guest' : 'authenticated'} participant leave:`, error);
-    }
+    // Check if this is the last participant by looking at the room state
+    const participantCount = room.remoteParticipants.size;
+    const isLastParticipant = participantCount === 0;
     
-    // Use database decision if available, otherwise fall back to LiveKit room check
-    const finalShouldEndMeeting = databaseSaysEndMeeting;
+    console.log(`📊 Participant leave check for ${isGuest ? 'guest' : 'authenticated'} user:`, {
+      remoteParticipants: participantCount,
+      isLastParticipant
+    });
+    
+    // If this is the last participant, we should end the meeting
+    const finalShouldEndMeeting = isLastParticipant;
     
     // Immediately disconnect user and redirect based on type - don't wait for transcript processing
     try {

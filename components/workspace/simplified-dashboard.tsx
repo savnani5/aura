@@ -65,7 +65,7 @@ interface Meeting {
     decisions?: string[];
   };
   hasTranscript: boolean;
-  status: 'completed' | 'upcoming' | 'in_progress';
+  status: 'completed' | 'upcoming' | 'in_progress' | 'processing';
 }
 
 export function SimplifiedDashboard() {
@@ -144,9 +144,9 @@ export function SimplifiedDashboard() {
   const MIN_SIDEBAR_WIDTH = 250;
   const MAX_SIDEBAR_WIDTH = 400;
   
-  // Cache settings (5 minutes for workspaces, 2 minutes for meetings)
+  // Cache settings (5 minutes for workspaces, 30 seconds for meetings for better real-time updates)
   const WORKSPACE_CACHE_DURATION = 5 * 60 * 1000;
-  const MEETINGS_CACHE_DURATION = 2 * 60 * 1000;
+  const MEETINGS_CACHE_DURATION = 30 * 1000; // Reduced to 30 seconds for better real-time updates
   
   // Cache invalidation helper
   const invalidateCache = useCallback((type: 'workspaces' | 'meetings' | 'all', workspaceId?: string) => {
@@ -459,14 +459,24 @@ export function SimplifiedDashboard() {
 
     try {
       console.log(`Fetching fresh meetings data for workspace: ${workspaceId}`);
-      const response = await fetch(`/api/meetings/${workspaceId}/history`);
       
-      if (!response.ok) throw new Error('Failed to fetch meetings');
+      // Fetch both historical meetings and current room status (including active meeting)
+      const [historyResponse, roomResponse] = await Promise.all([
+        fetch(`/api/meetings/${workspaceId}/history`),
+        fetch(`/api/meetings/${workspaceId}`)
+      ]);
       
-      const data = await response.json();
+      if (!historyResponse.ok) throw new Error('Failed to fetch meeting history');
+      if (!roomResponse.ok) throw new Error('Failed to fetch room status');
       
-      if (data.success) {
-        const transformedMeetings: Meeting[] = data.data.map((meeting: any) => ({
+      const [historyData, roomData] = await Promise.all([
+        historyResponse.json(),
+        roomResponse.json()
+      ]);
+      
+      if (historyData.success && roomData.success) {
+        // Transform historical meetings
+        const historicalMeetings: Meeting[] = historyData.data.map((meeting: any) => ({
           id: meeting.id || meeting._id,
           title: meeting.title || meeting.type,
           type: meeting.type,
@@ -475,17 +485,61 @@ export function SimplifiedDashboard() {
             day: 'numeric',
             year: 'numeric'
           }),
-          startTime: meeting.startTime || meeting.startedAt, // Add startTime for proper grouping
+          startTime: meeting.startTime || meeting.startedAt,
           duration: meeting.duration ? `${meeting.duration} min` : undefined,
           participants: meeting.participants?.map((p: any) => ({
             name: p.name,
             avatar: p.avatar
           })) || [],
-          summary: meeting.summary, // Pass the full summary object
+          summary: meeting.summary,
           hasTranscript: meeting.hasTranscripts || false,
-          status: meeting.isUpcoming ? 'upcoming' : 
-                   meeting.endedAt ? 'completed' : 'in_progress'
+          // Use the actual status from the database, with proper fallbacks
+          status: meeting.status === 'active' ? 'in_progress' :
+                  meeting.status === 'processing' ? 'processing' :
+                  meeting.status === 'ended' ? 'completed' :
+                  meeting.status === 'completed' ? 'completed' :
+                  meeting.isActive ? 'in_progress' : 
+                  meeting.isUpcoming ? 'upcoming' : 
+                  'completed'
         }));
+
+        // Check for active meeting and add/update it
+        let transformedMeetings = [...historicalMeetings];
+        
+        if (roomData.data.hasActiveMeeting && roomData.data.activeMeeting) {
+          const activeMeeting = roomData.data.activeMeeting;
+          
+          // Determine the correct status and title based on meeting state
+          const meetingStatus = activeMeeting.status === 'active' ? 'in_progress' : 
+                               activeMeeting.status === 'processing' ? 'processing' : 'in_progress';
+          const meetingTitle = activeMeeting.status === 'processing' ? 
+                              (activeMeeting.title === 'Meeting in progress' ? 'Processing Meeting Summary' : activeMeeting.title) :
+                              (activeMeeting.title || 'Meeting in progress');
+          const meetingDuration = activeMeeting.status === 'processing' ? 
+                                 `${activeMeeting.duration} min` : 
+                                 `${activeMeeting.duration} min (ongoing)`;
+          
+          const activeMeetingTransformed: Meeting = {
+            id: activeMeeting.id,
+            title: meetingTitle,
+            type: activeMeeting.type,
+            date: new Date(activeMeeting.startedAt).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric'
+            }),
+            startTime: activeMeeting.startedAt,
+            duration: meetingDuration,
+            participants: [], // Will be populated from room data if available
+            summary: undefined,
+            hasTranscript: false,
+            status: meetingStatus
+          };
+
+          // Remove any existing meeting with the same ID and add the active one at the top
+          transformedMeetings = transformedMeetings.filter(m => m.id !== activeMeeting.id);
+          transformedMeetings.unshift(activeMeetingTransformed);
+        }
         
         // Update cache and persist to sessionStorage
         const newMeetingsCache = {

@@ -49,16 +49,16 @@ export async function GET(
       includeTranscripts: searchParams.get('includeTranscripts') === 'true'
     });
     
-    // Check for active meetings (meetings that have started but not ended, or explicitly marked as active)
+    // Check for active meetings using the new status field
     const activeMeetings = historicalMeetings.filter(meeting => 
-      (meeting.startedAt && !meeting.endedAt) || meeting.isActive === true
+      meeting.status === 'active'
     );
     
     // Filter out completed meetings with no content (no embeddings/transcripts and no summary)
     // But keep active meetings regardless of content
     const meetingsWithContent = historicalMeetings.filter(meeting => {
       // Always include active meetings
-      if ((meeting.startedAt && !meeting.endedAt) || meeting.isActive === true) {
+      if (meeting.status === 'active') {
         return true;
       }
       
@@ -96,8 +96,8 @@ export async function GET(
     
     // Transform historical meetings to match frontend interface
     const transformedHistoricalMeetings = meetingsWithContent.map(meeting => {
-      const isActive = (meeting.startedAt && !meeting.endedAt) || meeting.isActive === true;
-      const isProcessing = meeting.endedAt && meeting.processingStatus && meeting.processingStatus !== 'completed' && meeting.processingStatus !== 'failed';
+      const isActive = meeting.status === 'active';
+      const isProcessing = meeting.status === 'processing';
       
       return {
         id: meeting._id,
@@ -110,6 +110,7 @@ export async function GET(
         isUpcoming: false,
         isActive: isActive,
         isProcessing: isProcessing,
+        status: meeting.status, // Include the actual status
         processingStatus: meeting.processingStatus,
         participants: meeting.participants || [],
         summary: meeting.summary ? {

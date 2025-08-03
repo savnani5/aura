@@ -314,7 +314,12 @@ const MeetingSchema = new mongoose.Schema({
   processingError: { type: String },
   
   // Meeting state
-  isActive: { type: Boolean, default: false } // Whether the meeting is currently active/in progress
+  isActive: { type: Boolean, default: false }, // Whether the meeting is currently active/in progress
+  
+  // New serverless-compatible fields
+  status: { type: String, enum: ['active', 'ended', 'processing', 'completed'], default: 'active' },
+  activeParticipantCount: { type: Number, default: 0 },
+  lastActivity: { type: Date, default: Date.now }
 }, {
   timestamps: true
 });
@@ -514,8 +519,10 @@ export interface IMeeting {
   processingFailedAt?: Date;
   processingError?: string;
   
-  // Meeting state
-  isActive?: boolean; // Whether the meeting is currently active/in progress
+  // Simple meeting state for serverless
+  status: 'active' | 'ended' | 'processing' | 'completed';
+  activeParticipantCount: number; // Simple counter instead of complex tracking
+  lastActivity: Date; // For cleanup of stale meetings
   
   createdAt: Date;
   updatedAt: Date;
@@ -1262,15 +1269,15 @@ export class DatabaseService {
     return meeting as IMeeting | null;
   }
   
-  // NEW: Check for active meeting in a room (meeting without endedAt)
+  // NEW: Check for active or processing meeting in a room
   async getActiveMeetingByRoom(roomName: string): Promise<IMeeting | null> {
     await this.ensureConnection();
     
     const activeMeeting = await Meeting.findOne({
       roomName,
-      endedAt: { $exists: false } // Meeting has not ended yet
+      status: { $in: ['active', 'processing'] } // Include both active and processing meetings
     })
-    .sort({ startedAt: -1 }) // Get the most recent active meeting
+    .sort({ startedAt: -1 }) // Get the most recent active/processing meeting
     .lean();
     
     return activeMeeting as IMeeting | null;
@@ -1287,9 +1294,161 @@ export class DatabaseService {
     
     return meeting as unknown as IMeeting | null;
   }
-  
 
-  
+  // ===== ATOMIC OPERATIONS FOR SERVERLESS =====
+
+  async atomicMeetingStart(roomName: string, meetingData: Partial<IMeeting>): Promise<IMeeting | null> {
+    await this.ensureConnection();
+    
+    console.log(`🔍 ATOMIC START: Checking for existing active meeting in room: ${roomName}`);
+    
+    // Use findOneAndUpdate with upsert for true atomic operation
+    const now = new Date();
+    const result = await Meeting.findOneAndUpdate(
+      {
+        roomName,
+        status: 'active'
+      },
+      {
+        $setOnInsert: {
+          ...meetingData,
+          status: 'active',
+          activeParticipantCount: 1, // Set to 1 for new meetings
+          createdAt: now
+        },
+        $set: {
+          lastActivity: now,
+          updatedAt: now
+        }
+      },
+      {
+        upsert: true,
+        new: true,
+        lean: true
+      }
+    );
+    
+    if (!result) {
+      throw new Error('Failed to create or find meeting');
+    }
+    
+    const resultDoc = result as any;
+    // More reliable way to detect if this was a new document
+    const wasNewlyCreated = Math.abs(resultDoc.createdAt.getTime() - now.getTime()) < 1000; // Within 1 second
+    
+    if (wasNewlyCreated) {
+      console.log(`🚀 ATOMIC START: Created new meeting ${resultDoc._id} for room ${roomName}`);
+      console.log(`🚀 ATOMIC START: New meeting data:`, {
+        roomName: resultDoc.roomName,
+        status: resultDoc.status,
+        activeParticipantCount: resultDoc.activeParticipantCount,
+        title: resultDoc.title
+      });
+      
+      // Update the meeting room's meetings array and lastMeetingAt
+      if (meetingData.roomId) {
+        await MeetingRoom.findByIdAndUpdate(meetingData.roomId, {
+          $push: { meetings: resultDoc._id },
+          $set: { lastMeetingAt: now }
+        });
+      }
+    } else {
+      console.log(`✅ ATOMIC START: Returning existing meeting ${resultDoc._id} for room ${roomName}`);
+      console.log(`✅ ATOMIC START: Existing meeting data:`, {
+        id: resultDoc._id,
+        status: resultDoc.status,
+        activeParticipantCount: resultDoc.activeParticipantCount,
+        startedAt: resultDoc.startedAt
+      });
+    }
+    
+    // Add metadata to help the caller determine if this was newly created
+    return {
+      ...resultDoc,
+      _wasNewlyCreated: wasNewlyCreated
+    } as IMeeting & { _wasNewlyCreated: boolean };
+  }
+
+  async atomicParticipantJoin(meetingId: string, participantName: string): Promise<{meeting: IMeeting | null, isFirstParticipant: boolean}> {
+    await this.ensureConnection();
+    
+    const meeting = await Meeting.findByIdAndUpdate(
+      meetingId,
+      {
+        $inc: { activeParticipantCount: 1 },
+        $set: { 
+          lastActivity: new Date(),
+          updatedAt: new Date()
+        },
+        $push: {
+          participants: {
+            name: participantName,
+            joinedAt: new Date(),
+            isHost: false // Will be updated if needed
+          }
+        }
+      },
+      { new: true }
+    ).lean();
+    
+    return {
+      meeting: meeting as unknown as IMeeting | null,
+      isFirstParticipant: (meeting as any)?.activeParticipantCount === 1
+    };
+  }
+
+  async atomicParticipantLeave(meetingId: string): Promise<{meeting: IMeeting | null, shouldEndMeeting: boolean}> {
+    await this.ensureConnection();
+    
+    const meeting = await Meeting.findByIdAndUpdate(
+      meetingId,
+      {
+        $inc: { activeParticipantCount: -1 },
+        $set: { 
+          lastActivity: new Date(),
+          updatedAt: new Date()
+        }
+      },
+      { new: true }
+    ).lean();
+    
+    const shouldEndMeeting = (meeting as any)?.activeParticipantCount <= 0;
+    
+    return {
+      meeting: meeting as unknown as IMeeting | null,
+      shouldEndMeeting
+    };
+  }
+
+  async atomicMeetingEnd(meetingId: string, endData: { transcripts?: any[], participants?: any[], endedAt?: Date }): Promise<IMeeting | null> {
+    await this.ensureConnection();
+    
+    const updateData: any = {
+      status: 'ended', // Will be updated to 'processing' or 'completed' by the processor
+      activeParticipantCount: 0,
+      endedAt: endData.endedAt || new Date(),
+      lastActivity: new Date(),
+      updatedAt: new Date()
+    };
+    
+    if (endData.transcripts) {
+      updateData.transcripts = endData.transcripts;
+      updateData.transcriptCount = endData.transcripts.length;
+    }
+    
+    if (endData.participants) {
+      updateData.participants = endData.participants;
+    }
+    
+    const meeting = await Meeting.findByIdAndUpdate(
+      meetingId,
+      { $set: updateData },
+      { new: true }
+    ).lean();
+    
+    return meeting as unknown as IMeeting | null;
+  }
+
   // Get monthly meeting count for a user
   async getMonthlyMeetingCount(userId: string, year?: number, month?: number): Promise<number> {
     await this.ensureConnection();

@@ -28,7 +28,7 @@ export class EmailService {
     try {
       const { title, recurringPattern } = room;
       // Updated to point to meeting prep section instead of direct meeting room
-      const meetingPrepUrl = `https://www.tryaura.com/meetingroom/${room.roomName}`;
+      const meetingPrepUrl = `https://www.auranow.co/rooms/${room.roomName}`;
       
       if (!recurringPattern?.frequency || !recurringPattern?.time) {
         console.warn('Missing recurring pattern for calendar invite');
@@ -137,7 +137,7 @@ export class EmailService {
         location: meetingPrepUrl,
         url: meetingPrepUrl,
         recurrenceRule: rrule,
-        organizer: { name: 'Aura', email: 'notifications@tryaura.com' },
+        organizer: { name: 'Aura', email: 'notifications@auranow.co' },
         attendees: room.participants.map(p => ({
           name: p.name,
           email: p.email,
@@ -181,7 +181,7 @@ export class EmailService {
       const host = room.participants.find(p => p.role === 'host');
       
       // Updated to point to meeting prep section instead of direct meeting room
-      const meetingPrepUrl = `https://www.tryaura.com/meetingroom/${room.roomName}`;
+      const meetingPrepUrl = `https://www.auranow.co/rooms/${room.roomName}`;
       
       // Create attachments if calendar invite was generated
       const attachments = calendarInvite ? [{
@@ -195,7 +195,7 @@ export class EmailService {
       for (const participant of participants) {
         try {
           await this.resend.emails.send({
-            from: 'Aura <notifications@tryaura.com>',
+            from: 'Aura <notifications@auranow.co>',
             to: [participant.email],
             subject: `🎥 You're invited to join "${room.title}" on Aura`,
             html: this.generateParticipantInviteEmail(room, participant, hostName, meetingPrepUrl),
@@ -214,7 +214,7 @@ export class EmailService {
       if (host) {
         try {
           await this.resend.emails.send({
-            from: 'Aura <notifications@tryaura.com>',
+            from: 'Aura <notifications@auranow.co>',
             to: [host.email],
             subject: `🎥 Your meeting room "${room.title}" is ready on Aura`,
             html: this.generateHostConfirmationEmail(room, host, meetingPrepUrl),
@@ -427,7 +427,7 @@ export class EmailService {
         Powered by <strong>Aura</strong> - AI-first video conferencing
       </p>
       <p style="margin: 8px 0;">
-        Manage your meeting rooms at <a href="https://www.tryaura.com" style="color: #667eea;">tryaura.com</a>
+        Manage your meeting rooms at <a href="https://www.auranow.co" style="color: #667eea;">auranow.co</a>
       </p>
     </div>
   </div>
@@ -470,7 +470,7 @@ export class EmailService {
       for (const participant of participants) {
         try {
           await this.resend.emails.send({
-            from: 'Aura <notifications@tryaura.com>',
+            from: 'Aura <notifications@auranow.co>',
             to: [participant.email],
             subject: `📝 Meeting Summary: ${roomTitle} - ${meetingDate}`,
             html: this.generateMeetingSummaryEmail(meeting, roomTitle, participant, duration)
@@ -648,7 +648,7 @@ export class EmailService {
 
       <!-- Action Button -->
       <div style="text-align: center; margin: 32px 0;">
-        <a href="https://www.tryaura.com/meetingroom/${meeting.roomName}" style="display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; transition: transform 0.2s;">
+        <a href="https://www.auranow.co/rooms/${meeting.roomName}" style="display: inline-block; padding: 16px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 16px; transition: transform 0.2s;">
           📊 View Full Meeting Details
         </a>
       </div>
@@ -692,7 +692,7 @@ export class EmailService {
     const errors: string[] = [];
 
     try {
-      const meetingPrepUrl = `https://www.tryaura.com/meetingroom/${room.roomName}`;
+      const meetingPrepUrl = `https://www.auranow.co/rooms/${room.roomName}`;
       
       // Generate calendar invite only if room has timing configured
       let calendarInvite = null;
@@ -720,7 +720,7 @@ export class EmailService {
             : `🎥 You've been added to "${room.title}" meeting room on Aura`;
 
           await this.resend.emails.send({
-            from: 'Aura <notifications@tryaura.com>',
+            from: 'Aura <notifications@auranow.co>',
             to: [participant.email],
             subject: emailSubject,
             html: this.generateNewParticipantInviteEmail(room, participant, hostName, meetingPrepUrl),

@@ -21,18 +21,32 @@ export async function GET(
       }, { status: 404 });
     }
     
-    // Get recent meetings and tasks for this room
-    const [recentMeetings, tasks] = await Promise.all([
+    // Get recent meetings, tasks, and active meeting status for this room
+    const [recentMeetings, tasks, activeMeeting] = await Promise.all([
       db.getMeetingsByRoom(room._id, 10), // Last 10 meetings
-      db.getTasksByRoom(room._id)
+      db.getTasksByRoom(room._id),
+      db.getActiveMeetingByRoom(roomName) // Check for active meeting
     ]);
+    
+    // Format active meeting data if exists
+    const activeMeetingData = activeMeeting ? {
+      id: activeMeeting._id,
+      title: activeMeeting.title || activeMeeting.type,
+      type: activeMeeting.type,
+      startedAt: activeMeeting.startedAt.toISOString(),
+      status: activeMeeting.status,
+      activeParticipantCount: activeMeeting.activeParticipantCount || 0,
+      duration: Math.round((new Date().getTime() - new Date(activeMeeting.startedAt).getTime()) / (1000 * 60)) // minutes
+    } : null;
     
     return NextResponse.json({ 
       success: true, 
       data: {
         ...room,
         recentMeetings,
-        tasks
+        tasks,
+        activeMeeting: activeMeetingData,
+        hasActiveMeeting: !!activeMeeting
       }
     });
   } catch (error) {

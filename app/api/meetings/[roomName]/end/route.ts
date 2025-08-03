@@ -43,13 +43,15 @@ export async function POST(
       }, { status: 400 });
     }
     
-    const { 
-      meetingId,
-      transcripts = [],
-      participants = [],
-      endedAt,
-      duration
-    } = requestBody;
+         const { 
+       meetingId,
+       action = 'end_meeting', // 'participant_leave' or 'end_meeting'
+       participantId,
+       transcripts = [],
+       participants = [],
+       endedAt,
+       duration
+     } = requestBody;
 
     // Validate required fields
     if (!meetingId) {
@@ -93,66 +95,91 @@ export async function POST(
         }, { status: 400 });
       }
 
-      // Check if meeting is already ended
-      if (meeting.endedAt) {
-        console.log(`⚠️ Meeting ${meetingId} already ended at ${meeting.endedAt}`);
+          // Check if meeting is already ended
+    if (meeting.status === 'ended' || meeting.status === 'completed' || meeting.endedAt) {
+      console.log(`⚠️ Meeting ${meetingId} already ended`);
+      return NextResponse.json({
+        success: true,
+        message: 'Meeting was already ended successfully',
+        data: {
+          meetingId: meeting._id,
+          roomName: meeting.roomName,
+          status: meeting.status,
+          alreadyEnded: true
+        }
+      });
+    }
+
+          // First, handle participant leave to check if we should actually end the meeting
+    console.log(`👤 Participant leaving meeting: ${meeting.title || meeting.type} (${meetingId})`);
+    console.log(`📊 Current meeting state:`, {
+      activeParticipantCount: meeting.activeParticipantCount,
+      status: meeting.status
+    });
+
+    // Use atomicParticipantLeave to properly track participant count
+    const leaveResult = await dbService.atomicParticipantLeave(meetingId);
+    
+    if (!leaveResult.shouldEndMeeting) {
+      console.log(`👥 Participant left, but meeting continues. Active participants: ${leaveResult.meeting?.activeParticipantCount}`);
+      return NextResponse.json({
+        success: true,
+        message: 'Participant left successfully, meeting continues',
+        data: {
+          meetingId,
+          roomName,
+          activeParticipantCount: leaveResult.meeting?.activeParticipantCount || 0,
+          shouldEndMeeting: false,
+          meetingStillActive: true
+        }
+      });
+    }
+
+    console.log(`🔚 Last participant left - ending meeting: ${meeting.title || meeting.type} (${meetingId})`);
+
+    // Calculate end time and duration
+    const meetingEndedAt = endedAt ? new Date(endedAt) : new Date();
+    const calculatedDuration = duration || Math.round(
+      (meetingEndedAt.getTime() - new Date(meeting.startedAt).getTime()) / (1000 * 60)
+    );
+
+      // If no transcripts, just delete the empty meeting
+      if (!transcripts || transcripts.length === 0) {
+        console.log(`🗑️ No transcripts found - deleting empty meeting record: ${meetingId}`);
+        await dbService.deleteMeeting(meetingId);
+        
         return NextResponse.json({
           success: true,
-          message: 'Meeting was already ended successfully',
+          message: 'Meeting ended but no content was recorded - meeting record removed',
           data: {
-            meetingId: meeting._id,
-            roomName: meeting.roomName,
-            endedAt: meeting.endedAt.toISOString(),
-            duration: meeting.duration || 0,
-            alreadyEnded: true,
-            redirectUrl: meeting.roomId ? `/meetingroom/${roomName}` : '/'
+            meetingId: null,
+            roomName,
+            endedAt: meetingEndedAt.toISOString(),
+            duration: calculatedDuration,
+            meetingDeleted: true
           }
         });
       }
 
-      console.log(`🔚 Ending meeting: ${meeting.title || meeting.type} (${meetingId})`);
+      // End meeting atomically with transcripts and participants
+      const processedParticipants = participants.map((p: any) => ({
+        ...p,
+        leftAt: p.leftAt ? new Date(p.leftAt) : meetingEndedAt
+      }));
 
-      // Calculate end time and duration
-      const meetingEndedAt = endedAt ? new Date(endedAt) : new Date();
-      const calculatedDuration = duration || Math.round(
-        (meetingEndedAt.getTime() - new Date(meeting.startedAt).getTime()) / (1000 * 60)
-      );
+      const endedMeeting = await dbService.atomicMeetingEnd(meetingId, {
+        transcripts,
+        participants: processedParticipants,
+        endedAt: meetingEndedAt
+      });
 
-      // Update meeting with basic end data first
-      const updateData: any = {
-        endedAt: meetingEndedAt,
-        duration: calculatedDuration,
-        isActive: false // Mark meeting as inactive
-      };
-
-      if (participants.length > 0) {
-        updateData.participants = participants.map((p: any) => ({
-          ...p,
-          leftAt: p.leftAt ? new Date(p.leftAt) : meetingEndedAt
-        }));
+      if (!endedMeeting) {
+        return NextResponse.json({
+          success: false,
+          error: 'Failed to end meeting'
+        }, { status: 500 });
       }
 
-      // If no transcripts, just end the meeting and delete it
-      if (!transcripts || transcripts.length === 0) {
-        console.log(`🗑️ No transcripts found - deleting empty meeting record: ${meetingId}`);
-          await dbService.deleteMeeting(meetingId);
-          
-          return NextResponse.json({
-            success: true,
-            message: 'Meeting ended but no content was recorded - meeting record removed',
-            data: {
-            meetingId: null,
-              roomName,
-              endedAt: meetingEndedAt.toISOString(),
-              duration: calculatedDuration,
-              meetingDeleted: true,
-            redirectUrl: meeting.roomId ? `/meetingroom/${roomName}` : '/'
-            }
-          });
-      }
-
-      // Update meeting with end data
-      await dbService.updateMeeting(meetingId, updateData);
       console.log(`✅ Meeting ended, starting background processing...`);
           
       // Process immediately within Vercel function limits
@@ -177,8 +204,8 @@ export async function POST(
           endedAt: meetingEndedAt.toISOString(),
           duration: calculatedDuration,
           transcriptsCount: transcripts.length,
-          processing: processingResult,
-          redirectUrl: meeting.roomId ? `/meetingroom/${roomName}` : '/'
+          status: 'processing',
+          processing: processingResult
         }
       });
 
@@ -198,3 +225,4 @@ export async function POST(
     }, { status: 500 });
   }
 } 
+

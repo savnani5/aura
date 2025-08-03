@@ -68,6 +68,7 @@ export class MeetingProcessor {
 
       // Mark meeting as processing immediately
       await dbService.updateMeeting(meetingId, { 
+        status: 'processing', // Update main status to processing
         processingStatus: 'pending',
         processingStartedAt: new Date()
       });
@@ -203,6 +204,7 @@ export class MeetingProcessor {
 
         // Mark as fully completed
         await dbService.updateMeeting(meetingId, { 
+          status: 'completed', // Update main status to completed
           processingStatus: 'completed',
           processingCompletedAt: new Date()
         });
@@ -211,6 +213,7 @@ export class MeetingProcessor {
       } else {
         console.log(`⚠️ FULL BACKGROUND PROCESSING: No transcripts to process, marking as completed`);
         await dbService.updateMeeting(meetingId, { 
+          status: 'completed', // Update main status to completed
           processingStatus: 'completed',
           processingCompletedAt: new Date()
         });
@@ -221,6 +224,7 @@ export class MeetingProcessor {
       
       // Mark as failed but don't throw - this is background processing
       await dbService.updateMeeting(meetingId, { 
+        status: 'completed', // Even if processing failed, meeting is done
         processingStatus: 'failed',
         processingError: error instanceof Error ? error.message : 'Unknown error',
         processingFailedAt: new Date()
