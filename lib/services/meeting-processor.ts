@@ -387,12 +387,13 @@ Return only valid JSON.`;
       model: 'claude-sonnet-4-20250514',
       max_tokens: 600, // Further reduced for faster response on Vercel
       temperature: 0.1,
-      timeout: 25000, // 25 second timeout to avoid Vercel issues
       system: systemPrompt,
       messages: [
         { role: 'user', content: userPrompt },
         { role: 'assistant', content: '{' }
       ],
+    }, {
+      timeout: 25000 // 25 second timeout to avoid Vercel issues
     });
 
     let aiResponse = '{';

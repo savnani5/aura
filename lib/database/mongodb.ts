@@ -306,7 +306,7 @@ const MeetingSchema = new mongoose.Schema({
   embeddingErrorAt: { type: Date }, // When embedding generation failed
   
   // Processing status for async background processing
-  processingStatus: { type: String, enum: ['pending', 'in_progress', 'summary_completed', 'completed', 'failed'] },
+  processingStatus: { type: String, enum: ['pending', 'in_progress', 'generating_summary', 'summary_completed', 'completed', 'failed'] },
   processingStartedAt: { type: Date },
   summaryGeneratedAt: { type: Date },
   processingCompletedAt: { type: Date },
@@ -512,7 +512,7 @@ export interface IMeeting {
   embeddingErrorAt?: Date; // When embedding generation failed
   
   // Processing status for async background processing
-  processingStatus?: 'pending' | 'in_progress' | 'summary_completed' | 'completed' | 'failed';
+  processingStatus?: 'pending' | 'in_progress' | 'generating_summary' | 'summary_completed' | 'completed' | 'failed';
   processingStartedAt?: Date;
   summaryGeneratedAt?: Date;
   processingCompletedAt?: Date;
