@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { DatabaseService } from '@/lib/database/mongodb';
 import { MeetingProcessor } from '@/lib/services/meeting-processor';
 
-// Simple in-memory lock to prevent duplicate meeting end requests
-const meetingEndLocks = new Set<string>();
+// Database-based locking for serverless environments (replaces in-memory locks)
       
 // POST /api/meetings/[roomName]/end - Handle meeting end with async processing
 export async function POST(
@@ -61,54 +60,40 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // Prevent duplicate processing
-    if (meetingEndLocks.has(meetingId)) {
+    // Database-based duplicate prevention (serverless-safe)
+    const dbService = DatabaseService.getInstance();
+    const meeting = await dbService.getMeetingById(meetingId);
+    
+    if (!meeting) {
+      return NextResponse.json({
+        success: false,
+        error: 'Meeting not found'
+      }, { status: 404 });
+    }
+
+    // Check if already processing/ended (database-based lock)
+    if (meeting.status === 'ended' || meeting.status === 'completed' || meeting.status === 'processing') {
       return NextResponse.json({
         success: true,
-        message: 'Meeting is already being processed',
+        message: 'Meeting is already being processed or completed',
         data: {
           meetingId,
           roomName,
-          alreadyProcessing: true
+          status: meeting.status,
+          alreadyProcessed: true
         }
       });
     }
 
-    meetingEndLocks.add(meetingId);
+    // Verify meeting belongs to this room
+    if (meeting.roomName !== roomName) {
+      return NextResponse.json({
+        success: false,
+        error: 'Meeting does not belong to this room'
+      }, { status: 400 });
+    }
 
     try {
-      const dbService = DatabaseService.getInstance();
-
-      // Get the meeting to verify it exists
-      const meeting = await dbService.getMeetingById(meetingId);
-      if (!meeting) {
-        return NextResponse.json({
-          success: false,
-          error: 'Meeting not found'
-        }, { status: 404 });
-      }
-
-      if (meeting.roomName !== roomName) {
-        return NextResponse.json({
-          success: false,
-          error: 'Meeting does not belong to this room'
-        }, { status: 400 });
-      }
-
-          // Check if meeting is already ended
-    if (meeting.status === 'ended' || meeting.status === 'completed' || meeting.endedAt) {
-      console.log(`⚠️ Meeting ${meetingId} already ended`);
-      return NextResponse.json({
-        success: true,
-        message: 'Meeting was already ended successfully',
-        data: {
-          meetingId: meeting._id,
-          roomName: meeting.roomName,
-          status: meeting.status,
-          alreadyEnded: true
-        }
-      });
-    }
 
           // First, handle participant leave to check if we should actually end the meeting
     console.log(`👤 Participant leaving meeting: ${meeting.title || meeting.type} (${meetingId})`);
@@ -182,22 +167,28 @@ export async function POST(
 
       console.log(`✅ Meeting ended, starting background processing...`);
           
-      // Process immediately within Vercel function limits
-      console.log(`🔄 MEETING END: Starting processing for meeting ${meetingId} with ${transcripts.length} transcripts`);
+      // Start processing in background WITHOUT waiting (fire-and-forget)
+      console.log(`🔄 MEETING END: Starting async processing for meeting ${meetingId} with ${transcripts.length} transcripts`);
       const processor = MeetingProcessor.getInstance();
-      const processingResult = await processor.processImmediately(
+      
+      // Fire-and-forget: Don't await the processing to avoid Vercel timeout
+      processor.processImmediately(
         meetingId,
         roomName,
         transcripts,
-              participants
-            );
+        participants
+      ).then((result) => {
+        console.log(`✅ MEETING END: Async processing completed for ${meetingId}:`, result);
+      }).catch((error) => {
+        console.error(`❌ MEETING END: Async processing failed for ${meetingId}:`, error);
+      });
       
-      console.log(`✅ MEETING END: Processing result:`, processingResult);
+      console.log(`✅ MEETING END: Background processing started, returning immediately`);
 
-      // Return with processing results
+      // Return immediately while processing continues in background
       return NextResponse.json({
         success: true,
-        message: 'Meeting ended and processed successfully',
+        message: 'Meeting ended, processing started in background',
         data: {
           meetingId,
           roomName,
@@ -205,15 +196,17 @@ export async function POST(
           duration: calculatedDuration,
           transcriptsCount: transcripts.length,
           status: 'processing',
-          processing: processingResult
+          backgroundProcessing: true
         }
       });
 
-    } finally {
-      // Clean up lock after a delay to prevent immediate duplicates
-      setTimeout(() => {
-        meetingEndLocks.delete(meetingId);
-      }, 5000);
+    } catch (error) {
+      console.error('Error in meeting end processing:', error);
+      return NextResponse.json({
+        success: false,
+        error: 'Failed to process meeting end',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      }, { status: 500 });
     }
 
   } catch (error) {

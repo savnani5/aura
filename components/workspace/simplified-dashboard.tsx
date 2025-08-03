@@ -144,9 +144,9 @@ export function SimplifiedDashboard() {
   const MIN_SIDEBAR_WIDTH = 250;
   const MAX_SIDEBAR_WIDTH = 400;
   
-  // Cache settings (5 minutes for workspaces, 30 seconds for meetings for better real-time updates)
+  // Cache settings (optimized for Vercel Free plan)
   const WORKSPACE_CACHE_DURATION = 5 * 60 * 1000;
-  const MEETINGS_CACHE_DURATION = 30 * 1000; // Reduced to 30 seconds for better real-time updates
+  const MEETINGS_CACHE_DURATION = 60 * 1000; // 60 seconds - balanced for Vercel Free plan limits
   
   // Cache invalidation helper
   const invalidateCache = useCallback((type: 'workspaces' | 'meetings' | 'all', workspaceId?: string) => {

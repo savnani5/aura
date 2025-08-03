@@ -225,9 +225,9 @@ export function MeetingDatabase({
     if (needsPolling) {
       console.log('🔄 Active/processing meeting detected, starting polling...');
       
-      // Use different intervals based on meeting status
+      // Use different intervals based on meeting status (optimized for Vercel Free plan)
       const hasProcessingMeeting = meetings.some(meeting => meeting.status === 'processing');
-      const pollInterval = hasProcessingMeeting ? 3000 : 5000; // 3s for processing, 5s for active
+      const pollInterval = hasProcessingMeeting ? 10000 : 15000; // 10s for processing, 15s for active
       
       const interval = setInterval(() => {
         console.log(`🔄 Polling for meeting updates... (${pollInterval/1000}s interval)`);
