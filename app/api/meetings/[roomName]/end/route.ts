@@ -171,17 +171,33 @@ export async function POST(
       console.log(`🔄 MEETING END: Starting async processing for meeting ${meetingId} with ${transcripts.length} transcripts`);
       const processor = MeetingProcessor.getInstance();
       
-      // Fire-and-forget: Don't await the processing to avoid Vercel timeout
-      processor.processImmediately(
-        meetingId,
-        roomName,
-        transcripts,
-        participants
-      ).then((result) => {
-        console.log(`✅ MEETING END: Async processing completed for ${meetingId}:`, result);
-      }).catch((error) => {
-        console.error(`❌ MEETING END: Async processing failed for ${meetingId}:`, error);
-      });
+      // Trigger dedicated processing function (runs in separate serverless instance)
+      try {
+        const processingResponse = await fetch(`${process.env.VERCEL_URL || 'http://localhost:3000'}/api/process-meeting`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            meetingId,
+            roomName,
+            transcripts,
+            participants
+          }),
+          // Add timeout to prevent hanging
+          signal: AbortSignal.timeout(5000) // 5 second timeout for triggering
+        });
+        
+        if (processingResponse.ok) {
+          console.log(`✅ MEETING END: Processing function triggered successfully for ${meetingId}`);
+        } else {
+          console.error(`❌ MEETING END: Processing function failed to trigger for ${meetingId}:`, processingResponse.status);
+          // Processing will retry automatically via Vercel's retry mechanism
+        }
+      } catch (error) {
+        console.error(`❌ MEETING END: Failed to trigger processing function for ${meetingId}:`, error);
+        // Could implement retry logic here if needed
+      }
       
       console.log(`✅ MEETING END: Background processing started, returning immediately`);
 
