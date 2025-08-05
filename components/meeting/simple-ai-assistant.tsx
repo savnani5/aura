@@ -61,8 +61,10 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
   const [currentAiMessage, setCurrentAiMessage] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
-  // Refs for auto-scrolling
+  // Refs for auto-scrolling with user control
   const chatMessagesRef = useRef<HTMLDivElement>(null);
+  const [userHasScrolled, setUserHasScrolled] = useState(false);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   // Question suggestions for AI chat
   const questionSuggestions = [
@@ -84,12 +86,34 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
     }
   ];
 
-  // Auto-scroll chat messages
+  // Smart auto-scroll: only scroll if user hasn't manually scrolled up
   useEffect(() => {
-    if (chatMessagesRef.current) {
+    if (chatMessagesRef.current && shouldAutoScroll && !userHasScrolled) {
       chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
     }
-  }, [aiChatHistory, currentAiMessage]);
+  }, [aiChatHistory, currentAiMessage, shouldAutoScroll, userHasScrolled]);
+
+  // Handle user scroll detection
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const element = e.currentTarget;
+    const isScrolledToBottom = element.scrollHeight - element.scrollTop <= element.clientHeight + 50; // 50px threshold
+    
+    if (isScrolledToBottom) {
+      setUserHasScrolled(false);
+      setShouldAutoScroll(true);
+    } else {
+      setUserHasScrolled(true);
+      setShouldAutoScroll(false);
+    }
+  };
+
+  // Reset scroll state when starting new AI response
+  useEffect(() => {
+    if (isAiProcessing && currentAiMessage === '') {
+      setUserHasScrolled(false);
+      setShouldAutoScroll(true);
+    }
+  }, [isAiProcessing, currentAiMessage]);
 
   const copyToClipboard = async (messageId: string, text: string) => {
     try {
@@ -320,6 +344,7 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
         {/* Chat Messages */}
         <div 
           ref={chatMessagesRef}
+          onScroll={handleScroll}
           className={cn(
             "flex-1 overflow-y-auto space-y-4 custom-scrollbar",
             isMobile ? "p-3" : "p-4"
@@ -573,17 +598,31 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
               "border-t border-[rgba(55,65,81,0.3)]",
               isMobile ? "p-3" : "p-4"
             )}>
-              <div className="flex gap-2">
-                <input
-                  type="text"
+              <div className="flex gap-2 items-end">
+                <textarea
                   value={aiChatInput}
                   onChange={(e) => setAiChatInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleAiChatSubmit(e)}
-                  placeholder="Ask AI about the meeting..."
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleAiChatSubmit(e);
+                    }
+                  }}
+                  placeholder="Ask AI about the meeting... (Shift+Enter for new line)"
+                  rows={1}
                   className={cn(
-                    "flex-1 bg-[#2a2a2a] border border-[#374151] rounded-md text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent",
+                    "flex-1 bg-[#2a2a2a] border border-[#374151] rounded-md text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent resize-none overflow-hidden",
                     isMobile ? "px-2 py-2 text-sm" : "px-3 py-2 text-sm"
                   )}
+                  style={{
+                    minHeight: isMobile ? '36px' : '40px',
+                    maxHeight: '120px'
+                  }}
+                  onInput={(e) => {
+                    const target = e.target as HTMLTextAreaElement;
+                    target.style.height = 'auto';
+                    target.style.height = Math.min(target.scrollHeight, 120) + 'px';
+                  }}
                   disabled={isAiProcessing}
                 />
                 <Button
@@ -591,8 +630,8 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
                   disabled={!aiChatInput.trim() || isAiProcessing}
                   size="icon"
                   className={cn(
-                    "bg-blue-600 hover:bg-blue-700 text-white",
-                    isMobile && "h-9 w-9"
+                    "bg-blue-600 hover:bg-blue-700 text-white shrink-0",
+                    isMobile ? "h-9 w-9" : "h-10 w-10"
                   )}
                 >
                   <Send size={isMobile ? 14 : 16} />

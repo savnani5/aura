@@ -90,15 +90,18 @@ export function ControlBarChat({ isOpen, onClose, onNewMessage }: ControlBarChat
     
     return parts.map((part, index) => {
       if (part.match(urlRegex)) {
+        // Truncate very long URLs for display
+        const displayUrl = part.length > 50 ? part.substring(0, 47) + '...' : part;
         return (
           <a 
             key={index}
             href={part}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-400 hover:text-blue-300 underline transition-colors"
+            className="text-blue-400 hover:text-blue-300 underline transition-colors break-all inline-block max-w-full"
+            title={part} // Show full URL on hover
           >
-            {part}
+            {displayUrl}
           </a>
         );
       }
@@ -163,14 +166,14 @@ export function ControlBarChat({ isOpen, onClose, onNewMessage }: ControlBarChat
                       {group.senderName} • {formatTimestamp(group.latestTimestamp)}
                     </div>
                     <div className={cn(
-                      "rounded-lg px-4 py-2",
+                      "rounded-lg px-4 py-2 break-words",
                       isCurrentUser 
                         ? "bg-blue-600 text-white" 
                         : "bg-[#2a2a2a] text-white"
                     )}>
                       <div className="space-y-1">
                         {group.messages.map((msg) => (
-                          <div key={msg.id} className="text-sm">
+                          <div key={msg.id} className="text-sm break-words overflow-wrap-anywhere">
                             {makeLinksClickable(msg.text)}
                           </div>
                         ))}

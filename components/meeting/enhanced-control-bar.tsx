@@ -76,6 +76,8 @@ export function EnhancedControlBar({
   });
   const [isResizing, setIsResizing] = useState(false);
   
+
+  
   const room = useRoomContext();
   const { localParticipant } = useLocalParticipant();
   const layoutContext = useLayoutContext();
@@ -155,6 +157,8 @@ export function EnhancedControlBar({
     setPanelWidth(resetWidth);
     localStorage.setItem('aura-panel-width', resetWidth.toString());
   };
+
+
 
   // Handle panel resizing
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -402,7 +406,24 @@ export function EnhancedControlBar({
       console.log('🖥️ Toggling screen share:', currentState, '->', newState);
       console.log('🖥️ LocalParticipant screen share state before toggle:', localParticipant.isScreenShareEnabled);
       
-      await localParticipant.setScreenShareEnabled(newState);
+      if (newState) {
+        // Start screen sharing with proper constraints
+        await localParticipant.setScreenShareEnabled(true, {
+          // Prevent zoom issues with proper resolution constraints
+          video: {
+            width: { ideal: 1920, max: 1920 },
+            height: { ideal: 1080, max: 1080 },
+            frameRate: { ideal: 30, max: 30 }
+          },
+          // Ensure proper display surface selection
+          displaySurface: 'monitor', // Prefer monitor over window/browser
+          selfBrowserSurface: 'exclude', // Exclude browser from selection
+          systemAudio: 'include' // Include system audio if available
+        });
+      } else {
+        // Stop screen sharing
+        await localParticipant.setScreenShareEnabled(false);
+      }
       
       // Force state update after toggle
       setTimeout(() => {
@@ -423,6 +444,9 @@ export function EnhancedControlBar({
       } else if (error instanceof Error) {
         if (error.name === 'NotSupportedError') {
           alert('Screen sharing is not supported in this browser.');
+        } else if (error.name === 'NotAllowedError') {
+          console.log('Screen sharing cancelled by user');
+          // Don't show error for user cancellation
         } else {
           alert('Failed to start screen sharing. Please try again.');
         }
@@ -492,6 +516,7 @@ export function EnhancedControlBar({
             <Button
               size="icon"
               onClick={toggleCamera}
+
               title={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
               className={cn(
                 "min-h-touch min-w-touch rounded-full transition-all duration-200",
@@ -509,6 +534,7 @@ export function EnhancedControlBar({
             <Button
               size="icon"
               onClick={toggleMicrophone}
+
               title={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
               className={cn(
                 "min-h-touch min-w-touch rounded-full transition-all duration-200",
@@ -526,6 +552,7 @@ export function EnhancedControlBar({
             <Button
               size="icon"
               onClick={handleSettingsToggle}
+
               title="Settings"
               className={cn(
                 "min-h-touch min-w-touch rounded-full transition-all duration-200",
@@ -544,6 +571,7 @@ export function EnhancedControlBar({
               variant="destructive"
               size="icon"
               onClick={handleLeave}
+
               title="Leave Meeting"
               className="min-h-touch min-w-touch rounded-full"
             >
@@ -559,6 +587,7 @@ export function EnhancedControlBar({
             <Button
               size="icon"
               onClick={toggleCamera}
+
               title={isCameraEnabled ? 'Turn off camera' : 'Turn on camera'}
               className={cn(
                 "h-12 w-12 rounded-full transition-all duration-200",
@@ -576,6 +605,7 @@ export function EnhancedControlBar({
             <Button
               size="icon"
               onClick={toggleMicrophone}
+
               title={isMicEnabled ? 'Mute microphone' : 'Unmute microphone'}
               className={cn(
                 "h-12 w-12 rounded-full transition-all duration-200",
@@ -593,6 +623,7 @@ export function EnhancedControlBar({
             <Button
               size="icon"
               onClick={toggleScreenShare}
+
               title={isScreenSharing ? 'Stop sharing screen' : 'Share screen'}
               className={cn(
                 "h-12 w-12 rounded-full transition-all duration-200",
@@ -628,8 +659,9 @@ export function EnhancedControlBar({
           {/* Participants Button */}
           <Button
             size="icon"
-            onClick={handleParticipantsToggle}
-            title="Participants"
+                          onClick={handleParticipantsToggle}
+
+              title="Participants"
             className={cn(
               "h-12 w-12 rounded-full relative transition-all duration-200",
               showParticipants 
@@ -643,8 +675,9 @@ export function EnhancedControlBar({
           {/* Chat Button */}
           <Button
             size="icon"
-            onClick={handleChatToggle}
-            title="Chat"
+                          onClick={handleChatToggle}
+
+              title="Chat"
             className={cn(
               "h-12 w-12 rounded-full relative transition-all duration-200",
               showChat 
@@ -661,8 +694,9 @@ export function EnhancedControlBar({
           {/* AI Assistant Button */}
           <Button
             size="icon"
-            onClick={handleAIToggle}
-            title="AI Assistant"
+                          onClick={handleAIToggle}
+
+              title="AI Assistant"
             className={cn(
               "h-12 w-12 rounded-full transition-all duration-200",
               showAI 
@@ -676,8 +710,9 @@ export function EnhancedControlBar({
           {/* Transcripts Button */}
           <Button
             size="icon"
-            onClick={handleTranscriptsToggle}
-            title="Transcripts"
+                          onClick={handleTranscriptsToggle}
+
+              title="Transcripts"
             className={cn(
               "h-12 w-12 rounded-full transition-all duration-200",
               showTranscripts 
@@ -697,6 +732,7 @@ export function EnhancedControlBar({
               variant="destructive"
               size="icon"
               onClick={handleLeave}
+
               title="Leave Meeting"
               className="h-12 w-12 rounded-full"
             >
