@@ -11,7 +11,7 @@ import {
   useLayoutContext,
   useParticipants
 } from '@livekit/components-react';
-import { Track } from 'livekit-client';
+import { Track, VideoPresets } from 'livekit-client';
 import { 
   Video, 
   VideoOff, 
@@ -409,16 +409,8 @@ export function EnhancedControlBar({
       if (newState) {
         // Start screen sharing with proper constraints
         await localParticipant.setScreenShareEnabled(true, {
-          // Prevent zoom issues with proper resolution constraints
-          video: {
-            width: { ideal: 1920, max: 1920 },
-            height: { ideal: 1080, max: 1080 },
-            frameRate: { ideal: 30, max: 30 }
-          },
-          // Ensure proper display surface selection
-          displaySurface: 'monitor', // Prefer monitor over window/browser
-          selfBrowserSurface: 'exclude', // Exclude browser from selection
-          systemAudio: 'include' // Include system audio if available
+          audio: true, // Include system audio
+          resolution: VideoPresets.h1080 // Set resolution to prevent zoom issues
         });
       } else {
         // Stop screen sharing
