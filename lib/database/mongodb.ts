@@ -56,26 +56,31 @@ export async function connectToDatabase(): Promise<typeof mongoose> {
   if (!cached.promise) {
     cached.isConnecting = true;
     
-    // Serverless-optimized MongoDB options
+    // Optimized MongoDB options for Vercel performance
     const opts = {
       bufferCommands: false, // Critical for serverless - don't buffer commands
       
-      // Aggressive timeouts for serverless (faster failure = better UX)
-      serverSelectionTimeoutMS: 5000, // 5 seconds max to select server
-      socketTimeoutMS: 10000, // 10 seconds socket timeout
-      connectTimeoutMS: 5000, // 5 seconds to connect
+      // Optimized timeouts for better performance
+      serverSelectionTimeoutMS: 3000, // 3 seconds max to select server (faster)
+      socketTimeoutMS: 15000, // 15 seconds socket timeout (longer for operations)
+      connectTimeoutMS: 3000, // 3 seconds to connect (faster)
       
-      // Minimal connection pool for serverless
-      maxPoolSize: 1, // Single connection per function instance
-      minPoolSize: 0, // No minimum connections
-      maxIdleTimeMS: 5000, // Close idle connections quickly
+      // Optimized connection pool for Vercel
+      maxPoolSize: 5, // Allow multiple connections for parallel operations
+      minPoolSize: 1, // Keep one connection warm
+      maxIdleTimeMS: 30000, // Keep connections alive longer (30s)
       
-      // Retry settings
+      // Enhanced retry settings
       retryWrites: true,
       retryReads: true,
+      maxStalenessSeconds: 90, // Allow slightly stale reads for performance
       
-      // Heartbeat for connection health
-      heartbeatFrequencyMS: 30000, // Check every 30 seconds
+      // Optimized heartbeat
+      heartbeatFrequencyMS: 10000, // Check every 10 seconds (more frequent)
+      
+      // Compression for faster data transfer
+      compressors: ['zlib'] as ('none' | 'zlib' | 'snappy' | 'zstd')[],
+      zlibCompressionLevel: 6 as const,
     };
 
     console.log('🔌 Connecting to MongoDB (serverless mode)');
@@ -1267,6 +1272,52 @@ export class DatabaseService {
     
     const meeting = await Meeting.findById(meetingId).lean();
     return meeting as IMeeting | null;
+  }
+
+  /**
+   * PERFORMANCE: Batch operation - Get meeting and room data in parallel
+   * Reduces database round trips for common operations
+   */
+  async getMeetingWithRoom(meetingId: string, roomName?: string): Promise<{
+    meeting: IMeeting | null;
+    room: IMeetingRoom | null;
+  }> {
+    await this.ensureConnection();
+    
+    const [meeting, room] = await Promise.all([
+      Meeting.findById(meetingId).lean(),
+      roomName ? MeetingRoom.findOne({ name: roomName }).lean() : Promise.resolve(null)
+    ]);
+    
+    return {
+      meeting: meeting as IMeeting | null,
+      room: room as IMeetingRoom | null
+    };
+  }
+
+  /**
+   * PERFORMANCE: Batch operation - Update meeting status and fetch room participants
+   * Common operation during meeting processing
+   */
+  async updateMeetingAndGetRoom(
+    meetingId: string, 
+    updateData: Partial<IMeeting>, 
+    roomName: string
+  ): Promise<{
+    meeting: IMeeting | null;
+    room: IMeetingRoom | null;
+  }> {
+    await this.ensureConnection();
+    
+    const [meeting, room] = await Promise.all([
+      Meeting.findByIdAndUpdate(meetingId, updateData, { new: true }).lean(),
+      MeetingRoom.findOne({ name: roomName }).lean()
+    ]);
+    
+    return {
+      meeting: meeting as IMeeting | null,
+      room: room as IMeetingRoom | null
+    };
   }
   
   // NEW: Check for active or processing meeting in a room

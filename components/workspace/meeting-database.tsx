@@ -225,9 +225,18 @@ export function MeetingDatabase({
     if (needsPolling) {
       console.log('🔄 Active/processing meeting detected, starting polling...');
       
-      // Use different intervals based on meeting status (optimized for faster processing updates)
+      // PERFORMANCE: Adaptive polling intervals based on meeting states
       const hasProcessingMeeting = meetings.some(meeting => meeting.status === 'processing');
-      const pollInterval = hasProcessingMeeting ? 8000 : 15000; // 8s for processing, 15s for active
+      const hasActiveMeeting = meetings.some(meeting => meeting.status === 'in_progress');
+      
+      let pollInterval;
+      if (hasProcessingMeeting) {
+        pollInterval = 4000; // 4s for processing meetings (very frequent)
+      } else if (hasActiveMeeting) {
+        pollInterval = 10000; // 10s for active meetings
+      } else {
+        pollInterval = 20000; // 20s for recently completed meetings
+      }
       
       const interval = setInterval(() => {
         console.log(`🔄 Polling for meeting updates... (${pollInterval/1000}s interval)`);

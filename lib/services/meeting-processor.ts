@@ -56,7 +56,7 @@ export class MeetingProcessor {
     console.log(`🚀 MEETING PROCESSOR: Starting INSTANT processing for meeting ${meetingId}`);
     
     try {
-      // Validate meeting exists quickly
+      // PERFORMANCE: Validate meeting exists quickly
       const dbService = DatabaseService.getInstance();
       const meeting = await dbService.getMeetingById(meetingId);
       
@@ -66,11 +66,16 @@ export class MeetingProcessor {
 
       console.log(`✅ MEETING PROCESSOR: Meeting validated, starting full background processing...`);
 
-      // Mark meeting as processing immediately
-      await dbService.updateMeeting(meetingId, { 
+      // PERFORMANCE: Mark meeting as processing immediately (non-blocking)
+      const updatePromise = dbService.updateMeeting(meetingId, { 
         status: 'processing', // Update main status to processing
         processingStatus: 'pending',
         processingStartedAt: new Date()
+      });
+      
+      // Don't await the update - let it run in parallel with background processing
+      updatePromise.catch(error => {
+        console.error(`❌ MEETING PROCESSOR: Failed to update meeting status:`, error);
       });
       
       console.log(`✅ MEETING PROCESSOR: Meeting ${meetingId} marked as pending processing`);
@@ -121,17 +126,19 @@ export class MeetingProcessor {
     const dbService = DatabaseService.getInstance();
     
     try {
-      // Step 1: Store transcripts and embeddings
+      // PERFORMANCE: Step 1 - Store transcripts with parallel status update
       let transcriptsStored = 0;
       if (transcripts.length > 0) {
         console.log(`📝 FULL BACKGROUND PROCESSING STEP 1: Processing ${transcripts.length} transcripts...`);
-        transcriptsStored = await this.storeTranscripts(meetingId, transcripts);
-        console.log(`✅ FULL BACKGROUND PROCESSING STEP 1: Stored ${transcriptsStored} transcripts`);
         
-        // Mark as in progress after transcripts are stored
-        await dbService.updateMeeting(meetingId, { 
-          processingStatus: 'in_progress'
-        });
+        // PERFORMANCE: Start transcript storage and status update in parallel
+        const [storedCount] = await Promise.all([
+          this.storeTranscripts(meetingId, transcripts),
+          dbService.updateMeeting(meetingId, { processingStatus: 'in_progress' })
+        ]);
+        
+        transcriptsStored = storedCount;
+        console.log(`✅ FULL BACKGROUND PROCESSING STEP 1: Stored ${transcriptsStored} transcripts`);
       } else {
         console.log(`⚠️ FULL BACKGROUND PROCESSING STEP 1: No transcripts to process - meeting should have been deleted by end API`);
         // This shouldn't happen as empty meetings should be deleted by the end API
@@ -247,6 +254,7 @@ export class MeetingProcessor {
 
   /**
    * Store transcripts with embeddings in Pinecone only
+   * PERFORMANCE: Parallel embeddings generation and database update
    */
   private async storeTranscripts(meetingId: string, transcripts: any[]): Promise<number> {
     const dbService = DatabaseService.getInstance();
@@ -256,15 +264,15 @@ export class MeetingProcessor {
     const cleanedTranscripts = this.deduplicateTranscripts(transcripts);
     
     if (cleanedTranscripts.length > 0) {
-      // Store embeddings in Pinecone for semantic search and AI context
-      await ragService.storeTranscriptEmbeddings(meetingId, cleanedTranscripts);
-      
-      // Only store metadata in MongoDB (not the full transcripts)
-      await dbService.updateMeeting(meetingId, {
-        transcriptCount: cleanedTranscripts.length,
-        hasEmbeddings: true,
-        embeddingsGeneratedAt: new Date()
-      });
+      // PERFORMANCE: Start embeddings storage and database update in parallel
+      const [_, __] = await Promise.all([
+        ragService.storeTranscriptEmbeddings(meetingId, cleanedTranscripts),
+        dbService.updateMeeting(meetingId, {
+          transcriptCount: cleanedTranscripts.length,
+          hasEmbeddings: true,
+          embeddingsGeneratedAt: new Date()
+        })
+      ]);
       
       return cleanedTranscripts.length;
     }
@@ -414,13 +422,14 @@ Transcript: ${limitedTranscript}`;
 
   /**
    * Send summary emails to participants
+   * PERFORMANCE: Uses batch database operations
    */
   private async sendEmails(meetingId: string, roomName: string, participants: any[]): Promise<void> {
     const dbService = DatabaseService.getInstance();
     const emailService = EmailService.getInstance();
 
-    const meeting = await dbService.getMeetingById(meetingId);
-    const room = await dbService.getMeetingRoomByName(roomName);
+    // PERFORMANCE: Batch fetch meeting and room data in parallel
+    const { meeting, room } = await dbService.getMeetingWithRoom(meetingId, roomName);
 
     if (!meeting?.summary || !room) return;
 

@@ -445,8 +445,10 @@ export function SimplifiedDashboard() {
       meeting.status === 'processing'
     );
     
-    // Use shorter cache duration for processing meetings
-    const effectiveCacheDuration = hasProcessingMeeting ? 10 * 1000 : MEETINGS_CACHE_DURATION; // 10s for processing
+    // PERFORMANCE: Dynamic cache duration based on meeting states
+    const effectiveCacheDuration = hasProcessingMeeting 
+      ? 5 * 1000  // 5s for processing meetings (very frequent updates)
+      : MEETINGS_CACHE_DURATION; // 30s for normal meetings
     const cacheValid = !forceRefresh && meetingsCache[workspaceId] && (now - lastFetch) < effectiveCacheDuration;
     
     console.log('🔍 fetchMeetingsForWorkspace - Cache check:', {
