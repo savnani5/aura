@@ -80,13 +80,10 @@ export class MeetingProcessor {
       
       console.log(`✅ MEETING PROCESSOR: Meeting ${meetingId} marked as pending processing`);
 
-      // Start COMPLETE background processing without waiting for anything
-      this.processFullyInBackground(meetingId, roomName, meeting, transcripts, participants)
-        .catch((error: any) => {
-          console.error(`❌ FULL BACKGROUND PROCESSING: Failed for meeting ${meetingId}:`, error);
-        });
+      // Since we're running in a dedicated serverless function, await the full processing
+      await this.processFullyInBackground(meetingId, roomName, meeting, transcripts, participants);
 
-      // Return immediately - user doesn't wait for anything!
+      console.log(`🎉 MEETING PROCESSOR: Complete processing finished for meeting ${meetingId}`);
       return {
         success: true,
         backgroundProcessingStarted: true,
