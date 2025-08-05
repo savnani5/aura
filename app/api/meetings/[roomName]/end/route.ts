@@ -128,9 +128,19 @@ export async function POST(
       (meetingEndedAt.getTime() - new Date(meeting.startedAt).getTime()) / (1000 * 60)
     );
 
-      // If no transcripts, just delete the empty meeting
-      if (!transcripts || transcripts.length === 0) {
-        console.log(`🗑️ No transcripts found - deleting empty meeting record: ${meetingId}`);
+      // If no transcripts and no meaningful participants, delete the empty meeting
+      const hasTranscripts = transcripts && transcripts.length > 0;
+      const hasParticipants = participants && participants.length > 1; // More than just the host
+      const hasContent = hasTranscripts || hasParticipants;
+      
+      if (!hasContent) {
+        console.log(`🗑️ No meaningful content found - deleting empty meeting record: ${meetingId}`, {
+          transcriptCount: transcripts?.length || 0,
+          participantCount: participants?.length || 0,
+          hasTranscripts,
+          hasParticipants
+        });
+        
         await dbService.deleteMeeting(meetingId);
         
         return NextResponse.json({
@@ -141,7 +151,8 @@ export async function POST(
             roomName,
             endedAt: meetingEndedAt.toISOString(),
             duration: calculatedDuration,
-            meetingDeleted: true
+            meetingDeleted: true,
+            reason: 'No transcripts or participants'
           }
         });
       }
