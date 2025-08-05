@@ -324,7 +324,9 @@ export class MeetingProcessor {
 
     const participantNames = participants.map(p => p.name).join(', ');
 
-    const systemPrompt = `You are a meeting analysis AI. Analyze the transcript and create detailed meeting notes in JSON format.
+    const systemPrompt = `You are a meeting analysis AI. Analyze the transcript and create detailed meeting notes.
+
+CRITICAL: You MUST respond with valid JSON only. No additional text, explanations, or formatting.
 
 ADAPTIVE APPROACH:
 - For short meetings (under 10 minutes) or simple conversations: Create a brief summary with 1-2 sections
@@ -332,7 +334,7 @@ ADAPTIVE APPROACH:
 - For long meetings (30+ minutes): Create 3-6+ sections with comprehensive detail
 - Let the content and complexity of the discussion drive the structure, not arbitrary limits
 
-REQUIRED JSON STRUCTURE:
+REQUIRED JSON STRUCTURE (respond with this exact format):
 - title: concise 4-8 word meeting title based on main topic
 - content: 2-3 sentence overall summary
 - sections: array of detailed sections based on natural topic flow, including:
@@ -375,28 +377,28 @@ GUIDELINES:
 - Include transcript references for important points - these will be shown in clickable popups
 - Focus on capturing substance and details discussed, like comprehensive meeting notes
 - For brief meetings, don't force artificial structure - adapt to the content
-- Prioritize quality over quantity - better to have fewer, more meaningful sections`;
+- Prioritize quality over quantity - better to have fewer, more meaningful sections
+
+RESPOND WITH VALID JSON ONLY - NO OTHER TEXT.`;
 
     const userPrompt = `Meeting Type: ${meetingType}
 Participants: ${participantNames}
-Transcript: ${limitedTranscript}
-
-Return only valid JSON.`;
+Transcript: ${limitedTranscript}`;
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 600, // Further reduced for faster response on Vercel
-      temperature: 0.1,
+      max_tokens: 800, // Increased back for complete JSON responses
+      temperature: 0.1, // Low temperature for consistent JSON formatting
       system: systemPrompt,
       messages: [
         { role: 'user', content: userPrompt },
-        { role: 'assistant', content: '{' }
-      ],
+        { role: 'assistant', content: '{\n  "title":' } // Start JSON response to guide format
+      ]
     }, {
-      timeout: 25000 // 25 second timeout to avoid Vercel issues
+      timeout: 30000 // 30 second timeout
     });
 
-    let aiResponse = '{';
+    let aiResponse = '{\n  "title":'; // Start with the prefix we provided
     for (const content of response.content) {
       if (content.type === 'text') {
         aiResponse += content.text;
