@@ -173,7 +173,12 @@ export async function POST(
       
       // Trigger dedicated processing function (runs in separate serverless instance)
       try {
-        const processingResponse = await fetch(`${process.env.VERCEL_URL || 'http://localhost:3000'}/api/process-meeting`, {
+        // Construct proper URL with protocol
+        const baseUrl = process.env.VERCEL_URL 
+          ? `https://${process.env.VERCEL_URL}` 
+          : 'http://localhost:3000';
+        
+        const processingResponse = await fetch(`${baseUrl}/api/process-meeting`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
