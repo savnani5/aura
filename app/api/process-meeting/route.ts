@@ -33,4 +33,4 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export const maxDuration = 60; // 60 seconds - enough for Claude + embeddings + emails
+export const maxDuration = 60; // 60 seconds for Pro plan, 10s for Free

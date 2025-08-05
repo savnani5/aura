@@ -1,0 +1,30 @@
+{
+  "functions": {
+    "app/api/webhooks/clerk/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/webhooks/stripe/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/process-meeting/route.ts": {
+      "maxDuration": 60
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/webhooks/:path*",
+      "destination": "/api/webhooks/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/webhooks/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    }
+  ]
+} 

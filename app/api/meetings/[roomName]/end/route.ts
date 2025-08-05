@@ -183,20 +183,16 @@ export async function POST(
             roomName,
             transcripts,
             participants
-          }),
-          // Add timeout to prevent hanging
-          signal: AbortSignal.timeout(5000) // 5 second timeout for triggering
+          })
         });
         
         if (processingResponse.ok) {
           console.log(`✅ MEETING END: Processing function triggered successfully for ${meetingId}`);
         } else {
           console.error(`❌ MEETING END: Processing function failed to trigger for ${meetingId}:`, processingResponse.status);
-          // Processing will retry automatically via Vercel's retry mechanism
         }
       } catch (error) {
         console.error(`❌ MEETING END: Failed to trigger processing function for ${meetingId}:`, error);
-        // Could implement retry logic here if needed
       }
       
       console.log(`✅ MEETING END: Background processing started, returning immediately`);
