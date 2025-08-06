@@ -1500,6 +1500,17 @@ export class DatabaseService {
     return meeting as unknown as IMeeting | null;
   }
 
+  async findAbandonedMeetings(cutoffTime: Date): Promise<IMeeting[]> {
+    await this.ensureConnection();
+    
+    const abandonedMeetings = await Meeting.find({
+      status: 'active',
+      lastActivity: { $lt: cutoffTime }
+    }).lean();
+    
+    return abandonedMeetings as unknown as IMeeting[];
+  }
+
   // Get monthly meeting count for a user
   async getMonthlyMeetingCount(userId: string, year?: number, month?: number): Promise<number> {
     await this.ensureConnection();

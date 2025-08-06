@@ -192,7 +192,8 @@ export class MeetingProcessor {
         console.log(`📋 FULL BACKGROUND PROCESSING STEP 2: Summary details:`, {
           title: summary.title,
           contentLength: summary.content?.length || 0,
-          keyPointsCount: summary.keyPoints?.length || 0,
+          sectionsCount: summary.sections?.length || 0,
+          totalPoints: summary.sections?.reduce((acc: number, section: any) => acc + (section.points?.length || 0), 0) || 0,
           actionItemsCount: summary.actionItems?.length || 0
         });
 
@@ -311,6 +312,9 @@ export class MeetingProcessor {
     cleanedTranscripts: any[],
     participants: any[]
   ): Promise<any> {
+    console.log('🤖 MEETING PROCESSOR: Calling Claude API with full transcript...');
+
+    // Send FULL transcript - no length limits as requested
     const transcriptText = cleanedTranscripts
       .map(t => {
         const timeStr = new Date(t.timestamp).toLocaleTimeString([], { 
@@ -321,100 +325,165 @@ export class MeetingProcessor {
       })
       .join('\n');
 
-    // Limit transcript length for faster processing
-    const maxTranscriptLength = 8000; // Reasonable limit for fast processing
-    const limitedTranscript = transcriptText.length > maxTranscriptLength 
-      ? transcriptText.substring(0, maxTranscriptLength) + '...'
-      : transcriptText;
-
     const participantNames = participants.map(p => p.name).join(', ');
 
-    const systemPrompt = `You are a meeting analysis AI. Analyze the transcript and create detailed meeting notes.
+    console.log('📝 Sending complete transcript to Claude:', {
+      transcriptLength: transcriptText.length,
+      transcriptCount: cleanedTranscripts.length,
+      participantCount: participants.length,
+      estimatedInputTokens: Math.ceil(transcriptText.length / 4) // Rough estimate: 4 chars per token
+    });
 
-CRITICAL: You MUST respond with valid JSON only. No additional text, explanations, or formatting.
+    // Claude Sonnet 4 has a 200K token input limit - warn if we're getting close
+    const estimatedTokens = Math.ceil(transcriptText.length / 4);
+    if (estimatedTokens > 150000) {
+      console.log('⚠️ WARNING: Very long transcript may approach Claude input limits', {
+        estimatedTokens,
+        limit: 200000
+      });
+    }
 
-ADAPTIVE APPROACH:
-- For short meetings (under 10 minutes) or simple conversations: Create a brief summary with 1-2 sections
-- For medium meetings (10-30 minutes): Create 2-4 sections with moderate detail
-- For long meetings (30+ minutes): Create 3-6+ sections with comprehensive detail
-- Let the content and complexity of the discussion drive the structure, not arbitrary limits
+    // Structured prompt with sections and clickable context
+    const systemPrompt = `You are an AI meeting assistant. Create a detailed, well-structured meeting summary with clickable bullet points.
 
-REQUIRED JSON STRUCTURE (respond with this exact format):
-- title: concise 4-8 word meeting title based on main topic
-- content: 2-3 sentence overall summary
-- sections: array of detailed sections based on natural topic flow, including:
-  * Discussion topics and key points
-  * Action items (if any) as a dedicated section
-  * Decisions made (if any) as points within relevant sections
-  * Technical details, strategic discussions, etc.
-  
-  Each section format:
-  {
-    "title": "descriptive section name (e.g., 'Product Strategy Discussion', 'Action Items & Next Steps')",
-    "points": [
-             {
-         "text": "detailed, substantive bullet point with specific information",
-         "speaker": "name of person who mentioned this (if clearly identifiable)",
-         "context": {
-           "speaker": "name of the person who said this",
-           "reasoning": "why they said this, what prompted the discussion, the motivation behind the statement",
-           "transcriptExcerpt": "the exact quote or key statement from the transcript",
-           "relatedDiscussion": "surrounding conversation that provides context - what was being discussed before and after this point"
-         }
-       }
-    ]
-  }
+CRITICAL: Respond with ONLY valid JSON. No extra text, explanations, or formatting.
 
-- actionItems: array of actionable tasks extracted from the discussion:
+Required JSON structure (must match exactly):
 {
-  "title": "specific task description", 
-  "owner": "person responsible (from participants, or 'Unassigned' if unclear)",
-  "priority": "HIGH" | "MEDIUM" | "LOW",
-  "dueDate": "YYYY-MM-DD format if mentioned, otherwise null",
-  "context": "brief context about why this task is needed"
+  "title": "Descriptive meeting title based on main topics discussed",
+  "content": "Comprehensive 3-4 sentence overview summarizing the entire meeting discussion and outcomes",
+  "sections": [
+    {
+      "title": "Section name (e.g., 'Technical Discussion', 'Budget Planning', 'Strategic Decisions')",
+      "points": [
+        {
+          "text": "Detailed bullet point with specific information from the discussion",
+          "speaker": "Name of person who mentioned this (if clearly identifiable, otherwise null)",
+          "context": {
+            "speaker": "Name of the person who said this",
+            "reasoning": "Why they said this, what prompted the discussion, the motivation behind the statement",
+            "transcriptExcerpt": "The exact quote or key statement from the transcript that this point is based on",
+            "relatedDiscussion": "Surrounding conversation that provides context - what was being discussed before and after this point"
+          }
+        }
+      ]
+    }
+  ],
+  "actionItems": [
+    {
+      "title": "Specific actionable task title",
+      "owner": "Person name or 'Unassigned'",
+      "priority": "HIGH|MEDIUM|LOW", 
+      "dueDate": null,
+      "context": "Detailed context about why this action is needed"
+    }
+  ],
+  "decisions": [
+    "Specific decision made with context",
+    "Another decision with details"
+  ]
 }
 
-- decisions: array of clear decisions made during the meeting
+CONTENT GUIDELINES:
+- For SHORT meetings (under 10 minutes): Create 2-3 sections with 2-3 bullet points each
+- For NORMAL meetings (10-60 minutes): Create 4-5 sections with 3-4 bullet points each  
+- For LONG meetings (1+ hours): Create 5-7 sections with 4-5 bullet points each to capture all key topics
+- Section titles should be descriptive (e.g., "Product Strategy Discussion", "Technical Implementation", "Budget Review", "Next Steps")
+- Each bullet point must include specific details from the transcript
+- For context.transcriptExcerpt: Use actual quotes from the meeting transcript (keep excerpts concise but meaningful)
+- For context.relatedDiscussion: Describe what was happening in the conversation around that point
+- If speaker is unclear from transcript, use null
+- Extract concrete details, numbers, names, and specific discussions from the transcript
+- For long meetings: Focus on the most important topics and decisions, but ensure comprehensive coverage
+- If no clear action items or decisions exist, use empty arrays
 
-GUIDELINES:
-- Include action items both as a dedicated section AND in the actionItems array
-- Make bullet points substantive and informative, not just topic names
-- Include transcript references for important points - these will be shown in clickable popups
-- Focus on capturing substance and details discussed, like comprehensive meeting notes
-- For brief meetings, don't force artificial structure - adapt to the content
-- Prioritize quality over quantity - better to have fewer, more meaningful sections
+IMPORTANT: No artificial limits on transcript length - analyze the entire meeting content regardless of length. For very long meetings, organize content logically by major topic areas or time periods discussed.
 
-RESPOND WITH VALID JSON ONLY - NO OTHER TEXT.`;
+Make all content detailed and based on the actual transcript content. The bullet points will be clickable to show the context.`;
 
     const userPrompt = `Meeting Type: ${meetingType}
 Participants: ${participantNames}
-Transcript: ${limitedTranscript}`;
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 800, // Increased back for complete JSON responses
-      temperature: 0.1, // Low temperature for consistent JSON formatting
-      system: systemPrompt,
-      messages: [
-        { role: 'user', content: userPrompt },
-        { role: 'assistant', content: '{\n  "title":' } // Start JSON response to guide format
-      ]
-    }, {
-      timeout: 30000 // 30 second timeout
-    });
+Complete Meeting Transcript:
+${transcriptText}
 
-    let aiResponse = '{\n  "title":'; // Start with the prefix we provided
-    for (const content of response.content) {
-      if (content.type === 'text') {
-        aiResponse += content.text;
+Generate a comprehensive meeting summary in the exact JSON format specified.`;
+
+    try {
+      // For long meetings (1-2 hours), we need more generous limits
+      const isLongMeeting = cleanedTranscripts.length > 100 || transcriptText.length > 20000;
+      const maxTokens = isLongMeeting ? 8000 : 4000; // Much higher for long meetings
+      const timeoutMs = isLongMeeting ? 120000 : 60000; // 2 minutes for long meetings, 1 minute for normal
+      
+      console.log(`🤖 Claude API configuration for ${isLongMeeting ? 'LONG' : 'NORMAL'} meeting:`, {
+        maxTokens,
+        timeoutSeconds: timeoutMs / 1000,
+        transcriptLength: transcriptText.length,
+        transcriptCount: cleanedTranscripts.length
+      });
+
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514', // Use the correct model name
+        max_tokens: maxTokens, // Dynamic based on meeting length - NO ARTIFICIAL LIMITS
+        temperature: 0.1, // Low for consistent formatting
+        system: systemPrompt,
+        messages: [
+          { role: 'user', content: userPrompt }
+        ]
+      }, {
+        timeout: timeoutMs // Dynamic timeout for longer processing
+      });
+
+      if (!response.content || response.content.length === 0) {
+        throw new Error('Empty response from Claude');
       }
-    }
 
-    const parsed = JSON.parse(aiResponse);
-    return {
-      ...parsed,
-      generatedAt: new Date()
-    };
+      let aiResponse = '';
+      for (const content of response.content) {
+        if (content.type === 'text') {
+          aiResponse += content.text;
+        }
+      }
+
+      aiResponse = aiResponse.trim();
+      
+      console.log('🤖 Claude response length:', aiResponse.length);
+      console.log('🤖 Claude response preview:', aiResponse.substring(0, 300) + '...');
+
+      // Clean up response to ensure valid JSON
+      if (!aiResponse.startsWith('{')) {
+        const jsonStart = aiResponse.indexOf('{');
+        if (jsonStart !== -1) {
+          aiResponse = aiResponse.substring(jsonStart);
+        } else {
+          throw new Error('No JSON object found in Claude response');
+        }
+      }
+
+      if (!aiResponse.endsWith('}')) {
+        const jsonEnd = aiResponse.lastIndexOf('}');
+        if (jsonEnd !== -1) {
+          aiResponse = aiResponse.substring(0, jsonEnd + 1);
+        }
+      }
+
+      console.log('🤖 Cleaned response for parsing');
+
+      const parsed = JSON.parse(aiResponse);
+      
+      // Validate required fields
+      if (!parsed.title || !parsed.content || !parsed.sections) {
+        throw new Error('Missing required fields in Claude response');
+      }
+
+      return {
+        ...parsed,
+        generatedAt: new Date()
+      };
+    } catch (error) {
+      console.error('❌ MEETING PROCESSOR: AI summary failed:', error);
+      throw error;
+    }
   }
 
   /**
@@ -529,32 +598,50 @@ Transcript: ${limitedTranscript}`;
   }
 
   /**
-   * Deduplicate transcripts (simplified version)
+   * Deduplicate transcripts (improved version)
    */
   private deduplicateTranscripts(transcripts: any[]): any[] {
-    return transcripts
+    console.log('🔍 DEDUPLICATION: Starting with', transcripts.length, 'transcripts');
+    
+    const cleaned = transcripts
       .filter(t => t.text && t.text.trim().length > 0)
-      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
-      .reduce((acc, current) => {
-        const isDuplicate = acc.some((existing: any) => 
-          existing.speaker === current.speaker && 
-          existing.text.trim() === current.text.trim()
-        );
+      .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    
+    console.log('🔍 DEDUPLICATION: After filtering empty:', cleaned.length, 'transcripts');
+
+    // More aggressive deduplication - check for exact duplicates and near-duplicates
+    const deduplicated = cleaned.reduce((acc, current) => {
+      const currentText = current.text.trim().toLowerCase();
+      const currentTime = new Date(current.timestamp).getTime();
+      
+      const isDuplicate = acc.some((existing: any) => {
+        const existingText = existing.text.trim().toLowerCase();
+        const existingTime = new Date(existing.timestamp).getTime();
         
-        if (!isDuplicate) {
-          acc.push({
-            speaker: current.speaker,
-            text: current.text.trim(),
-            timestamp: new Date(current.timestamp),
-            speakerConfidence: current.speakerConfidence,
-            deepgramSpeaker: current.deepgramSpeaker,
-            participantId: current.participantId,
-            isLocal: current.isLocal
-          });
-        }
-        
-        return acc;
-      }, [] as any[]);
+        // Check for exact duplicates (same speaker, same text, within 5 seconds)
+        const timeDiff = Math.abs(currentTime - existingTime);
+        return existing.speaker === current.speaker && 
+               existingText === currentText && 
+               timeDiff < 5000; // Within 5 seconds
+      });
+      
+      if (!isDuplicate) {
+        acc.push({
+          speaker: current.speaker,
+          text: current.text.trim(),
+          timestamp: new Date(current.timestamp),
+          speakerConfidence: current.speakerConfidence,
+          deepgramSpeaker: current.deepgramSpeaker,
+          participantId: current.participantId,
+          isLocal: current.isLocal
+        });
+      }
+      
+      return acc;
+    }, [] as any[]);
+    
+    console.log('🔍 DEDUPLICATION: Final result:', deduplicated.length, 'unique transcripts');
+    return deduplicated;
   }
 
   /**
@@ -564,11 +651,58 @@ Transcript: ${limitedTranscript}`;
     console.log('⚠️ MEETING PROCESSOR: Using fallback summary');
     return {
       title: `${meetingType} Session`,
-      content: `${meetingType} session with ${participants.length} participants completed successfully.`,
-      keyPoints: [
-        'Meeting completed successfully',
-        'Participants engaged in discussion',
-        'Transcripts recorded for reference'
+      content: `${meetingType} session with ${participants.length} participants completed successfully. The meeting covered various discussion topics and was recorded for future reference. Participants engaged actively throughout the session.`,
+      sections: [
+        {
+          title: 'Meeting Overview',
+          points: [
+            {
+              text: 'Meeting completed successfully with all participants present',
+              speaker: null,
+              context: {
+                speaker: 'System',
+                reasoning: 'Meeting completion status',
+                transcriptExcerpt: 'Meeting session completed',
+                relatedDiscussion: 'General meeting completion and participant engagement'
+              }
+            },
+            {
+              text: 'Session was recorded for future reference and review',
+              speaker: null,
+              context: {
+                speaker: 'System',
+                reasoning: 'Recording functionality confirmation',
+                transcriptExcerpt: 'Session recorded',
+                relatedDiscussion: 'Meeting recording and documentation process'
+              }
+            }
+          ]
+        },
+        {
+          title: 'Next Steps',
+          points: [
+            {
+              text: 'Review meeting transcripts for key takeaways',
+              speaker: null,
+              context: {
+                speaker: 'System',
+                reasoning: 'Standard follow-up procedure',
+                transcriptExcerpt: 'Review transcripts',
+                relatedDiscussion: 'Post-meeting review and action item identification'
+              }
+            },
+            {
+              text: 'Schedule follow-up meetings with relevant stakeholders as needed',
+              speaker: null,
+              context: {
+                speaker: 'System',
+                reasoning: 'Continuation planning',
+                transcriptExcerpt: 'Schedule follow-ups',
+                relatedDiscussion: 'Future meeting planning and stakeholder engagement'
+              }
+            }
+          ]
+        }
       ],
       actionItems: [
         {

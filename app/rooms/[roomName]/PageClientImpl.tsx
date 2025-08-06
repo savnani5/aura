@@ -69,29 +69,45 @@ export function PageClientImpl(props: {
   );
   const [roomTitle, setRoomTitle] = React.useState<string>('');
 
-  // Fetch room title
+  // Fetch workspace name (not last meeting title)
   React.useEffect(() => {
-    const fetchRoomTitle = async () => {
+    const fetchWorkspaceName = async () => {
       try {
-        const response = await fetch(`/api/meetings/${props.roomName}/history`);
+        // First try to get workspace info from the main meetings API
+        const response = await fetch(`/api/meetings/${props.roomName}`);
         if (response.ok) {
           const data = await response.json();
-          if (data.success && data.data.length > 0) {
-            const roomData = data.data[0];
-            setRoomTitle(roomData.title || `Meeting Room`);
+          if (data.success && data.data?.room?.title) {
+            // Use the workspace/room title, not the meeting title
+            setRoomTitle(data.data.room.title);
           } else {
-            setRoomTitle('Meeting Room');
+            // Fallback: extract clean workspace name (remove technical ID)
+            const cleanName = props.roomName
+              .replace(/[-_][a-z0-9]{8,}$/i, '') // Remove trailing ID like -mds6mzph
+              .replace(/[-_]/g, ' ')
+              .replace(/\b\w/g, l => l.toUpperCase());
+            setRoomTitle(cleanName || 'Workspace');
           }
         } else {
-          setRoomTitle('Meeting Room');
+          // Fallback: extract clean workspace name (remove technical ID)
+          const cleanName = props.roomName
+            .replace(/[-_][a-z0-9]{8,}$/i, '') // Remove trailing ID like -mds6mzph
+            .replace(/[-_]/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+          setRoomTitle(cleanName || 'Workspace');
         }
       } catch (error) {
-        console.error('Error fetching room title:', error);
-        setRoomTitle('Meeting Room');
+        console.error('Error fetching workspace name:', error);
+        // Fallback: extract clean workspace name (remove technical ID)
+        const cleanName = props.roomName
+          .replace(/[-_][a-z0-9]{8,}$/i, '') // Remove trailing ID like -mds6mzph
+          .replace(/[-_]/g, ' ')
+          .replace(/\b\w/g, l => l.toUpperCase());
+        setRoomTitle(cleanName || 'Workspace');
       }
     };
     
-    fetchRoomTitle();
+    fetchWorkspaceName();
   }, [props.roomName]);
 
   const handlePreJoinSubmit = React.useCallback(async (values: LocalUserChoices) => {
