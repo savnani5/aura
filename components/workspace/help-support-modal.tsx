@@ -10,7 +10,7 @@ interface HelpSupportModalProps {
 
 export function HelpSupportModal({ onClose }: HelpSupportModalProps) {
   const handleEmailClick = () => {
-    window.location.href = 'mailto:support@tryaura.com';
+    window.location.href = 'mailto:support@auranow.co';
   };
 
   return (
@@ -45,7 +45,7 @@ export function HelpSupportModal({ onClose }: HelpSupportModalProps) {
               onClick={handleEmailClick}
               className="w-full max-w-xs mx-auto"
             >
-              support@tryaura.com
+              support@auranow.co
             </Button>
           </div>
         </div>

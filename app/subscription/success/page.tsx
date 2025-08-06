@@ -140,7 +140,7 @@ export default function SubscriptionSuccessPage() {
 
         {/* Help text */}
         <p className="text-xs text-gray-400 mt-6">
-          Need help? Contact us at support@tryaura.com
+          Need help? Contact us at support@auranow.co
             </p>
           </div>
     </div>
