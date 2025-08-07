@@ -18,6 +18,14 @@ export interface RAGContext {
   historicalContext: TranscriptContext[];
   totalRelevantTranscripts: number;
   usedContext: boolean;
+  searchStrategy?: 'local_only' | 'local_first' | 'web_required';
+  queryAnalysis?: {
+    type: 'comprehensive' | 'targeted' | 'specific';
+    searchStrategy: 'local_only' | 'local_first' | 'web_required';
+    summaryPriority: 'high' | 'medium' | 'low';
+    adaptiveThreshold: number;
+    reasoning: string;
+  };
 }
 
 export class HybridRAGService {
@@ -78,9 +86,11 @@ export class HybridRAGService {
       console.log(`✅ Found room: ${room.title} (${room.roomName})`);
       console.log(`🔒 Search scope: LIMITED to room ${room.roomName} only`);
 
-      // Detect query type for comprehensive vs targeted search
-      const queryType = this.detectQueryType(query);
-      console.log(`🎯 Query type: ${queryType}`);
+      // Intelligent query analysis using LLM reasoning
+      const queryAnalysis = await this.analyzeQueryIntelligently(query);
+      console.log(`🎯 Query analysis: ${queryAnalysis.type} (${queryAnalysis.reasoning})`);
+      console.log(`🔍 Search strategy: ${queryAnalysis.searchStrategy}`);
+      console.log(`📊 Summary priority: ${queryAnalysis.summaryPriority}, Threshold: ${queryAnalysis.adaptiveThreshold}`);
 
       // Generate embedding for query
       const queryEmbedding = await this.embeddingsService.generateEmbedding(query);
@@ -107,12 +117,22 @@ export class HybridRAGService {
         console.log(`📝 Processed ${currentTranscriptContext.length} current transcript entries`);
       }
 
-      // Get historical context using Pinecone + MongoDB hybrid approach
-      const historicalContext = await this.getHybridHistoricalContext(
+      // Get historical context using intelligent hybrid approach
+      const historicalContext = await this.getIntelligentHistoricalContext(
         room._id,
         queryEmbedding.embedding,
-        queryType
+        queryAnalysis
       );
+
+      // Add search strategy to context for downstream use
+      const contextWithStrategy = {
+        currentTranscripts: currentTranscriptContext,
+        historicalContext,
+        totalRelevantTranscripts: historicalContext.length + currentTranscriptContext.length,
+        usedContext: historicalContext.length > 0 || currentTranscriptContext.length > 0,
+        searchStrategy: queryAnalysis.searchStrategy,
+        queryAnalysis: queryAnalysis
+      };
 
       console.log(`✅ Retrieved ${historicalContext.length} relevant historical transcripts`);
       console.log(`📋 Current transcript context: ${currentTranscriptContext.length} entries`);
@@ -122,12 +142,7 @@ export class HybridRAGService {
       
       console.log(`🎯 Total relevant transcripts: ${totalRelevantTranscripts}, Used context: ${usedContext}`);
       
-      return {
-        currentTranscripts: currentTranscriptContext,
-        historicalContext,
-        totalRelevantTranscripts,
-        usedContext,
-      };
+      return contextWithStrategy;
 
     } catch (error) {
       console.error('Error getting hybrid RAG context:', error);
@@ -141,17 +156,21 @@ export class HybridRAGService {
   }
 
   /**
-   * Get historical context using hybrid approach: Pinecone for similarity + MongoDB for metadata
+   * Get historical context using intelligent approach: LLM-driven retrieval with adaptive strategies
    */
-  private async getHybridHistoricalContext(
+  private async getIntelligentHistoricalContext(
     roomId: string,
     queryEmbedding: number[],
-    queryType: 'comprehensive' | 'targeted' | 'specific'
+    queryAnalysis: {
+      type: 'comprehensive' | 'targeted' | 'specific';
+      summaryPriority: 'high' | 'medium' | 'low';
+      adaptiveThreshold: number;
+    }
   ): Promise<TranscriptContext[]> {
     try {
-      // Step 1: Query Pinecone for semantically similar transcripts (optimized for speed)
-      const topK = queryType === 'comprehensive' ? 20 : 15;  // Reduced from 30/20 to 20/15
-      const threshold = queryType === 'comprehensive' ? 0.3 : 0.4;  // Lowered thresholds for better retrieval
+      // Step 1: Use adaptive parameters based on LLM analysis
+      const topK = queryAnalysis.type === 'comprehensive' ? 25 : queryAnalysis.type === 'targeted' ? 20 : 15;
+      const threshold = queryAnalysis.adaptiveThreshold;
       
       console.log(`🔍 Querying Pinecone with topK=${topK}, threshold=${threshold}, roomId=${roomId}`);
       const pineconeResults = await this.pineconeService.queryTranscripts(
@@ -194,23 +213,61 @@ export class HybridRAGService {
         meetingMap.set(meeting._id, meeting);
       });
 
-      // Step 3: Combine Pinecone results with MongoDB metadata
+      // Step 3: Intelligently combine results based on summary priority
       const historicalContext: TranscriptContext[] = [];
       
-      // Add meeting summaries first (high relevance)
-      for (const meeting of meetings) {
-        if (meeting.summary && meeting.summary.content) {
-          historicalContext.push({
-            speaker: 'AI Summary',
-            text: `Meeting Summary: ${meeting.summary.content}`,
-            timestamp: meeting.startedAt,
-            meetingId: meeting._id,
-            meetingType: `${meeting.type} (All participants: ${meeting.participants?.map(p => p.name).join(', ') || 'Unknown'})`,
-            meetingDate: meeting.startedAt,
-            similarity: 0.85 // High relevance for summaries
-          });
+      // Add meeting summaries with priority-based weighting
+      if (queryAnalysis.summaryPriority === 'high') {
+        console.log(`📊 High summary priority - prioritizing meeting summaries`);
+        for (const meeting of meetings) {
+          if (meeting.summary && meeting.summary.content) {
+            // Add comprehensive summary content for high priority
+            historicalContext.push({
+              speaker: 'AI Summary',
+              text: `Meeting Summary: ${meeting.summary.content}`,
+              timestamp: meeting.startedAt,
+              meetingId: meeting._id,
+              meetingType: `${meeting.type} (All participants: ${meeting.participants?.map(p => p.name).join(', ') || 'Unknown'})`,
+              meetingDate: meeting.startedAt,
+              similarity: 0.95 // Very high relevance for high-priority summaries
+            });
+
+            // Also add structured sections if available
+            if (meeting.summary.sections && meeting.summary.sections.length > 0) {
+              meeting.summary.sections.forEach((section, index) => {
+                if (section.title && section.points && section.points.length > 0) {
+                  const sectionText = `${section.title}: ${section.points.map(p => p.text).join('; ')}`;
+                  historicalContext.push({
+                    speaker: 'AI Summary Section',
+                    text: sectionText,
+                    timestamp: meeting.startedAt,
+                    meetingId: meeting._id,
+                    meetingType: `${meeting.type} - ${section.title}`,
+                    meetingDate: meeting.startedAt,
+                    similarity: 0.90 - (index * 0.05) // Slightly lower for each section
+                  });
+                }
+              });
+            }
+          }
+        }
+      } else if (queryAnalysis.summaryPriority === 'medium') {
+        // Standard summary inclusion
+        for (const meeting of meetings) {
+          if (meeting.summary && meeting.summary.content) {
+            historicalContext.push({
+              speaker: 'AI Summary',
+              text: `Meeting Summary: ${meeting.summary.content}`,
+              timestamp: meeting.startedAt,
+              meetingId: meeting._id,
+              meetingType: `${meeting.type} (All participants: ${meeting.participants?.map(p => p.name).join(', ') || 'Unknown'})`,
+              meetingDate: meeting.startedAt,
+              similarity: 0.80 // Standard relevance for summaries
+            });
+          }
         }
       }
+      // For low priority, skip summaries and focus on transcripts
 
       // Add transcript results from Pinecone
       for (const result of pineconeResults) {
@@ -228,16 +285,28 @@ export class HybridRAGService {
         }
       }
 
-      // Sort by relevance and recency, prioritizing summaries
+      // Sort by relevance using intelligent priority system
       historicalContext.sort((a, b) => {
-        // Prioritize summaries first
-        if (a.speaker === 'AI Summary' && b.speaker !== 'AI Summary') return -1;
-        if (b.speaker === 'AI Summary' && a.speaker !== 'AI Summary') return 1;
+        // High priority: Prioritize summaries and sections
+        if (queryAnalysis.summaryPriority === 'high') {
+          const aIsSummary = a.speaker.includes('AI Summary');
+          const bIsSummary = b.speaker.includes('AI Summary');
+          if (aIsSummary && !bIsSummary) return -1;
+          if (bIsSummary && !aIsSummary) return 1;
+        }
+        
+        // Low priority: Prioritize transcripts over summaries
+        if (queryAnalysis.summaryPriority === 'low') {
+          const aIsSummary = a.speaker.includes('AI Summary');
+          const bIsSummary = b.speaker.includes('AI Summary');
+          if (!aIsSummary && bIsSummary) return -1;
+          if (!bIsSummary && aIsSummary) return 1;
+        }
         
         // Then by similarity/relevance
         const aSimilarity = a.similarity || 0;
         const bSimilarity = b.similarity || 0;
-        if (Math.abs(aSimilarity - bSimilarity) > 0.1) {
+        if (Math.abs(aSimilarity - bSimilarity) > 0.05) {
           return bSimilarity - aSimilarity;
         }
         
@@ -245,8 +314,11 @@ export class HybridRAGService {
         return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
       });
 
-      // Limit results based on query type
-      const maxResults = queryType === 'comprehensive' ? 25 : 15;
+      // Adaptive result limits based on analysis
+      const maxResults = queryAnalysis.type === 'comprehensive' ? 30 : 
+                        queryAnalysis.type === 'targeted' ? 20 : 15;
+      
+      console.log(`📊 Returning ${Math.min(historicalContext.length, maxResults)} results (${queryAnalysis.summaryPriority} priority)`);
       return historicalContext.slice(0, maxResults);
 
     } catch (error) {
@@ -256,30 +328,163 @@ export class HybridRAGService {
   }
 
   /**
-   * Detect query type for appropriate retrieval strategy
+   * Intelligent query analysis using LLM reasoning
    */
-  private detectQueryType(query: string): 'comprehensive' | 'targeted' | 'specific' {
+  private async analyzeQueryIntelligently(query: string): Promise<{
+    type: 'comprehensive' | 'targeted' | 'specific';
+    searchStrategy: 'local_only' | 'local_first' | 'web_required';
+    summaryPriority: 'high' | 'medium' | 'low';
+    adaptiveThreshold: number;
+    reasoning: string;
+  }> {
+    try {
+      // Use Claude for intelligent query analysis
+      const anthropic = new (await import('@anthropic-ai/sdk')).default({
+        apiKey: process.env.ANTHROPIC_API_KEY,
+      });
+
+      const analysisPrompt = `Analyze this user query to determine optimal retrieval strategy:
+
+Query: "${query}"
+
+Consider:
+1. Query type: comprehensive (broad overview), targeted (specific topic), or specific (exact detail)
+2. Search strategy: local_only (meeting context), local_first (try local then web), web_required (external info needed)
+3. Summary priority: high (summaries most useful), medium (balanced), low (transcripts preferred)
+4. Similarity threshold: 0.2-0.5 (lower = more results, higher = more precise)
+
+Respond in JSON format:
+{
+  "type": "comprehensive|targeted|specific",
+  "searchStrategy": "local_only|local_first|web_required", 
+  "summaryPriority": "high|medium|low",
+  "adaptiveThreshold": 0.2-0.5,
+  "reasoning": "brief explanation of decisions"
+}`;
+
+      const response = await anthropic.messages.create({
+        model: 'claude-3-7-sonnet-20250219',
+        max_tokens: 300,
+        temperature: 0.1,
+        messages: [{ role: 'user', content: analysisPrompt }],
+      });
+
+      const content = response.content[0];
+      if (content.type === 'text') {
+        try {
+          const analysis = JSON.parse(content.text);
+          console.log(`🧠 LLM Query Analysis: ${analysis.reasoning}`);
+          return {
+            type: analysis.type || 'targeted',
+            searchStrategy: analysis.searchStrategy || 'local_first',
+            summaryPriority: analysis.summaryPriority || 'medium',
+            adaptiveThreshold: Math.max(0.2, Math.min(0.5, analysis.adaptiveThreshold || 0.3)),
+            reasoning: analysis.reasoning || 'LLM analysis completed'
+          };
+        } catch (parseError) {
+          console.warn('Failed to parse LLM analysis, using heuristics');
+          return this.analyzeQueryHeuristically(query);
+        }
+      }
+      
+      return this.analyzeQueryHeuristically(query);
+      
+    } catch (error) {
+      console.warn('LLM query analysis failed, falling back to heuristics:', error);
+      return this.analyzeQueryHeuristically(query);
+    }
+  }
+
+  /**
+   * Heuristic-based query analysis (fallback)
+   */
+  private analyzeQueryHeuristically(query: string): {
+    type: 'comprehensive' | 'targeted' | 'specific';
+    searchStrategy: 'local_only' | 'local_first' | 'web_required';
+    summaryPriority: 'high' | 'medium' | 'low';
+    adaptiveThreshold: number;
+    reasoning: string;
+  } {
+    const queryLower = query.toLowerCase();
+    
+    // Check for web-required indicators
+    const webRequiredKeywords = [
+      'current news', 'latest', 'recent developments', 'what\'s happening now',
+      'market trends', 'stock price', 'weather', 'breaking news'
+    ];
+    
+    // Check for local-context indicators
+    const localContextKeywords = [
+      'tool stack', 'tools', 'what tools', 'technology stack', 'tech stack',
+      'discussed', 'mentioned', 'said', 'talked about', 'meeting',
+      'transcript', 'conversation', 'our discussion'
+    ];
+    
+    // Check for comprehensive indicators
     const comprehensiveKeywords = [
       'summary', 'overview', 'what happened', 'tell me about', 'explain',
       'context', 'background', 'history', 'all about', 'everything'
     ];
     
+    // Check for specific indicators
     const specificKeywords = [
       'when did', 'who said', 'what time', 'specific', 'exact', 'particular',
-      'find', 'search', 'locate', 'show me'
+      'find', 'search', 'locate', 'show me', 'which', 'what is'
     ];
 
-    const queryLower = query.toLowerCase();
+    // Determine search strategy
+    let searchStrategy: 'local_only' | 'local_first' | 'web_required' = 'local_first';
+    
+    if (webRequiredKeywords.some(keyword => queryLower.includes(keyword))) {
+      searchStrategy = 'web_required';
+    } else if (localContextKeywords.some(keyword => queryLower.includes(keyword))) {
+      searchStrategy = 'local_only';
+    }
+    
+    // Determine query type
+    let type: 'comprehensive' | 'targeted' | 'specific' = 'targeted';
     
     if (comprehensiveKeywords.some(keyword => queryLower.includes(keyword))) {
-      return 'comprehensive';
+      type = 'comprehensive';
+    } else if (specificKeywords.some(keyword => queryLower.includes(keyword))) {
+      type = 'specific';
     }
     
-    if (specificKeywords.some(keyword => queryLower.includes(keyword))) {
-      return 'specific';
+    // Determine summary priority based on query characteristics
+    let summaryPriority: 'high' | 'medium' | 'low' = 'medium';
+    let adaptiveThreshold = 0.3;
+
+    const summaryPreferredKeywords = [
+      'tool stack', 'technology stack', 'tech stack', 'tools used', 'what tools',
+      'overview', 'summary', 'main points', 'key topics', 'decisions made',
+      'action items', 'outcomes', 'conclusions'
+    ];
+
+    const transcriptPreferredKeywords = [
+      'who said', 'exact words', 'quote', 'specifically said', 'mentioned',
+      'when did', 'what time', 'conversation', 'discussion details'
+    ];
+
+    if (summaryPreferredKeywords.some(keyword => queryLower.includes(keyword))) {
+      summaryPriority = 'high';
+      adaptiveThreshold = 0.25; // Lower threshold for broader retrieval
+    } else if (transcriptPreferredKeywords.some(keyword => queryLower.includes(keyword))) {
+      summaryPriority = 'low';
+      adaptiveThreshold = 0.4; // Higher threshold for precise matches
+    } else if (type === 'comprehensive') {
+      summaryPriority = 'high';
+      adaptiveThreshold = 0.25;
+    } else if (type === 'specific') {
+      adaptiveThreshold = 0.35;
     }
-    
-    return 'targeted';
+
+    return {
+      type,
+      searchStrategy,
+      summaryPriority,
+      adaptiveThreshold,
+      reasoning: `Query appears to be ${type} and ${searchStrategy === 'local_only' ? 'can be answered from meeting context' : searchStrategy === 'web_required' ? 'requires web search' : 'should try local context first'}. Priority: ${summaryPriority} summaries, threshold: ${adaptiveThreshold}`
+    };
   }
 
   /**
@@ -465,10 +670,18 @@ export class HybridRAGService {
   }
 
   /**
-   * Format context for AI prompt
+   * Format context for AI prompt with enhanced extraction
    */
   formatContextForPrompt(context: RAGContext): string {
     let prompt = '';
+
+    // Add query analysis information for the AI
+    if (context.queryAnalysis) {
+      prompt += `QUERY ANALYSIS:\n`;
+      prompt += `Type: ${context.queryAnalysis.type}\n`;
+      prompt += `Search Strategy: ${context.queryAnalysis.searchStrategy}\n`;
+      prompt += `Reasoning: ${context.queryAnalysis.reasoning}\n\n`;
+    }
 
     if (context.currentTranscripts.length > 0) {
       prompt += 'CURRENT MEETING TRANSCRIPTS:\n';
@@ -483,34 +696,51 @@ export class HybridRAGService {
       prompt += 'RELEVANT HISTORICAL CONTEXT:\n';
       prompt += '(These are relevant excerpts from past meetings in this room)\n';
       
-      // Group by meeting for better context
-      const transcriptsByMeeting = new Map<string, TranscriptContext[]>();
-      context.historicalContext.forEach(transcript => {
-        const key = transcript.meetingId;
-        if (!transcriptsByMeeting.has(key)) {
-          transcriptsByMeeting.set(key, []);
-        }
-        transcriptsByMeeting.get(key)!.push(transcript);
-      });
-
-      // Sort meetings by date (most recent first)
-      const sortedMeetings = Array.from(transcriptsByMeeting.entries())
-        .sort(([, transcriptsA], [, transcriptsB]) => {
-          const dateA = transcriptsA[0]?.meetingDate || new Date(0);
-          const dateB = transcriptsB[0]?.meetingDate || new Date(0);
-          return dateB.getTime() - dateA.getTime();
+      // Separate summaries from transcripts for better organization
+      const summaries = context.historicalContext.filter(t => t.speaker === 'AI Summary');
+      const transcripts = context.historicalContext.filter(t => t.speaker !== 'AI Summary');
+      
+      // Show summaries first (highest level context)
+      if (summaries.length > 0) {
+        prompt += '\n📋 MEETING SUMMARIES:\n';
+        summaries.forEach(summary => {
+          prompt += `${summary.text}\n\n`;
+        });
+      }
+      
+      // Then show relevant transcript excerpts
+      if (transcripts.length > 0) {
+        prompt += '💬 RELEVANT TRANSCRIPT EXCERPTS:\n';
+        
+        // Group by meeting for better context
+        const transcriptsByMeeting = new Map<string, TranscriptContext[]>();
+        transcripts.forEach(transcript => {
+          const key = transcript.meetingId;
+          if (!transcriptsByMeeting.has(key)) {
+            transcriptsByMeeting.set(key, []);
+          }
+          transcriptsByMeeting.get(key)!.push(transcript);
         });
 
-      sortedMeetings.forEach(([meetingId, transcripts]) => {
-        const firstTranscript = transcripts[0];
-        if (firstTranscript) {
-          prompt += `\n--- ${firstTranscript.meetingType} (${firstTranscript.meetingDate.toDateString()}) ---\n`;
-          transcripts.forEach(transcript => {
-            const similarityInfo = transcript.similarity ? ` (relevance: ${(transcript.similarity * 100).toFixed(0)}%)` : '';
-            prompt += `${transcript.speaker}: ${transcript.text}${similarityInfo}\n`;
+        // Sort meetings by date (most recent first)
+        const sortedMeetings = Array.from(transcriptsByMeeting.entries())
+          .sort(([, transcriptsA], [, transcriptsB]) => {
+            const dateA = transcriptsA[0]?.meetingDate || new Date(0);
+            const dateB = transcriptsB[0]?.meetingDate || new Date(0);
+            return dateB.getTime() - dateA.getTime();
           });
-        }
-      });
+
+        sortedMeetings.forEach(([meetingId, transcripts]) => {
+          const firstTranscript = transcripts[0];
+          if (firstTranscript) {
+            prompt += `\n--- ${firstTranscript.meetingType} (${firstTranscript.meetingDate.toDateString()}) ---\n`;
+            transcripts.forEach(transcript => {
+              const similarityInfo = transcript.similarity ? ` (relevance: ${(transcript.similarity * 100).toFixed(0)}%)` : '';
+              prompt += `${transcript.speaker}: ${transcript.text}${similarityInfo}\n`;
+            });
+          }
+        });
+      }
     }
 
     return prompt;

@@ -60,8 +60,10 @@ RESPONSE GUIDELINES:
 - When you have relevant context, use it confidently to provide specific answers
 - Quote exact phrases from transcripts when available
 - Reference meeting dates and participants from the context
+- For tool stack/technology questions, extract specific tool names, platforms, and technologies mentioned
 - Only say "I don't have access" if NO relevant context is provided
 - If context exists but doesn't contain the specific information, say "Based on the available transcripts, I don't see information about X"
+- When extracting information from summaries, look for specific details in the structured sections
 
 PLATFORM FEATURES (explain briefly if asked):
 - Live meetings with real-time transcription and AI
@@ -74,10 +76,23 @@ PLATFORM FEATURES (explain briefly if asked):
 Always analyze all provided context before stating information isn't available.`;
   }
 
-  // Check if message is a web search request (now always enabled for auto-detection)
-  private isWebSearchRequest(message: string): boolean {
-    // Always enable web search tool and let Claude decide when to use it
-    return true;
+  // Check if message needs web search based on context analysis
+  private shouldUseWebSearch(message: string, ragContext?: any): boolean {
+    // If we have query analysis from RAG, use that
+    if (ragContext?.searchStrategy) {
+      return ragContext.searchStrategy === 'web_required' || 
+             (ragContext.searchStrategy === 'local_first' && !ragContext.usedContext);
+    }
+    
+    // Fallback heuristics for web search detection
+    const webSearchKeywords = [
+      'current news', 'latest', 'recent developments', 'what\'s happening now',
+      'market trends', 'stock price', 'weather', 'breaking news', 'today',
+      'recent', 'current events', 'news about'
+    ];
+    
+    const messageLower = message.toLowerCase();
+    return webSearchKeywords.some(keyword => messageLower.includes(keyword));
   }
 
   // Extract search query from web search request
@@ -110,20 +125,10 @@ Always analyze all provided context before stating information isn't available.`
       };
       history.push(userMessage);
 
-      // Check if this is a web search request
-      const needsWebSearch = this.isWebSearchRequest(message);
-      let searchQuery = '';
-      
-      if (needsWebSearch) {
-        searchQuery = this.extractWebSearchQuery(message);
-      }
-
       // Send initial chunk with metadata
       onChunk({
         type: 'metadata',
         processing: true,
-        needsWebSearch,
-        searchQuery
       });
 
       // Get RAG context (current + historical) with performance timing
@@ -136,6 +141,15 @@ Always analyze all provided context before stating information isn't available.`
       );
       const ragEndTime = Date.now();
       console.log(`⏱️ [Streaming] RAG context retrieval took ${ragEndTime - ragStartTime}ms`);
+
+      // Now decide if we need web search based on context analysis
+      const needsWebSearch = this.shouldUseWebSearch(message, ragContext);
+      let searchQuery = '';
+      
+      if (needsWebSearch) {
+        searchQuery = this.extractWebSearchQuery(message);
+        console.log(`🌐 Web search determined: ${needsWebSearch ? 'YES' : 'NO'} - Strategy: ${ragContext.searchStrategy}, Used Context: ${ragContext.usedContext}`);
+      }
 
       // Send context chunk
       onChunk({
@@ -180,8 +194,12 @@ Always analyze all provided context before stating information isn't available.`
         systemPrompt += `\n\nThese are the most recent transcripts from the ongoing meeting. Use them to answer questions about what's currently being discussed, recent decisions, or immediate context. Prioritize this current information when relevant to the user's question.`;
       }
 
-      // If web search is needed, modify the system prompt
-      if (needsWebSearch) {
+      // Add instructions based on search strategy
+      if (ragContext.searchStrategy === 'local_only') {
+        systemPrompt += `\n\nIMPORTANT: This query should be answerable from the meeting context provided. Focus on extracting specific information from the transcripts and summaries. If the exact information isn't available in the context, clearly state what information is missing rather than suggesting web search.`;
+      } else if (ragContext.searchStrategy === 'local_first' && !needsWebSearch) {
+        systemPrompt += `\n\nThe query has been answered using local meeting context. Provide a direct, specific answer based on the provided transcripts and summaries.`;
+      } else if (needsWebSearch) {
         systemPrompt += `\n\nThe user is requesting information that may require web search. Use the web search tool to find current, relevant information about: "${searchQuery}"`;
       }
 
