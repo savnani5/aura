@@ -414,7 +414,7 @@ We welcome contributions! Here's how to get started:
 
 ## 📄 License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+Apache License 2.0 - see [LICENSE](LICENSE) file for details.
 
 ## 🆘 Support
 
@@ -425,4 +425,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-**Built with ❤️ using Next.js, LiveKit, and Claude AI**
+**Built with ❤️ by Paras Savnani**
