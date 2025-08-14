@@ -11,6 +11,12 @@
     },
     "app/api/cleanup-abandoned-meetings/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/webhooks/livekit/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/meetings/check-room-status/route.ts": {
+      "maxDuration": 30
     }
   },
   "rewrites": [

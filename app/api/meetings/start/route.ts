@@ -91,13 +91,7 @@ export async function POST(request: NextRequest) {
       console.log(`🚀 Created new meeting: ${meeting._id} for room ${roomName}`);
     } else {
       console.log(`✅ Joined existing meeting: ${meeting._id} for room ${roomName}`);
-      
-      // Add participant to existing meeting
-      const joinResult = await db.atomicParticipantJoin(meeting._id, participantName);
-      console.log(`👥 Participant join result:`, {
-        activeParticipantCount: joinResult.meeting?.activeParticipantCount,
-        isFirstParticipant: joinResult.isFirstParticipant
-      });
+      // Note: Participant tracking is now handled by LiveKit webhooks and room state checks
     }
 
     return NextResponse.json({ 
@@ -110,8 +104,8 @@ export async function POST(request: NextRequest) {
         type: meeting.type,
         startedAt: meeting.startedAt,
         status: meeting.status,
-        activeParticipantCount: meeting.activeParticipantCount,
         isNewMeeting
+        // Note: activeParticipantCount removed - use LiveKit room state instead
       }
     });
 

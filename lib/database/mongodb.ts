@@ -323,8 +323,8 @@ const MeetingSchema = new mongoose.Schema({
   
   // New serverless-compatible fields
   status: { type: String, enum: ['active', 'ended', 'processing', 'completed'], default: 'active' },
-  activeParticipantCount: { type: Number, default: 0 },
   lastActivity: { type: Date, default: Date.now }
+  // Note: activeParticipantCount removed - using LiveKit room state instead
 }, {
   timestamps: true
 });
@@ -526,8 +526,8 @@ export interface IMeeting {
   
   // Simple meeting state for serverless
   status: 'active' | 'ended' | 'processing' | 'completed';
-  activeParticipantCount: number; // Simple counter instead of complex tracking
   lastActivity: Date; // For cleanup of stale meetings
+  // Note: activeParticipantCount removed - using LiveKit room state instead
   
   createdAt: Date;
   updatedAt: Date;
@@ -1364,8 +1364,8 @@ export class DatabaseService {
         $setOnInsert: {
           ...meetingData,
           status: 'active',
-          activeParticipantCount: 1, // Set to 1 for new meetings
           createdAt: now
+          // Note: activeParticipantCount removed - using LiveKit room state instead
         },
         $set: {
           lastActivity: now,
@@ -1392,8 +1392,8 @@ export class DatabaseService {
       console.log(`🚀 ATOMIC START: New meeting data:`, {
         roomName: resultDoc.roomName,
         status: resultDoc.status,
-        activeParticipantCount: resultDoc.activeParticipantCount,
         title: resultDoc.title
+        // Note: activeParticipantCount removed - using LiveKit room state instead
       });
       
       // Update the meeting room's meetings array and lastMeetingAt
@@ -1408,8 +1408,8 @@ export class DatabaseService {
       console.log(`✅ ATOMIC START: Existing meeting data:`, {
         id: resultDoc._id,
         status: resultDoc.status,
-        activeParticipantCount: resultDoc.activeParticipantCount,
         startedAt: resultDoc.startedAt
+        // Note: activeParticipantCount removed - using LiveKit room state instead
       });
     }
     
@@ -1420,66 +1420,30 @@ export class DatabaseService {
     } as IMeeting & { _wasNewlyCreated: boolean };
   }
 
+  // DEPRECATED: Database participant tracking replaced with LiveKit room state
+  // These methods are no longer used since we now rely on LiveKit's actual room state
+  
+  /*
   async atomicParticipantJoin(meetingId: string, participantName: string): Promise<{meeting: IMeeting | null, isFirstParticipant: boolean}> {
-    await this.ensureConnection();
-    
-    const meeting = await Meeting.findByIdAndUpdate(
-      meetingId,
-      {
-        $inc: { activeParticipantCount: 1 },
-        $set: { 
-          lastActivity: new Date(),
-          updatedAt: new Date()
-        },
-        $push: {
-          participants: {
-            name: participantName,
-            joinedAt: new Date(),
-            isHost: false // Will be updated if needed
-          }
-        }
-      },
-      { new: true }
-    ).lean();
-    
-    return {
-      meeting: meeting as unknown as IMeeting | null,
-      isFirstParticipant: (meeting as any)?.activeParticipantCount === 1
-    };
+    // DEPRECATED: Use LiveKit room state instead
+    throw new Error('atomicParticipantJoin is deprecated - use LiveKit room state');
   }
 
   async atomicParticipantLeave(meetingId: string): Promise<{meeting: IMeeting | null, shouldEndMeeting: boolean}> {
-    await this.ensureConnection();
-    
-    const meeting = await Meeting.findByIdAndUpdate(
-      meetingId,
-      {
-        $inc: { activeParticipantCount: -1 },
-        $set: { 
-          lastActivity: new Date(),
-          updatedAt: new Date()
-        }
-      },
-      { new: true }
-    ).lean();
-    
-    const shouldEndMeeting = (meeting as any)?.activeParticipantCount <= 0;
-    
-    return {
-      meeting: meeting as unknown as IMeeting | null,
-      shouldEndMeeting
-    };
+    // DEPRECATED: Use LiveKit room state instead
+    throw new Error('atomicParticipantLeave is deprecated - use LiveKit room state');
   }
+  */
 
   async atomicMeetingEnd(meetingId: string, endData: { transcripts?: any[], participants?: any[], endedAt?: Date }): Promise<IMeeting | null> {
     await this.ensureConnection();
     
     const updateData: any = {
       status: 'ended', // Will be updated to 'processing' or 'completed' by the processor
-      activeParticipantCount: 0,
       endedAt: endData.endedAt || new Date(),
       lastActivity: new Date(),
       updatedAt: new Date()
+      // Note: activeParticipantCount removed - using LiveKit room state instead
     };
     
     if (endData.transcripts) {

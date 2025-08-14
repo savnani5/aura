@@ -35,8 +35,8 @@ export async function GET(
       type: activeMeeting.type,
       startedAt: activeMeeting.startedAt.toISOString(),
       status: activeMeeting.status,
-      activeParticipantCount: activeMeeting.activeParticipantCount || 0,
       duration: Math.round((new Date().getTime() - new Date(activeMeeting.startedAt).getTime()) / (1000 * 60)) // minutes
+      // Note: activeParticipantCount removed - use LiveKit room state instead
     } : null;
     
     return NextResponse.json({ 
