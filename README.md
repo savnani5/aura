@@ -33,7 +33,7 @@ An enterprise-grade AI-native video conferencing platform built with Next.js 15,
 - **AI Chat Integration**: Chat directly with AI during meetings
 - **Task Management**: Create and assign tasks within meetings
 
-## 📱 App Screenshots
+## 📱 Product Interface
 
 <div align="center">
 
