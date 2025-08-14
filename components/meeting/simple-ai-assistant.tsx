@@ -608,7 +608,7 @@ export function SimpleAIAssistant({ isOpen, onClose, currentTranscripts }: Simpl
                       handleAiChatSubmit(e);
                     }
                   }}
-                  placeholder="Ask AI about the meeting... (Shift+Enter for new line)"
+                  placeholder="Ask AI about the meeting..."
                   rows={1}
                   className={cn(
                     "flex-1 bg-[#2a2a2a] border border-[#374151] rounded-md text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent resize-none overflow-hidden",
