@@ -33,6 +33,36 @@ An enterprise-grade AI-native video conferencing platform built with Next.js 15,
 - **AI Chat Integration**: Chat directly with AI during meetings
 - **Task Management**: Create and assign tasks within meetings
 
+## 📱 App Screenshots
+
+<div align="center">
+
+### Real-time AI Assistant
+<img src="./public/images/realtime-ai-assistant.png" alt="Real-time AI Assistant" width="600"/>
+
+*Chat with AI during meetings for instant insights and answers*
+
+### Live Transcription
+<img src="./public/images/live-transcripts.png" alt="Live Transcription" width="600"/>
+
+*Automatic speech-to-text transcription during meetings*
+
+### Meeting Summaries
+<img src="./public/images/meeting-summary.png" alt="Meeting Summary" width="600"/>
+
+*AI-generated meeting summaries with key points and decisions*
+
+### Task Management
+<img src="./public/images/task-mgmt.png" alt="Task Management" width="600"/>
+
+*Create and assign tasks directly from meeting discussions*
+
+### Meeting Workspace
+<img src="./public/images/workspace.png" alt="Meeting Workspace" width="600"/>
+
+*Comprehensive meeting workspace with all tools integrated*
+
+</div>
 
 ## 🛠 Tech Stack
 

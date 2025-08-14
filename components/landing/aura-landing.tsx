@@ -117,16 +117,15 @@ export function AuraLanding() {
             
             {/* Aura Demo Video */}
             <div className="mt-16 relative">
-              <div className="bg-white/70 backdrop-blur-sm rounded-2xl border border-slate-300/50 shadow-2xl p-6 max-w-4xl mx-auto">
+              <div className="bg-white/70 backdrop-blur-sm rounded-2xl border border-slate-300/50 shadow-2xl p-3 max-w-4xl mx-auto">
                 <div className="aspect-video rounded-xl overflow-hidden">
-                  <video 
-                    className="w-full h-full object-cover"
-                    controls
-                    preload="metadata"
-                  >
-                    <source src="/videos/aura_demo.mp4" type="video/mp4" />
-                    Your browser does not support the video tag.
-                  </video>
+                  <iframe
+                    src="https://www.loom.com/embed/474c8fd4264e4bdbbcc2166e6a623633?sid=93fa10a0-a888-460a-a9d7-5b309a975f52&speed=1.5"
+                    frameBorder="0"
+                    allowFullScreen
+                    className="w-full h-full"
+                    {...({ webkitallowfullscreen: "true", mozallowfullscreen: "true" } as any)}
+                  ></iframe>
                 </div>
                 <div className="text-center mt-4">
                   <p className="text-slate-600 font-medium">See Aura in Action</p>
