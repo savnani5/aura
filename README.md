@@ -7,10 +7,8 @@ An enterprise-grade AI-native video conferencing platform built with Next.js 15,
 ### 🎥 **Advanced Video Conferencing**
 - High-quality real-time video/audio with LiveKit
 - Adaptive bitrate and network optimization
-- Background effects and camera settings
 - Multi-participant support with grid/spotlight layouts
 - Screen sharing and presentation mode
-- Recording capabilities with cloud storage
 
 ### 🤖 **AI-Powered Meeting Intelligence**
 - **Claude AI Assistant**: Advanced conversational AI using Anthropic's Claude
@@ -22,26 +20,19 @@ An enterprise-grade AI-native video conferencing platform built with Next.js 15,
 - **Web Search Integration**: AI can search the web for real-time information
 
 ### 🏢 **Enterprise Meeting Management**
-- **Persistent Meeting Rooms**: Create and manage dedicated meeting spaces
+- **Persistent Meeting Workspaces**: Create and manage dedicated meeting spaces
 - **User Authentication**: Secure access with Clerk authentication
 - **Subscription Management**: Tiered access with Stripe integration
 - **Meeting History**: Complete archive of past meetings and transcripts
 - **Participant Management**: Role-based permissions (host/participant)
 - **Email Invitations**: Automated meeting invites via Resend
-- **Calendar Integration**: Schedule recurring meetings
+- **Calendar Integration**: Schedule recurring meetings (coming soon)
 
 ### 💬 **Enhanced Collaboration**
 - **Real-time Chat**: In-meeting messaging with participants
 - **AI Chat Integration**: Chat directly with AI during meetings
 - **Task Management**: Create and assign tasks within meetings
-- **File Sharing**: Share documents and resources
-- **Meeting Notes**: Collaborative note-taking capabilities
 
-### 📊 **Analytics & Insights**
-- **Meeting Analytics**: Track participation and engagement
-- **AI Usage Tracking**: Monitor AI assistant interactions
-- **Subscription Analytics**: Usage metrics and billing insights
-- **Performance Monitoring**: Real-time health checks and monitoring
 
 ## 🛠 Tech Stack
 
@@ -313,7 +304,6 @@ npx vercel --prod
 - **💬 Real-time Chat**: Message participants during meetings
 - **🤖 AI Assistant**: Chat with AI about meeting content
 - **📝 Transcription**: Live speech-to-text transcription
-- **📹 Recording**: Record meetings for later review
 
 ### **AI Assistant Usage**
 The AI assistant provides intelligent meeting support:
@@ -329,7 +319,7 @@ The AI assistant provides intelligent meeting support:
 - **Meeting Analytics**: Track participation and engagement metrics
 - **Subscription Management**: Upgrade for advanced AI features
 - **Email Invitations**: Automatically send meeting invites
-- **Calendar Integration**: Schedule recurring meetings
+- **Calendar Integration**: Schedule recurring meetings (coming soon)
 
 ## 🏗️ Project Architecture
 
