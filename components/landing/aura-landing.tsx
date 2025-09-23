@@ -91,7 +91,7 @@ export function AuraLanding() {
             
             {/* Headlines */}
             <h1 className="mb-6 text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-slate-900 leading-tight">
-              It&apos;s time to ditch Zoom.
+              AI-Native Video Conferencing
             </h1>
             
             <p className="mb-12 text-lg md:text-xl text-slate-700 max-w-3xl mx-auto leading-relaxed">
