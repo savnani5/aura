@@ -31,16 +31,20 @@ export function AuraLanding() {
       answer: 'Aura replaces Zoom + Meeting Bots + Manual Work. It combines video conferencing, AI transcription, meeting summaries, task tracking, and follow-up automation in one platform.'
     },
     {
-      question: "What is Aura's refund policy?",
-      answer: 'We offer a 30-day free trial with no credit card required. After that, you can cancel anytime with no long-term commitments.'
+      question: 'Can I use Aura with existing video conferencing tools?',
+      answer: 'Aura works best as your primary video platform, but we\'re building integrations with popular tools. Contact us for specific integration needs.'
+    },
+    {
+      question: 'Is Aura free?',
+      answer: 'Yes, Aura is free to use for up to 10 meetings per month. After that, you can upgrade to the pro plan.'
     },
     {
       question: 'Is my data secure?',
       answer: 'Yes, absolutely. All meeting data is encrypted end-to-end, stored securely, and never shared with third parties. We comply with enterprise security standards.'
     },
     {
-      question: 'Can I use Aura with existing video conferencing tools?',
-      answer: 'Aura works best as your primary video platform, but we\'re building integrations with popular tools. Contact us for specific integration needs.'
+      question: "What is Aura's refund policy?",
+      answer: 'We do not offer refunds on pro plan, but you can cancel anytime with no long-term commitments.'
     }
   ];
 
