@@ -288,7 +288,7 @@ export function AuraLanding() {
               </h2>
             </div>
             
-            <div className="grid gap-8 md:grid-cols-2 max-w-5xl mx-auto">
+            <div className="grid gap-8 md:grid-cols-3 max-w-6xl mx-auto">
               {/* Free Plan */}
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-300/50 shadow-lg p-8">
                 <div className="mb-8">
@@ -326,8 +326,9 @@ export function AuraLanding() {
               {/* Pro Plan */}
               <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-300/50 shadow-lg p-8">
                 <div className="mb-8">
+                  <h3 className="text-3xl font-bold text-slate-900 mb-2">Pro</h3>
                   <div className="flex items-baseline gap-2 mb-2">
-                    <h3 className="text-4xl font-bold text-slate-900">$25</h3>
+                    <span className="text-4xl font-bold text-slate-900">$25</span>
                     <span className="text-slate-700 text-lg">/month</span>
                   </div>
                   <p className="text-slate-700 text-lg">Everything Included in Free Plus:</p>
@@ -357,6 +358,48 @@ export function AuraLanding() {
                     </div>
                     <span className="text-slate-700">Access to Slack Community</span>
                   </div>
+                </div>
+              </div>
+
+              {/* Enterprise Plan */}
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-slate-300/50 shadow-lg p-8">
+                <div className="mb-8">
+                  <h3 className="text-3xl font-bold text-slate-900 mb-2">Enterprise</h3>
+                  <p className="text-slate-700 text-lg">Custom Solutions for Teams</p>
+                </div>
+                <div className="space-y-4 mb-8">
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center">
+                      <Check className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-slate-700">Everything in Pro Plus</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center">
+                      <Check className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-slate-700">Advanced Security & Compliance</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center">
+                      <Check className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-slate-700">Dedicated Support</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center">
+                      <Check className="h-3 w-3 text-white" />
+                    </div>
+                    <span className="text-slate-700">Custom Integrations</span>
+                  </div>
+                </div>
+                <div className="pt-4 border-t border-slate-200">
+                  <Button 
+                    className="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium"
+                    onClick={() => window.location.href = 'mailto:team@auranow.co'}
+                  >
+                    Contact team@auranow.co
+                  </Button>
                 </div>
               </div>
             </div>
