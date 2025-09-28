@@ -151,7 +151,7 @@ export function AuraLanding() {
                 Why Aura
               </div>
               <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-slate-900 mb-4">
-                We cut 15+ hours of<br />
+                We cut 10+ hours of<br />
                 meeting busywork
               </h2>
             </div>
